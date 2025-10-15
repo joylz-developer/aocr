@@ -1,0 +1,25 @@
+{
+  "name": "docgen-ai",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Генератор актов скрытых работ",
+  "scripts": {
+    "dev": "vite"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.4",
+    "@google/genai": "^1.24.0",
+    "pizzip": "^3.1.7",
+    "docxtemplater": "^3.47.2",
+    "file-saver": "^2.0.5"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/file-saver": "^2.0.7",
+    "vite": "^5.3.1",
+    "@vitejs/plugin-react": "^4.3.1"
+  }
+}
