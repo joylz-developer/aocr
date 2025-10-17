@@ -21,6 +21,8 @@ export const generateDocument = (templateBase64: string, act: Act, people: Perso
         const doc = new Docxtemplater(zip, {
             paragraphLoop: true,
             linebreaks: true,
+            // Добавлено для предотвращения ошибок, если данные отсутствуют
+            nullGetter: () => "", 
         });
 
         const [actYear, actMonth, actDay] = act.date ? act.date.split('-') : ['', '', ''];
@@ -68,8 +70,8 @@ export const generateDocument = (templateBase64: string, act: Act, people: Perso
             data[`${roleKey}_details`] = person ? `${person.position}, ${person.name}, ${person.authDoc || '(нет данных о документе)'}` : '';
         });
 
-        doc.setData(data);
-        doc.render();
+        // Исправлено: используется современный метод render(data)
+        doc.render(data);
 
         const out = doc.getZip().generate({
             type: 'blob',
