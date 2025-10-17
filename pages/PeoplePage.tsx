@@ -50,7 +50,7 @@ const PersonForm: React.FC<{
     const [ocrError, setOcrError] = useState<string | null>(null);
     const [ocrWarning, setOcrWarning] = useState<string | null>(null);
     const ocrInputRef = useRef<HTMLInputElement>(null);
-    const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
+    const ai = import.meta.env.VITE_API_KEY ? new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY as string }) : null;
 
     // Helper function for more robust string comparison
     const normalizeOrgName = (name: string): string => {

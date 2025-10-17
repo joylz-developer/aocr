@@ -43,7 +43,7 @@ const OrganizationForm: React.FC<{ organization: Organization | null, onSave: (o
     const [isOcrLoading, setIsOcrLoading] = useState(false);
     const [ocrError, setOcrError] = useState<string | null>(null);
     const ocrInputRef = useRef<HTMLInputElement>(null);
-    const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
+    const ai = import.meta.env.VITE_API_KEY ? new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY as string }) : null;
 
 
     useEffect(() => {

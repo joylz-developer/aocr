@@ -85,7 +85,7 @@ const ActForm: React.FC<{
     const [confirmation, setConfirmation] = useState<{ message: string; onConfirm: () => void } | null>(null);
     const [suppressWarning, setSuppressWarning] = useState(false);
     
-    const ai = process.env.API_KEY ? new GoogleGenAI({apiKey: process.env.API_KEY}) : null;
+    const ai = import.meta.env.VITE_API_KEY ? new GoogleGenAI({apiKey: import.meta.env.VITE_API_KEY as string}) : null;
 
     // Effect to auto-update attachments from materials and certs
     useEffect(() => {
