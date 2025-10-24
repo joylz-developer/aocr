@@ -85,8 +85,9 @@ const ActForm: React.FC<{
     const [confirmation, setConfirmation] = useState<{ message: string; onConfirm: () => void } | null>(null);
     const [suppressWarning, setSuppressWarning] = useState(false);
     
-    // FIX: Switched from `import.meta.env.VITE_API_KEY` to `process.env.API_KEY` to follow Gemini API guidelines and resolve TypeScript errors.
-    const ai = process.env.API_KEY ? new GoogleGenAI({apiKey: process.env.API_KEY}) : null;
+    // Safely access the API key to prevent crashes in browser environments where `process` is not defined.
+    const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
+    const ai = apiKey ? new GoogleGenAI({apiKey: apiKey}) : null;
 
     // Effect to auto-update attachments from materials and certs
     useEffect(() => {

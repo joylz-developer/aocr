@@ -43,8 +43,9 @@ const OrganizationForm: React.FC<{ organization: Organization | null, onSave: (o
     const [isOcrLoading, setIsOcrLoading] = useState(false);
     const [ocrError, setOcrError] = useState<string | null>(null);
     const ocrInputRef = useRef<HTMLInputElement>(null);
-    // FIX: Switched from `import.meta.env.VITE_API_KEY` to `process.env.API_KEY` to follow Gemini API guidelines and resolve TypeScript errors.
-    const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
+    // Safely access the API key to prevent crashes in browser environments where `process` is not defined.
+    const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
+    const ai = apiKey ? new GoogleGenAI({apiKey: apiKey}) : null;
 
 
     useEffect(() => {
