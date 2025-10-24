@@ -50,7 +50,8 @@ const PersonForm: React.FC<{
     const [ocrError, setOcrError] = useState<string | null>(null);
     const [ocrWarning, setOcrWarning] = useState<string | null>(null);
     const ocrInputRef = useRef<HTMLInputElement>(null);
-    const ai = import.meta.env.VITE_API_KEY ? new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY as string }) : null;
+    // FIX: Switched from `import.meta.env.VITE_API_KEY` to `process.env.API_KEY` to follow Gemini API guidelines and resolve TypeScript errors.
+    const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
 
     // Helper function for more robust string comparison
     const normalizeOrgName = (name: string): string => {

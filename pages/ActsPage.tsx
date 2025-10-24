@@ -85,7 +85,8 @@ const ActForm: React.FC<{
     const [confirmation, setConfirmation] = useState<{ message: string; onConfirm: () => void } | null>(null);
     const [suppressWarning, setSuppressWarning] = useState(false);
     
-    const ai = import.meta.env.VITE_API_KEY ? new GoogleGenAI({apiKey: import.meta.env.VITE_API_KEY as string}) : null;
+    // FIX: Switched from `import.meta.env.VITE_API_KEY` to `process.env.API_KEY` to follow Gemini API guidelines and resolve TypeScript errors.
+    const ai = process.env.API_KEY ? new GoogleGenAI({apiKey: process.env.API_KEY}) : null;
 
     // Effect to auto-update attachments from materials and certs
     useEffect(() => {
@@ -552,15 +553,26 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
                     <p>Для генерации документов ваш .docx шаблон должен содержать теги-заполнители. Приложение заменит эти теги на данные из формы. Нажмите на любой тег ниже, чтобы скопировать его.</p>
                     
                     <h4 className="font-semibold mt-4">Основные теги</h4>
-                    <ul className="list-disc space-y-1 pl-5">
-                        <li><CopyableTag tag="{object_name}" />: Наименование объекта (из настроек проекта).</li>
-                        <li><CopyableTag tag="{act_number}" />, <CopyableTag tag="{act_day}" />, <CopyableTag tag="{act_month}" />, <CopyableTag tag="{act_year}" /></li>
-                        <li><CopyableTag tag="{builder_details}" />, <CopyableTag tag="{contractor_details}" />, <CopyableTag tag="{designer_details}" />, <CopyableTag tag="{work_performer}" /></li>
-                        <li><CopyableTag tag="{work_name}" />, <CopyableTag tag="{project_docs}" />, <CopyableTag tag="{materials}" />, <CopyableTag tag="{certs}" /></li>
-                        <li><CopyableTag tag="{work_start_day}" />, <CopyableTag tag="{work_start_month}" />, <CopyableTag tag="{work_start_year}" /></li>
-                        <li><CopyableTag tag="{work_end_day}" />, <CopyableTag tag="{work_end_month}" />, <CopyableTag tag="{work_end_year}" /></li>
-                        <li><CopyableTag tag="{regulations}" />, <CopyableTag tag="{next_work}" /></li>
-                        <li><CopyableTag tag="{additional_info}" />, <CopyableTag tag="{copies_count}" />, <CopyableTag tag="{attachments}" /></li>
+                    <p>Теги для основной информации об акте:</p>
+                    <ul className="list-disc space-y-2 pl-5 mt-2">
+                        <li><CopyableTag tag="{object_name}" /> &mdash; Наименование объекта (из настроек проекта).</li>
+                        <li><CopyableTag tag="{act_number}" /> &mdash; Номер акта.</li>
+                        <li><CopyableTag tag="{act_day}" />, <CopyableTag tag="{act_month}" />, <CopyableTag tag="{act_year}" /> &mdash; Дата составления акта (день, месяц, год).</li>
+                        <li><CopyableTag tag="{builder_details}" /> &mdash; Реквизиты застройщика (технического заказчика).</li>
+                        <li><CopyableTag tag="{contractor_details}" /> &mdash; Реквизиты лица, осуществляющего строительство.</li>
+                        <li><CopyableTag tag="{designer_details}" /> &mdash; Реквизиты проектировщика.</li>
+                        <li><CopyableTag tag="{work_performer}" /> &mdash; Реквизиты исполнителя работ.</li>
+                        <li><CopyableTag tag="{work_name}" /> &mdash; Наименование работ, подлежащих освидетельствованию.</li>
+                        <li><CopyableTag tag="{project_docs}" /> &mdash; Проектная документация.</li>
+                        <li><CopyableTag tag="{materials}" /> &mdash; Примененные материалы.</li>
+                        <li><CopyableTag tag="{certs}" /> &mdash; Предъявленные документы (сертификаты, паспорта).</li>
+                        <li><CopyableTag tag="{work_start_day}" />, <CopyableTag tag="{work_start_month}" />, <CopyableTag tag="{work_start_year}" /> &mdash; Дата начала работ.</li>
+                        <li><CopyableTag tag="{work_end_day}" />, <CopyableTag tag="{work_end_month}" />, <CopyableTag tag="{work_end_year}" /> &mdash; Дата окончания работ.</li>
+                        <li><CopyableTag tag="{regulations}" /> &mdash; Нормативные документы (СП, ГОСТ).</li>
+                        <li><CopyableTag tag="{next_work}" /> &mdash; Разрешается производство следующих работ.</li>
+                        <li><CopyableTag tag="{additional_info}" /> &mdash; Дополнительные сведения.</li>
+                        <li><CopyableTag tag="{copies_count}" /> &mdash; Количество экземпляров акта.</li>
+                        <li><CopyableTag tag="{attachments}" /> &mdash; Приложения к акту.</li>
                     </ul>
 
                     <h4 className="font-semibold mt-4">Представители (Комиссия)</h4>

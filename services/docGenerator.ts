@@ -90,8 +90,41 @@ export const generateDocument = (templateBase64: string, act: Act, people: Perso
 
         saveAs(out, `Акт_скрытых_работ_${act.number || 'б-н'}.docx`);
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error generating document:', error);
-        alert('Не удалось сгенерировать документ. Проверьте шаблон и данные. Подробности в консоли.');
+
+        let userMessage = 'Не удалось сгенерировать документ. Проверьте шаблон и данные. Подробности в консоли.';
+        
+        // docxtemplater aggregates parsing errors in `error.properties.errors`
+        const errors = error.properties?.errors;
+
+        if (Array.isArray(errors) && errors.length > 0) {
+            const firstError = errors[0];
+            const { id, xtag, explanation } = firstError.properties;
+            
+            switch (id) {
+                case 'unbalanced_loop_tags':
+                    userMessage = `Ошибка в шаблоне: Несбалансированные теги.\n\nПроверьте, что для каждого открывающего тега цикла (например, {#items}) есть соответствующий закрывающий ({/items}).\n\nДетали: ${explanation}`;
+                    break;
+                case 'duplicate_open_tag':
+                    userMessage = `Ошибка в шаблоне: Найден дублирующийся открывающий тег "${xtag}".\n\nВозможно, вы случайно напечатали '{{{' вместо '{' или использовали неверный синтаксис.\n\nДетали: ${explanation}`;
+                    break;
+                case 'unclosed_tag':
+                    userMessage = `Ошибка в шаблоне: Незакрытый тег "${xtag}".\n\nПроверьте, что у каждого тега есть закрывающая часть '}'.\n\nДетали: ${explanation}`;
+                    break;
+                case 'closing_tag_does_not_match_opening_tag':
+                     userMessage = `Ошибка в шаблоне: Закрывающий тег не соответствует открывающему.\n\nПроверьте парные теги, например {#users} ... {/users}.\n\nДетали: ${explanation}`;
+                    break;
+                default:
+                    userMessage = `В шаблоне обнаружена ошибка: ${firstError.message}. Пожалуйста, проверьте синтаксис тегов.`;
+                    break;
+            }
+        } else if (error.properties?.id === 'scope_error') {
+            // Handle scope errors (data not found for a tag) separately
+            const { xtag, explanation } = error.properties;
+            userMessage = `Ошибка в данных: Не удалось найти данные для тега "${xtag}".\n\nУбедитесь, что все поля в акте заполнены.\n\nДетали: ${explanation}`;
+        }
+
+        alert(userMessage);
     }
 };
