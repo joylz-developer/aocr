@@ -180,7 +180,7 @@ const PersonForm: React.FC<{
             </div>
             <div>
                 <label className="block text-sm font-medium text-slate-700">Реквизиты документа о полномочиях</label>
-                <input type="text" name="authDoc" value={formData.authDoc} onChange={handleChange} className={inputClass} placeholder="Например: Приказ №123 от 01.01.2024" />
+                <input type="text" name="authDoc" value={formData.authDoc || ''} onChange={handleChange} className={inputClass} placeholder="Например: Приказ №123 от 01.01.2024" />
             </div>
             <div className="flex justify-end space-x-3 pt-4">
                 <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-md hover:bg-slate-300">Отмена</button>
