@@ -21,15 +21,16 @@ export const generateDocument = (templateBase64: string, act: Act, people: Perso
         const doc = new Docxtemplater(zip, {
             paragraphLoop: true,
             linebreaks: true,
-            // Добавлено для предотвращения ошибок, если данные отсутствуют
-            nullGetter: () => "", 
+            // Используется nullGetter, чтобы теги, для которых нет данных, были falsy.
+            // Это необходимо для корректной работы условных блоков в шаблоне.
+            nullGetter: () => null, 
         });
 
         const [actYear, actMonth, actDay] = act.date ? act.date.split('-') : ['', '', ''];
         const [workStartYear, workStartMonth, workStartDay] = act.workStartDate ? act.workStartDate.split('-') : ['', '', ''];
         const [workEndYear, workEndMonth, workEndDay] = act.workEndDate ? act.workEndDate.split('-') : ['', '', ''];
 
-        const data: { [key: string]: string } = {
+        const data: { [key: string]: any } = {
             // Header
             object_name: act.objectName,
             builder_details: act.builderDetails,
@@ -60,17 +61,26 @@ export const generateDocument = (templateBase64: string, act: Act, people: Perso
             attachments: act.attachments,
         };
 
+        // Добавляем данные о представителях как вложенные объекты.
+        // Если представитель не выбран, его объект будет null,
+        // что позволит скрыть его в шаблоне с помощью условных тегов.
         ROLES_KEYS.forEach(roleKey => {
             const personId = act.representatives[roleKey];
             const person = people.find(p => p.id === personId);
-            data[`${roleKey}_name`] = person?.name || '';
-            data[`${roleKey}_position`] = person?.position || '';
-            data[`${roleKey}_org`] = person?.organization || '';
-            data[`${roleKey}_auth_doc`] = person?.authDoc || '';
-            data[`${roleKey}_details`] = person ? `${person.position}, ${person.name}, ${person.authDoc || '(нет данных о документе)'}` : '';
+
+            if (person) {
+                data[roleKey] = {
+                    name: person.name || '',
+                    position: person.position || '',
+                    org: person.organization || '',
+                    auth_doc: person.authDoc || '',
+                    details: `${person.position}, ${person.name}, ${person.authDoc || '(нет данных о документе)'}`
+                };
+            } else {
+                data[roleKey] = null; // Критически важно для условных блоков в docxtemplater
+            }
         });
 
-        // Исправлено: используется современный метод render(data)
         doc.render(data);
 
         const out = doc.getZip().generate({

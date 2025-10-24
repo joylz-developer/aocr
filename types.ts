@@ -67,6 +67,7 @@ export interface ProjectSettings {
     showAttachments: boolean;
     showActDate?: boolean;
     showParticipantDetails?: boolean;
+    useShortOrgNames?: boolean;
 }
 
 // Types for Import/Export feature

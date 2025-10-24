@@ -124,7 +124,7 @@ const ActForm: React.FC<{
                 if (person) {
                     const org = organizations.find(o => o.name === person.organization);
                     if (org) {
-                        detailString = formatOrganizationDetails(org);
+                        detailString = settings.useShortOrgNames ? org.name : formatOrganizationDetails(org);
                     }
                 }
             }
@@ -139,7 +139,7 @@ const ActForm: React.FC<{
             setFormData(prev => ({ ...prev, ...newDetails }));
         }
 
-    }, [formData.representatives, people, organizations]);
+    }, [formData.representatives, people, organizations, settings.useShortOrgNames]);
 
     useEffect(() => {
         // If "show other reps" is unchecked, clear their values
@@ -551,42 +551,27 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
                 <div className="prose max-w-none text-slate-700">
                     <p>Для генерации документов ваш .docx шаблон должен содержать теги-заполнители. Приложение заменит эти теги на данные из формы. Нажмите на любой тег ниже, чтобы скопировать его.</p>
                     
-                    <h4 className="font-semibold mt-4">Основные реквизиты</h4>
+                    <h4 className="font-semibold mt-4">Основные теги</h4>
                     <ul className="list-disc space-y-1 pl-5">
                         <li><CopyableTag tag="{object_name}" />: Наименование объекта (из настроек проекта).</li>
-                        <li><CopyableTag tag="{act_number}" />: Номер акта.</li>
-                        <li><CopyableTag tag="{act_day}" />, <CopyableTag tag="{act_month}" />, <CopyableTag tag="{act_year}" />: День, месяц и год составления акта.</li>
-                    </ul>
-
-                    <h4 className="font-semibold mt-4">Реквизиты организаций</h4>
-                    <ul className="list-disc space-y-1 pl-5">
-                        <li><CopyableTag tag="{builder_details}" />: Реквизиты застройщика (тех. заказчика).</li>
-                        <li><CopyableTag tag="{contractor_details}" />: Реквизиты лица, осуществляющего строительство.</li>
-                        <li><CopyableTag tag="{designer_details}" />: Реквизиты проектировщика.</li>
-                        <li><CopyableTag tag="{work_performer}" />: Реквизиты исполнителя работ.</li>
-                    </ul>
-                    
-                    <h4 className="font-semibold mt-4">Информация о работах</h4>
-                    <ul className="list-disc space-y-1 pl-5">
-                        <li><CopyableTag tag="{work_name}" />: Наименование работ (пункт 1).</li>
-                        <li><CopyableTag tag="{project_docs}" />: Проектная документация (пункт 2).</li>
-                        <li><CopyableTag tag="{materials}" />: Примененные материалы (пункт 3).</li>
-                        <li><CopyableTag tag="{certs}" />: Документы о качестве (пункт 4).</li>
-                        <li><CopyableTag tag="{work_start_day}" />, <CopyableTag tag="{work_start_month}" />, <CopyableTag tag="{work_start_year}" />: Дата начала работ.</li>
-                        <li><CopyableTag tag="{work_end_day}" />, <CopyableTag tag="{work_end_month}" />, <CopyableTag tag="{work_end_year}" />: Дата окончания работ.</li>
-                        <li><CopyableTag tag="{regulations}" />: Нормативные документы (пункт 6).</li>
-                        <li><CopyableTag tag="{next_work}" />: Разрешенные последующие работы (пункт 7).</li>
-                    </ul>
-
-                    <h4 className="font-semibold mt-4">Заключительная часть</h4>
-                    <ul className="list-disc space-y-1 pl-5">
-                        <li><CopyableTag tag="{additional_info}" />: Дополнительные сведения.</li>
-                        <li><CopyableTag tag="{copies_count}" />: Количество экземпляров.</li>
-                        <li><CopyableTag tag="{attachments}" />: Приложения к акту.</li>
+                        <li><CopyableTag tag="{act_number}" />, <CopyableTag tag="{act_day}" />, <CopyableTag tag="{act_month}" />, <CopyableTag tag="{act_year}" /></li>
+                        <li><CopyableTag tag="{builder_details}" />, <CopyableTag tag="{contractor_details}" />, <CopyableTag tag="{designer_details}" />, <CopyableTag tag="{work_performer}" /></li>
+                        <li><CopyableTag tag="{work_name}" />, <CopyableTag tag="{project_docs}" />, <CopyableTag tag="{materials}" />, <CopyableTag tag="{certs}" /></li>
+                        <li><CopyableTag tag="{work_start_day}" />, <CopyableTag tag="{work_start_month}" />, <CopyableTag tag="{work_start_year}" /></li>
+                        <li><CopyableTag tag="{work_end_day}" />, <CopyableTag tag="{work_end_month}" />, <CopyableTag tag="{work_end_year}" /></li>
+                        <li><CopyableTag tag="{regulations}" />, <CopyableTag tag="{next_work}" /></li>
+                        <li><CopyableTag tag="{additional_info}" />, <CopyableTag tag="{copies_count}" />, <CopyableTag tag="{attachments}" /></li>
                     </ul>
 
                     <h4 className="font-semibold mt-4">Представители (Комиссия)</h4>
-                    <p>Для каждого представителя доступны теги с ключом его роли. Например, для ФИО представителя застройщика (ключ <CopyableTag tag="tnz" />) используйте тег <CopyableTag tag="{tnz_name}" />.</p>
+                     <div className="my-2 p-3 rounded-md bg-blue-50 border border-blue-200">
+                        <h5 className="font-semibold text-blue-800">✨ Условное отображение</h5>
+                        <p className="text-sm mt-1">Теперь вы можете использовать <strong>условные блоки</strong>, чтобы скрыть целые разделы (включая пустые строки), если представитель не был выбран. Для этого оберните нужный текст в теги <code>{`{#ключ}...{/ключ}`}</code>.</p>
+                        <p className="text-sm mt-1"><strong>Пример:</strong> Блок ниже появится, только если выбран "Представитель иной организации (1)":</p>
+                        <pre className="bg-slate-200 p-2 rounded mt-2 text-xs"><code>{`{#i1}
+Представитель иной организации: {i1.position}, {i1.name}{/i1}`}</code></pre>
+                    </div>
+
                      <p className="mt-2 font-medium">Расшифровка ключей ролей:</p>
                      <ul className="list-disc space-y-2 pl-5 mt-2">
                          {Object.entries(ROLES).map(([key, description]) => (
@@ -597,11 +582,11 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
                     </ul>
                     <p className="mt-3">Полный список тегов для представителя (замените <strong>tnz</strong> на нужный ключ из списка выше):</p>
                     <ul className="list-disc space-y-1 pl-5">
-                        <li><CopyableTag tag="{tnz_name}" />: ФИО представителя.</li>
-                        <li><CopyableTag tag="{tnz_position}" />: Должность.</li>
-                        <li><CopyableTag tag="{tnz_org}" />: Организация.</li>
-                        <li><CopyableTag tag="{tnz_auth_doc}" />: Документ о полномочиях.</li>
-                        <li><CopyableTag tag="{tnz_details}" />: Сводная строка (должность, ФИО, документ).</li>
+                        <li><CopyableTag tag="{tnz.name}" />: ФИО представителя.</li>
+                        <li><CopyableTag tag="{tnz.position}" />: Должность.</li>
+                        <li><CopyableTag tag="{tnz.org}" />: Организация.</li>
+                        <li><CopyableTag tag="{tnz.auth_doc}" />: Документ о полномочиях.</li>
+                        <li><CopyableTag tag="{tnz.details}" />: Сводная строка (должность, ФИО, документ).</li>
                     </ul>
                 </div>
             </Modal>

@@ -120,7 +120,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
                             id="showActDate"
                             name="showActDate"
                             type="checkbox"
-                            checked={formData.showActDate}
+                            checked={!!formData.showActDate}
                             onChange={handleChange}
                             className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             />
@@ -138,7 +138,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
                             id="showParticipantDetails"
                             name="showParticipantDetails"
                             type="checkbox"
-                            checked={formData.showParticipantDetails}
+                            checked={!!formData.showParticipantDetails}
                             onChange={handleChange}
                             className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             />
@@ -148,6 +148,24 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
                                 Показывать раздел "Реквизиты участников"
                             </label>
                             <p className="text-xs text-slate-500">Этот раздел заполняется автоматически, его можно скрыть для экономии места.</p>
+                        </div>
+                      </div>
+                       <div className="relative flex items-start">
+                        <div className="flex h-6 items-center">
+                            <input
+                            id="useShortOrgNames"
+                            name="useShortOrgNames"
+                            type="checkbox"
+                            checked={!!formData.useShortOrgNames}
+                            onChange={handleChange}
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                        </div>
+                        <div className="ml-3 text-sm leading-6">
+                            <label htmlFor="useShortOrgNames" className="font-medium text-gray-900">
+                                Использовать только наименование организации в реквизитах
+                            </label>
+                            <p className="text-xs text-slate-500">Вместо полных данных (ИНН, ОГРН, адрес) в поля акта будет подставляться только название.</p>
                         </div>
                       </div>
                 </fieldset>
