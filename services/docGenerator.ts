@@ -61,23 +61,43 @@ export const generateDocument = (templateBase64: string, act: Act, people: Perso
             attachments: act.attachments,
         };
 
-        // Добавляем данные о представителях как вложенные объекты.
-        // Если представитель не выбран, его объект будет null,
-        // что позволит скрыть его в шаблоне с помощью условных тегов.
+        // Добавляем данные о представителях.
+        // Мы предоставляем данные в двух форматах для максимальной совместимости с шаблонами:
+        // 1. Вложенные объекты (например, data.tnz = { name: '...' }): 
+        //    Это позволяет использовать условные блоки {#tnz}...{/tnz}.
+        // 2. "Плоские" переменные с подчеркиванием (например, data.tnz_name = '...'):
+        //    Это более надежный способ вставки данных, который решает проблемы с полями через точку.
         ROLES_KEYS.forEach(roleKey => {
             const personId = act.representatives[roleKey];
             const person = people.find(p => p.id === personId);
 
             if (person) {
-                data[roleKey] = {
+                const personData = {
                     name: person.name || '',
                     position: person.position || '',
                     org: person.organization || '',
                     auth_doc: person.authDoc || '',
                     details: `${person.position}, ${person.name}, ${person.authDoc || '(нет данных о документе)'}`
                 };
+                
+                // 1. Вложенный объект для условных блоков {#tnz}
+                data[roleKey] = personData;
+
+                // 2. Плоские переменные для прямой вставки {tnz_name}
+                data[`${roleKey}_name`] = personData.name;
+                data[`${roleKey}_position`] = personData.position;
+                data[`${roleKey}_org`] = personData.org;
+                data[`${roleKey}_auth_doc`] = personData.auth_doc;
+                data[`${roleKey}_details`] = personData.details;
             } else {
-                data[roleKey] = null; // Критически важно для условных блоков в docxtemplater
+                // Если представитель не выбран, устанавливаем null для условных блоков
+                // и для всех связанных "плоских" переменных.
+                data[roleKey] = null;
+                data[`${roleKey}_name`] = null;
+                data[`${roleKey}_position`] = null;
+                data[`${roleKey}_org`] = null;
+                data[`${roleKey}_auth_doc`] = null;
+                data[`${roleKey}_details`] = null;
             }
         });
 

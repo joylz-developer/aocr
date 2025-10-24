@@ -576,12 +576,14 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
 
                     <h4 className="font-semibold mt-4">Представители (Комиссия)</h4>
                      <div className="my-2 p-3 rounded-md bg-blue-50 border border-blue-200">
-                        <h5 className="font-semibold text-blue-800">✨ Условное отображение</h5>
-                        <p className="text-sm mt-1">Теперь вы можете использовать <strong>условные блоки</strong>, чтобы скрыть целые разделы (включая пустые строки), если представитель не был выбран. Для этого оберните нужный текст в теги <code>{`{#ключ}...{/ключ}`}</code>.</p>
-                        <p className="text-sm mt-1"><strong>Пример:</strong> Блок ниже появится, только если выбран "Представитель иной организации (1)":</p>
-                        <pre className="bg-slate-200 p-2 rounded mt-2 text-xs"><code>{`{#i1}
-Представитель иной организации: {i1.position}, {i1.name}{/i1}`}</code></pre>
+                        <h5 className="font-semibold text-blue-800">✨ Важное обновление синтаксиса</h5>
+                        <p className="text-sm mt-1">Для вставки данных представителей теперь рекомендуется использовать синтаксис с подчеркиванием, например <CopyableTag tag="{tnz_name}" />. Этот формат более надежен.</p>
+                        <p className="text-sm mt-1">Прежний синтаксис с точкой (например, <code>{`{tnz.name}`}</code>) может не работать. Пожалуйста, обновите ваш шаблон.</p>
                     </div>
+
+                     <p className="mt-2">Используйте <strong>условные блоки</strong>, чтобы скрыть строки, если представитель не выбран. Для этого оберните нужный текст в теги <code>{`{#ключ}...{/ключ}`}</code>, где "ключ" - это код роли (например, <code>tnz</code>).</p>
+                        <pre className="bg-slate-200 p-2 rounded mt-2 text-xs"><code>{`{#i1}
+Представитель иной организации: {i1_position}, {i1_name}{/i1}`}</code></pre>
 
                      <p className="mt-2 font-medium">Расшифровка ключей ролей:</p>
                      <ul className="list-disc space-y-2 pl-5 mt-2">
@@ -593,11 +595,11 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
                     </ul>
                     <p className="mt-3">Полный список тегов для представителя (замените <strong>tnz</strong> на нужный ключ из списка выше):</p>
                     <ul className="list-disc space-y-1 pl-5">
-                        <li><CopyableTag tag="{tnz.name}" />: ФИО представителя.</li>
-                        <li><CopyableTag tag="{tnz.position}" />: Должность.</li>
-                        <li><CopyableTag tag="{tnz.org}" />: Организация.</li>
-                        <li><CopyableTag tag="{tnz.auth_doc}" />: Документ о полномочиях.</li>
-                        <li><CopyableTag tag="{tnz.details}" />: Сводная строка (должность, ФИО, документ).</li>
+                        <li><CopyableTag tag="{tnz_name}" />: ФИО представителя.</li>
+                        <li><CopyableTag tag="{tnz_position}" />: Должность.</li>
+                        <li><CopyableTag tag="{tnz_org}" />: Организация.</li>
+                        <li><CopyableTag tag="{tnz_auth_doc}" />: Документ о полномочиях.</li>
+                        <li><CopyableTag tag="{tnz_details}" />: Сводная строка (должность, ФИО, документ).</li>
                     </ul>
                 </div>
             </Modal>
