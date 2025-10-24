@@ -68,6 +68,7 @@ export interface ProjectSettings {
     showActDate?: boolean;
     showParticipantDetails?: boolean;
     useShortOrgNames?: boolean;
+    geminiApiKey?: string;
 }
 
 // Types for Import/Export feature

@@ -38,6 +38,7 @@ const App: React.FC = () => {
         showAttachments: true,
         showActDate: false,
         showParticipantDetails: false,
+        geminiApiKey: '',
     });
     const [currentPage, setCurrentPage] = useState<Page>('acts');
     const importInputRef = useRef<HTMLInputElement>(null);
@@ -267,9 +268,9 @@ const App: React.FC = () => {
                             onDelete={handleDeleteAct} 
                         />;
             case 'people':
-                return <PeoplePage people={people} organizations={organizations} onSave={handleSavePerson} onDelete={handleDeletePerson} />;
+                return <PeoplePage people={people} organizations={organizations} settings={settings} onSave={handleSavePerson} onDelete={handleDeletePerson} />;
             case 'organizations':
-                 return <OrganizationsPage organizations={organizations} onSave={handleSaveOrganization} onDelete={handleDeleteOrganization} />;
+                 return <OrganizationsPage organizations={organizations} settings={settings} onSave={handleSaveOrganization} onDelete={handleDeleteOrganization} />;
             case 'settings':
                 return <SettingsPage settings={settings} onSave={handleSaveSettings} />;
             default:

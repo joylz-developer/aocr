@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Person, Organization } from '../types';
+import { Person, Organization, ProjectSettings } from '../types';
 import Modal from '../components/Modal';
 import { PlusIcon, EditIcon, DeleteIcon } from '../components/Icons';
 import { GoogleGenAI } from '@google/genai';
@@ -7,6 +7,7 @@ import { GoogleGenAI } from '@google/genai';
 interface PeoplePageProps {
     people: Person[];
     organizations: Organization[];
+    settings: ProjectSettings;
     onSave: (person: Person) => void;
     onDelete: (id: string) => void;
 }
@@ -40,9 +41,10 @@ const imageFileToBase64 = (file: File): Promise<{ mimeType: string, data: string
 const PersonForm: React.FC<{
     person: Person | null,
     organizations: Organization[],
+    settings: ProjectSettings;
     onSave: (person: Person) => void,
     onClose: () => void
-}> = ({ person, organizations, onSave, onClose }) => {
+}> = ({ person, organizations, settings, onSave, onClose }) => {
     const [formData, setFormData] = useState<Person>(
         person || { id: crypto.randomUUID(), name: '', position: '', organization: '', authDoc: '' }
     );
@@ -50,9 +52,7 @@ const PersonForm: React.FC<{
     const [ocrError, setOcrError] = useState<string | null>(null);
     const [ocrWarning, setOcrWarning] = useState<string | null>(null);
     const ocrInputRef = useRef<HTMLInputElement>(null);
-    // Safely access the API key to prevent crashes in browser environments where `process` is not defined.
-    const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
-    const ai = apiKey ? new GoogleGenAI({apiKey: apiKey}) : null;
+    const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
 
     // Helper function for more robust string comparison
     const normalizeOrgName = (name: string): string => {
@@ -155,7 +155,7 @@ const PersonForm: React.FC<{
             {ai && (
                 <div>
                      <input type="file" ref={ocrInputRef} onChange={handleImageSelected} className="hidden" accept="image/*" />
-                     <button type="button" onClick={handleOcrClick} disabled={isOcrLoading} className="w-full flex justify-center items-center gap-2 px-4 py-2 border border-slate-300 text-sm font-medium rounded-md shadow-sm text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                     <button type="button" onClick={handleOcrClick} disabled={isOcrLoading} className="w-full flex justify-center items-center gap-2 px-4 py-2 border border-slate-300 text-sm font-medium rounded-md shadow-sm text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed" title={ai ? "Заполнить по фото документа" : "Введите API ключ в Настройках, чтобы включить эту функцию"}>
                         <CameraIcon /> {isOcrLoading ? "Анализ изображения..." : "✨ Заполнить по фото"}
                     </button>
                     {ocrError && <p className="text-red-500 text-sm mt-2 text-center">{ocrError}</p>}
@@ -191,7 +191,7 @@ const PersonForm: React.FC<{
     );
 };
 
-const PeoplePage: React.FC<PeoplePageProps> = ({ people, organizations, onSave, onDelete }) => {
+const PeoplePage: React.FC<PeoplePageProps> = ({ people, organizations, settings, onSave, onDelete }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingPerson, setEditingPerson] = useState<Person | null>(null);
 
@@ -256,6 +256,7 @@ const PeoplePage: React.FC<PeoplePageProps> = ({ people, organizations, onSave, 
                 <PersonForm
                     person={editingPerson}
                     organizations={organizations}
+                    settings={settings}
                     onSave={onSave}
                     onClose={handleCloseModal}
                 />

@@ -76,6 +76,25 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
                         required
                     />
                 </div>
+                
+                 <div>
+                    <label htmlFor="geminiApiKey" className={labelClass}>
+                        Gemini API Key
+                    </label>
+                    <input
+                        type="password"
+                        id="geminiApiKey"
+                        name="geminiApiKey"
+                        value={formData.geminiApiKey || ''}
+                        onChange={handleChange}
+                        className={inputClass}
+                        placeholder="Введите ваш API ключ"
+                    />
+                     <p className="text-xs text-slate-500 mt-1">
+                        Получите ваш ключ в <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Google AI Studio</a>.
+                        Ключ хранится локально в вашем браузере.
+                    </p>
+                </div>
 
                 <fieldset className="space-y-4">
                     <legend className="text-base font-medium text-slate-800">Настройки формы акта</legend>

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Organization } from '../types';
+import { Organization, ProjectSettings } from '../types';
 import Modal from '../components/Modal';
 import { PlusIcon, EditIcon, DeleteIcon } from '../components/Icons';
 import { GoogleGenAI } from '@google/genai';
 
 interface OrganizationsPageProps {
     organizations: Organization[];
+    settings: ProjectSettings;
     onSave: (org: Organization) => void;
     onDelete: (id: string) => void;
 }
@@ -35,7 +36,12 @@ const imageFileToBase64 = (file: File): Promise<{ mimeType: string, data: string
     });
 
 
-const OrganizationForm: React.FC<{ organization: Organization | null, onSave: (org: Organization) => void, onClose: () => void }> = ({ organization, onSave, onClose }) => {
+const OrganizationForm: React.FC<{
+    organization: Organization | null,
+    settings: ProjectSettings,
+    onSave: (org: Organization) => void,
+    onClose: () => void
+}> = ({ organization, settings, onSave, onClose }) => {
     const [formData, setFormData] = useState({
         name: '', ogrn: '', inn: '', kpp: '',
         address: '', phone: '', sro: '',
@@ -43,9 +49,7 @@ const OrganizationForm: React.FC<{ organization: Organization | null, onSave: (o
     const [isOcrLoading, setIsOcrLoading] = useState(false);
     const [ocrError, setOcrError] = useState<string | null>(null);
     const ocrInputRef = useRef<HTMLInputElement>(null);
-    // Safely access the API key to prevent crashes in browser environments where `process` is not defined.
-    const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
-    const ai = apiKey ? new GoogleGenAI({apiKey: apiKey}) : null;
+    const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
 
 
     useEffect(() => {
@@ -140,7 +144,7 @@ const OrganizationForm: React.FC<{ organization: Organization | null, onSave: (o
              {ai && (
                 <div>
                      <input type="file" ref={ocrInputRef} onChange={handleImageSelected} className="hidden" accept="image/*" />
-                     <button type="button" onClick={handleOcrClick} disabled={isOcrLoading} className="w-full flex justify-center items-center gap-2 px-4 py-2 border border-slate-300 text-sm font-medium rounded-md shadow-sm text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                     <button type="button" onClick={handleOcrClick} disabled={isOcrLoading} className="w-full flex justify-center items-center gap-2 px-4 py-2 border border-slate-300 text-sm font-medium rounded-md shadow-sm text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed" title={ai ? "Заполнить по фото документа" : "Введите API ключ в Настройках, чтобы включить эту функцию"}>
                         <CameraIcon /> {isOcrLoading ? "Анализ изображения..." : "✨ Заполнить по фото"}
                     </button>
                     {ocrError && <p className="text-red-500 text-sm mt-2 text-center">{ocrError}</p>}
@@ -184,7 +188,7 @@ const OrganizationForm: React.FC<{ organization: Organization | null, onSave: (o
     );
 };
 
-const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ organizations, onSave, onDelete }) => {
+const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ organizations, settings, onSave, onDelete }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
 
@@ -253,7 +257,7 @@ const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ organizations, on
             </div>
 
             <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingOrg ? 'Редактировать данные' : 'Новая организация'}>
-                <OrganizationForm organization={editingOrg} onSave={onSave} onClose={handleCloseModal} />
+                <OrganizationForm organization={editingOrg} settings={settings} onSave={onSave} onClose={handleCloseModal} />
             </Modal>
         </div>
     );

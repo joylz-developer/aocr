@@ -85,9 +85,7 @@ const ActForm: React.FC<{
     const [confirmation, setConfirmation] = useState<{ message: string; onConfirm: () => void } | null>(null);
     const [suppressWarning, setSuppressWarning] = useState(false);
     
-    // Safely access the API key to prevent crashes in browser environments where `process` is not defined.
-    const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
-    const ai = apiKey ? new GoogleGenAI({apiKey: apiKey}) : null;
+    const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
 
     // Effect to auto-update attachments from materials and certs
     useEffect(() => {
@@ -175,7 +173,7 @@ const ActForm: React.FC<{
     
     const handleAiFill = async () => {
         if (!ai) {
-             setAiError("API-ключ для Gemini не настроен.");
+             setAiError("API-ключ для Gemini не настроен. Пожалуйста, добавьте его в Настройках.");
              return;
         }
         if (!formData.workName) {
@@ -213,7 +211,7 @@ const ActForm: React.FC<{
             }
         } catch (error) {
             console.error("AI fill error:", error);
-            setAiError("Не удалось получить данные от AI. Попробуйте снова.");
+            setAiError("Не удалось получить данные от AI. Проверьте API ключ и попробуйте снова.");
         } finally {
             setIsAiLoading(false);
         }
@@ -335,7 +333,7 @@ const ActForm: React.FC<{
                     <label className={labelClass}>6. Работы выполнены в соответствии с</label>
                     <div className="flex items-start gap-2">
                         <textarea name="regulations" value={formData.regulations} onChange={handleChange} className={textareaClass} rows={2} style={{flexGrow: 1}}/>
-                        <button type="button" onClick={handleAiFill} disabled={isAiLoading || !ai || !formData.workName} className="mt-1 flex-shrink-0 flex justify-center items-center gap-2 px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed" title="Заполнить с помощью Gemini">
+                        <button type="button" onClick={handleAiFill} disabled={isAiLoading || !ai || !formData.workName} className="mt-1 flex-shrink-0 flex justify-center items-center gap-2 px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed" title={ai ? "Заполнить с помощью Gemini" : "Введите API ключ в Настройках, чтобы включить эту функцию"}>
                              ✨
                         </button>
                     </div>
