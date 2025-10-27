@@ -333,6 +333,7 @@ type Coords = { rowIndex: number; colIndex: number };
 // Main Table Component
 const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, template, settings, onSave, onDelete }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
+    const [editorValue, setEditorValue] = useState('');
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
     const [copiedCells, setCopiedCells] = useState<Set<string> | null>(null);
@@ -346,19 +347,78 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
     const tableContainerRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
-    useEffect(() => {
-        if (editingCell && editorRef.current) {
-            editorRef.current.focus();
-            editorRef.current.select();
-        }
-    }, [editingCell]);
-
+    // FIX: Moved 'columns' declaration before its use in the following useEffect hook.
     const columns = useMemo(() => ALL_COLUMNS.filter(col => {
         if (col.key === 'date' && !settings.showActDate) {
             return false;
         }
         return true;
     }), [settings.showActDate]);
+
+    useEffect(() => {
+        if (editingCell && editorRef.current) {
+            const { rowIndex, colIndex } = editingCell;
+            const act = acts[rowIndex];
+            const col = columns[colIndex];
+            
+            const columnKey = col.key as Exclude<ActTableColumnKey, 'workDates'>;
+            const initialValue = act[columnKey] || '';
+            setEditorValue(initialValue);
+            
+            editorRef.current.focus();
+    
+            if (editorRef.current instanceof HTMLTextAreaElement) {
+                const el = editorRef.current;
+                // Defer to allow DOM to update with the value before calculating scrollHeight
+                setTimeout(() => {
+                    el.style.height = 'auto'; // Reset height
+                    el.style.height = `${el.scrollHeight}px`; // Set to content height
+                    // Move cursor to end of text
+                    el.selectionStart = el.selectionEnd = el.value.length;
+                }, 0);
+            } else {
+                // For regular inputs, select the whole text
+                editorRef.current.select();
+            }
+        }
+    }, [editingCell, acts, columns]);
+
+    const handleEditorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        setEditorValue(e.target.value);
+        // Auto-resize textarea
+        if (e.target instanceof HTMLTextAreaElement) {
+            e.target.style.height = 'auto';
+            e.target.style.height = `${e.target.scrollHeight}px`;
+        }
+    };
+    
+    const handleEditorSaveAndClose = () => {
+        if (!editingCell) return;
+        const { rowIndex, colIndex } = editingCell;
+        const act = acts[rowIndex];
+        const col = columns[colIndex];
+        const columnKey = col.key as Exclude<ActTableColumnKey, 'workDates'>;
+        
+        const currentValue = act[columnKey] || '';
+        if (currentValue !== editorValue) {
+            onSave({ ...act, [columnKey]: editorValue });
+        }
+        setEditingCell(null);
+    };
+    
+    const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            setEditingCell(null); // Discard changes
+        }
+        // For input, Enter saves. For textarea, only Ctrl/Meta+Enter saves.
+        if (e.key === 'Enter' && !e.shiftKey) {
+            if (e.currentTarget instanceof HTMLInputElement || (e.currentTarget instanceof HTMLTextAreaElement && (e.ctrlKey || e.metaKey))) {
+                e.preventDefault();
+                handleEditorSaveAndClose();
+            }
+        }
+    };
 
     const getCellId = (rowIndex: number, colIndex: number) => `${rowIndex}:${colIndex}`;
 
@@ -381,9 +441,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
     };
 
     const handleCellMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
-        // We no longer set editingCell to null here to allow double-click to work reliably.
-        // Exiting edit mode is handled by onBlur on the editor itself.
-        setCopiedCells(null); // Clear copy selection on any new click
+        setCopiedCells(null);
     
         const cellId = getCellId(rowIndex, colIndex);
     
@@ -413,7 +471,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
     };
     
     const handleCellDoubleClick = (rowIndex: number, colIndex: number) => {
-        setEditingCell({ rowIndex, colIndex });
+        const col = columns[colIndex];
+        if (col.type !== 'custom_date') {
+            setEditingCell({ rowIndex, colIndex });
+        } else {
+             setEditingCell({ rowIndex, colIndex });
+        }
     };
 
      // Keyboard controls: Copy, Paste, Delete
@@ -898,37 +961,55 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
 
                                 const shouldHaveFillHandle = isSelectionContiguous && selectionBounds && rowIndex === selectionBounds.maxRow && colIndex === selectionBounds.maxCol;
 
-                                if (col.type === 'custom_date') {
-                                    return (
-                                        <td
-                                            key={col.key}
-                                            data-row-index={rowIndex}
-                                            data-col-index={colIndex}
-                                            onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
-                                            onDoubleClick={() => handleCellDoubleClick(rowIndex, colIndex)}
-                                            className={cellClassName}
-                                            style={cellStyle}
-                                        >
-                                            {isEditing ? (
-                                                <DateCellEditor
-                                                    act={act}
-                                                    onSave={onSave}
-                                                    onClose={() => setEditingCell(null)}
-                                                />
-                                            ) : (
-                                                <div className="w-full h-full p-2 whitespace-pre-wrap truncate">
-                                                    {(act.workStartDate || act.workEndDate)
-                                                        ? `${act.workStartDate || '...'} - ${act.workEndDate || '...'}`
-                                                        : <span className="text-slate-400">...</span>
-                                                    }
-                                                </div>
-                                            )}
-                                            {shouldHaveFillHandle && <FillHandle onMouseDown={handleFillMouseDown} />}
-                                        </td>
-                                    );
-                                }
+                                let displayContent;
+                                let editorContent = null;
                                 
-                                const columnKey = col.key as Exclude<ActTableColumnKey, 'workDates'>;
+                                if (col.type === 'custom_date') {
+                                    displayContent = (
+                                        (act.workStartDate || act.workEndDate)
+                                            ? `${act.workStartDate || '...'} - ${act.workEndDate || '...'}`
+                                            : <span className="text-slate-400">...</span>
+                                    );
+                                    if (isEditing) {
+                                        editorContent = (
+                                            <DateCellEditor
+                                                act={act}
+                                                onSave={onSave}
+                                                onClose={() => setEditingCell(null)}
+                                            />
+                                        );
+                                    }
+                                } else {
+                                    const columnKey = col.key as Exclude<ActTableColumnKey, 'workDates'>;
+                                    displayContent = act[columnKey] || <span className="text-slate-400">...</span>;
+                                    if (isEditing) {
+                                        if (col.type === 'textarea') {
+                                            editorContent = (
+                                                <textarea
+                                                    ref={editorRef as React.RefObject<HTMLTextAreaElement>}
+                                                    value={editorValue}
+                                                    onChange={handleEditorChange}
+                                                    onBlur={handleEditorSaveAndClose}
+                                                    onKeyDown={handleEditorKeyDown}
+                                                    className="absolute top-0 left-0 w-full p-2 ring-2 ring-blue-500 rounded-md resize-none focus:outline-none z-10 overflow-hidden"
+                                                    style={{ minHeight: '100%' }}
+                                                />
+                                            );
+                                        } else {
+                                            editorContent = (
+                                                <input
+                                                    ref={editorRef as React.RefObject<HTMLInputElement>}
+                                                    type={col.type}
+                                                    value={editorValue}
+                                                    onChange={handleEditorChange}
+                                                    onBlur={handleEditorSaveAndClose}
+                                                    onKeyDown={handleEditorKeyDown}
+                                                    className="absolute top-0 left-0 w-full h-full p-2 ring-2 ring-blue-500 rounded-md focus:outline-none z-10"
+                                                />
+                                            );
+                                        }
+                                    }
+                                }
 
                                 return (
                                     <td
@@ -940,32 +1021,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                         className={cellClassName}
                                         style={cellStyle}
                                     >
-                                        {isEditing ? (
-                                             col.type === 'textarea' ? (
-                                                <textarea
-                                                    ref={editorRef as React.RefObject<HTMLTextAreaElement>}
-                                                    value={act[columnKey] || ''}
-                                                    onChange={(e) => onSave({ ...act, [columnKey]: e.target.value })}
-                                                    onBlur={() => setEditingCell(null)}
-                                                    onKeyDown={(e) => { if(e.key === 'Escape') setEditingCell(null); }}
-                                                    className="w-full h-full p-2 border-2 border-blue-500 rounded-md resize-y focus:outline-none"
-                                                />
-                                             ) : (
-                                                <input
-                                                    ref={editorRef as React.RefObject<HTMLInputElement>}
-                                                    type={col.type}
-                                                    value={act[columnKey] || ''}
-                                                    onChange={(e) => onSave({ ...act, [columnKey]: e.target.value })}
-                                                    onBlur={() => setEditingCell(null)}
-                                                    onKeyDown={(e) => { if(e.key === 'Escape') setEditingCell(null); }}
-                                                    className="w-full h-full p-2 border-2 border-blue-500 rounded-md focus:outline-none"
-                                                />
-                                             )
-                                        ) : (
-                                            <div className="w-full h-full p-2 whitespace-pre-wrap truncate">
-                                                {act[columnKey] || <span className="text-slate-400">...</span>}
-                                            </div>
-                                        )}
+                                        <div className="w-full min-h-[2.5rem] h-full p-2 whitespace-pre-wrap break-words">
+                                            {displayContent}
+                                        </div>
+                                        
+                                        {editorContent}
+
                                         {shouldHaveFillHandle && <FillHandle onMouseDown={handleFillMouseDown} />}
                                     </td>
                                 );
