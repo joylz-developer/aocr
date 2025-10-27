@@ -448,86 +448,109 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
             // Handle Copy
             if (e.key === 'c' && isCtrlKey && selectedCells.size > 0) {
                  e.preventDefault();
-                const coordsList = Array.from(selectedCells).map(id => {
-                    const [rowIndex, colIndex] = id.split(':').map(Number);
-                    return { rowIndex, colIndex };
-                });
+                try {
+                    const coordsList = Array.from(selectedCells).map(id => {
+                        const [rowIndex, colIndex] = id.split(':').map(Number);
+                        return { rowIndex, colIndex };
+                    });
 
-                const minRow = Math.min(...coordsList.map(c => c.rowIndex));
-                const maxRow = Math.max(...coordsList.map(c => c.rowIndex));
-                const minCol = Math.min(...coordsList.map(c => c.colIndex));
-                const maxCol = Math.max(...coordsList.map(c => c.colIndex));
+                    if (coordsList.length === 0) return;
 
-                 const copyData = [];
-                 for (let r = minRow; r <= maxRow; r++) {
-                     const rowData = [];
-                     for (let c = minCol; c <= maxCol; c++) {
-                        if (selectedCells.has(getCellId(r, c))) {
-                             const act = acts[r];
-                             const col = columns[c];
-                             if (col.key === 'workDates') {
-                                 rowData.push(`${act.workStartDate || ''} - ${act.workEndDate || ''}`);
-                             } else {
-                                 rowData.push(act[col.key as Exclude<ActTableColumnKey, 'workDates'>] || '');
-                             }
-                        } else {
-                            rowData.push('');
+                    const minRow = Math.min(...coordsList.map(c => c.rowIndex));
+                    const maxRow = Math.max(...coordsList.map(c => c.rowIndex));
+                    const minCol = Math.min(...coordsList.map(c => c.colIndex));
+                    const maxCol = Math.max(...coordsList.map(c => c.colIndex));
+
+                    const copyData = [];
+                    for (let r = minRow; r <= maxRow; r++) {
+                        const rowData = [];
+                        for (let c = minCol; c <= maxCol; c++) {
+                            if (selectedCells.has(getCellId(r, c))) {
+                                const act = acts[r];
+                                const col = columns[c];
+                                if (act && col) {
+                                    if (col.key === 'workDates') {
+                                        rowData.push(`${act.workStartDate || ''} - ${act.workEndDate || ''}`);
+                                    } else {
+                                        rowData.push(act[col.key as Exclude<ActTableColumnKey, 'workDates'>] || '');
+                                    }
+                                } else {
+                                     rowData.push('');
+                                }
+                            } else {
+                                rowData.push('');
+                            }
                         }
-                     }
-                     copyData.push(rowData.join('\t'));
-                 }
-                 await navigator.clipboard.writeText(copyData.join('\n'));
-                 setCopiedCells(new Set(selectedCells));
+                        copyData.push(rowData.join('\t'));
+                    }
+                    await navigator.clipboard.writeText(copyData.join('\n'));
+                    setCopiedCells(new Set(selectedCells));
+                } catch (err) {
+                    console.error("Failed to copy: ", err);
+                    alert("Не удалось скопировать данные в буфер обмена.");
+                }
             }
             
             // Handle Paste
             if (e.key === 'v' && isCtrlKey && activeCell) {
                 e.preventDefault();
-                const pastedText = await navigator.clipboard.readText();
-                const pastedRows = pastedText.replace(/\r\n/g, '\n').split('\n').map(row => row.split('\t'));
-                
-                const startRow = activeCell.rowIndex;
-                const startCol = activeCell.colIndex;
-                const updatedActs = new Map<string, Act>();
+                try {
+                    const pastedText = await navigator.clipboard.readText();
+                    if (!pastedText) return;
 
-                pastedRows.forEach((rowData, rOffset) => {
-                    const targetRowIndex = startRow + rOffset;
-                    if (targetRowIndex >= acts.length) return;
+                    const pastedRows = pastedText.replace(/\r\n/g, '\n').split('\n').map(row => row.split('\t'));
                     
-                    const originalAct = acts[targetRowIndex];
-                    let updatedAct = updatedActs.get(originalAct.id) || { ...originalAct };
+                    const startRow = activeCell.rowIndex;
+                    const startCol = activeCell.colIndex;
+                    const updatedActs = new Map<string, Act>();
 
-                    rowData.forEach((cellData, cOffset) => {
-                        const targetColIndex = startCol + cOffset;
-                        if (targetColIndex >= columns.length) return;
+                    pastedRows.forEach((rowData, rOffset) => {
+                        const targetRowIndex = startRow + rOffset;
+                        if (targetRowIndex >= acts.length) return;
                         
-                        const col = columns[targetColIndex];
-                         if (col.key === 'workDates') {
-                            const [start, end] = cellData.split(' - ').map(s => s.trim());
-                            updatedAct.workStartDate = start || '';
-                            updatedAct.workEndDate = end || '';
-                            updatedAct.date = end || '';
-                        } else {
-                            const columnKey = col.key as Exclude<ActTableColumnKey, 'workDates'>;
-                            (updatedAct as any)[columnKey] = cellData;
-                        }
+                        const originalAct = acts[targetRowIndex];
+                        if(!originalAct) return;
+                        let updatedAct = updatedActs.get(originalAct.id) || { ...originalAct };
+
+                        rowData.forEach((cellData, cOffset) => {
+                            const targetColIndex = startCol + cOffset;
+                            if (targetColIndex >= columns.length) return;
+                            
+                            const col = columns[targetColIndex];
+                            if (!col) return;
+
+                            if (col.key === 'workDates') {
+                                const parts = cellData.split(' - ').map(s => s.trim());
+                                const start = parts[0] || '';
+                                const end = parts.length > 1 ? (parts[1] || start) : start;
+                                updatedAct.workStartDate = start;
+                                updatedAct.workEndDate = end;
+                                updatedAct.date = end; // Act date follows end date
+                            } else {
+                                const columnKey = col.key as Exclude<ActTableColumnKey, 'workDates'>;
+                                (updatedAct as any)[columnKey] = cellData;
+                            }
+                        });
+                        updatedActs.set(originalAct.id, updatedAct);
                     });
-                    updatedActs.set(originalAct.id, updatedAct);
-                });
-                updatedActs.forEach(onSave);
-                setCopiedCells(null);
-                
-                // Expand selection to pasted area
-                const endRow = startRow + pastedRows.length - 1;
-                const maxCols = pastedRows.length > 0 ? Math.max(...pastedRows.map(r => r.length)) : 0;
-                const endCol = startCol + maxCols - 1;
-                const newSelection = new Set<string>();
-                for (let r = startRow; r <= Math.min(endRow, acts.length - 1); r++) {
-                    for (let c = startCol; c <= Math.min(endCol, columns.length - 1); c++) {
-                        newSelection.add(getCellId(r, c));
+                    updatedActs.forEach(onSave);
+                    setCopiedCells(null);
+                    
+                    // Expand selection to pasted area
+                    const endRow = startRow + pastedRows.length - 1;
+                    const maxCols = pastedRows.length > 0 ? Math.max(...pastedRows.map(r => r.length)) : 0;
+                    const endCol = startCol + maxCols - 1;
+                    const newSelection = new Set<string>();
+                    for (let r = startRow; r <= Math.min(endRow, acts.length - 1); r++) {
+                        for (let c = startCol; c <= Math.min(endCol, columns.length - 1); c++) {
+                            newSelection.add(getCellId(r, c));
+                        }
                     }
+                    setSelectedCells(newSelection);
+                } catch (err) {
+                     console.error("Failed to paste: ", err);
+                     alert("Не удалось вставить данные из буфера обмена.");
                 }
-                setSelectedCells(newSelection);
             }
         };
 
@@ -591,12 +614,16 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
             if (coords) {
                 const selectionBounds = getSelectionBounds(selectedCells);
                 if (!selectionBounds) return;
-                const { maxRow, minCol, maxCol } = selectionBounds;
-                if (coords.rowIndex > maxRow) { // Only support dragging down for now
-                     setFillTargetArea({ start: {rowIndex: maxRow + 1, colIndex: minCol}, end: {rowIndex: coords.rowIndex, colIndex: maxCol} });
-                } else {
-                    setFillTargetArea(null);
+                const { minRow, maxRow, minCol, maxCol } = selectionBounds;
+                
+                let fillArea: { start: Coords, end: Coords } | null = null;
+
+                if (coords.rowIndex > maxRow) { // Dragging down
+                     fillArea = { start: {rowIndex: maxRow + 1, colIndex: minCol}, end: {rowIndex: coords.rowIndex, colIndex: maxCol} };
+                } else if (coords.rowIndex < minRow) { // Dragging up
+                     fillArea = { start: {rowIndex: coords.rowIndex, colIndex: minCol}, end: {rowIndex: minRow - 1, colIndex: maxCol} };
                 }
+                setFillTargetArea(fillArea);
             }
         };
 
@@ -610,26 +637,31 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
             const selectionBounds = getSelectionBounds(selectedCells);
             if (!selectionBounds) return;
 
-            const { minCol: selMinCol, maxCol: selMaxCol } = selectionBounds;
-            const { minRow: fillMinRow, maxRow: fillMaxRow } = normalizeSelection(fillTargetArea.start, fillTargetArea.end);
-
-            const { minRow: selMinRow, maxRow: selMaxRow } = selectionBounds;
+            const { minRow: selMinRow, maxRow: selMaxRow, minCol: selMinCol, maxCol: selMaxCol } = selectionBounds;
             const patternHeight = selMaxRow - selMinRow + 1;
             
+            const { minRow: fillMinRow, maxRow: fillMaxRow } = normalizeSelection(fillTargetArea.start, fillTargetArea.end);
+            
+            const isFillingUpwards = fillMaxRow < selMinRow;
             const actsToUpdate: Act[] = [];
 
             for (let r = fillMinRow; r <= fillMaxRow; r++) {
                 const targetAct = acts[r];
+                if (!targetAct) continue;
+                
                 let updatedAct = { ...targetAct };
                 let hasChanges = false;
                 
-                const patternRowIndex = selMinRow + ((r - fillMinRow) % patternHeight);
+                const patternRowIndex = isFillingUpwards
+                    ? selMaxRow - ((selMinRow - 1 - r) % patternHeight)
+                    : selMinRow + ((r - (selMaxRow + 1)) % patternHeight);
+                
                 const sourceAct = acts[patternRowIndex];
-
                 if (!sourceAct) continue;
 
                 for (let c = selMinCol; c <= selMaxCol; c++) {
-                    if (!selectedCells.has(getCellId(patternRowIndex, c))) continue;
+                    const sourceCellId = getCellId(patternRowIndex, c);
+                    if (!selectedCells.has(sourceCellId)) continue;
 
                     const colKey = columns[c]?.key;
                     if (!colKey) continue;
