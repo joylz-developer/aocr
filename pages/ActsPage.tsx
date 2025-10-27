@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Act, Person, Organization, ROLES, ProjectSettings, WorkItem } from '../types';
+import { Act, Person, Organization, ROLES, ProjectSettings } from '../types';
 import Modal from '../components/Modal';
 import { PlusIcon, EditIcon, DeleteIcon, DownloadIcon, HelpIcon } from '../components/Icons';
 import { generateDocument } from '../services/docGenerator';
@@ -70,32 +70,16 @@ const ActForm: React.FC<{
     onSave: (act: Act) => void;
     onClose: () => void;
 }> = ({ act, people, organizations, settings, onSave, onClose }) => {
-    const [formData, setFormData] = useState<Act>(() => {
-        const initialAct = act || {
+    const [formData, setFormData] = useState<Act>(() => 
+        act || {
             id: crypto.randomUUID(),
             number: '', date: '', objectName: settings.objectName, builderDetails: '', contractorDetails: '',
-            designerDetails: '', workPerformer: '', workItems: [], workStartDate: '', workEndDate: '', 
+            designerDetails: '', workPerformer: '', workName: '', projectDocs: '', materials: '', certs: '',
+            workStartDate: '', workEndDate: '', 
             regulations: '', nextWork: '', additionalInfo: '', 
             copiesCount: String(settings.defaultCopiesCount), attachments: '', representatives: {},
-        };
-        
-        // Backward compatibility: migrate old data structure to new workItems table
-        if (act && !act.workItems && (act as any).workName) {
-            const legacyAct = act as any;
-            initialAct.workItems = [{
-                id: crypto.randomUUID(),
-                name: legacyAct.workName || '',
-                projectDocs: legacyAct.projectDocs || '',
-                materials: legacyAct.materials || '',
-                certs: legacyAct.certs || '',
-                notes: '',
-            }];
-        } else if (!initialAct.workItems || initialAct.workItems.length === 0) {
-            // Ensure there's at least one empty row for new acts
-            initialAct.workItems = [{ id: crypto.randomUUID(), name: '', projectDocs: '', materials: '', certs: '', notes: '' }];
         }
-        return initialAct;
-    });
+    );
 
     const [isAiLoading, setIsAiLoading] = useState(false);
     const [aiError, setAiError] = useState<string | null>(null);
@@ -105,26 +89,15 @@ const ActForm: React.FC<{
     
     const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
 
-    const availableColumns: { key: keyof WorkItem, label: string }[] = [
-        { key: 'name', label: '1. Наименование работ' },
-        { key: 'projectDocs', label: '2. Проектная документация' },
-        { key: 'materials', label: '3. Примененные материалы' },
-        { key: 'certs', label: '4. Документы о качестве' },
-        { key: 'notes', label: 'Примечания' },
-    ];
-
-    const visibleColumns = availableColumns.filter(c => settings.visibleWorkItemColumns?.includes(c.key));
-
     // Effect to auto-update attachments from workItems
     useEffect(() => {
-        const materials = formData.workItems.map(item => item.materials).filter(Boolean).join('\n');
-        const certs = formData.workItems.map(item => item.certs).filter(Boolean).join('\n');
+        const { materials, certs } = formData;
         const combined = [materials, certs].filter(Boolean).join('\n\n');
-
         if (combined !== formData.attachments) {
             setFormData(prev => ({ ...prev, attachments: combined }));
         }
-    }, [formData.workItems]);
+    }, [formData.materials, formData.certs]);
+
 
     // Effect to sync act date with work end date
     useEffect(() => {
@@ -192,29 +165,6 @@ const ActForm: React.FC<{
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
-    
-    const handleWorkItemChange = (index: number, field: keyof WorkItem, value: string) => {
-        const newWorkItems = [...formData.workItems];
-        newWorkItems[index] = { ...newWorkItems[index], [field]: value };
-        setFormData(prev => ({ ...prev, workItems: newWorkItems }));
-    };
-
-    const handleAddWorkItem = () => {
-        setFormData(prev => ({
-            ...prev,
-            workItems: [...prev.workItems, { id: crypto.randomUUID(), name: '', projectDocs: '', materials: '', certs: '', notes: '' }]
-        }));
-    };
-
-    const handleRemoveWorkItem = (index: number) => {
-        if (formData.workItems.length <= 1) {
-            alert("Нельзя удалить последнюю строку.");
-            return;
-        }
-        const newWorkItems = formData.workItems.filter((_, i) => i !== index);
-        setFormData(prev => ({ ...prev, workItems: newWorkItems }));
-    };
-
 
     const handleRepChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -230,16 +180,15 @@ const ActForm: React.FC<{
              return;
         }
         
-        const workNames = formData.workItems.map(item => item.name).filter(Boolean).join('; ');
-        if (!workNames) {
-            alert("Пожалуйста, заполните наименования работ в таблице 'Выполненные работы'.");
+        if (!formData.workName) {
+            alert("Пожалуйста, заполните наименование работ.");
             return;
         }
 
         setIsAiLoading(true);
         setAiError(null);
         try {
-            const prompt = `На основе следующего списка работ: "${workNames}", предложи список нормативных документов (СП, ГОСТ), в соответствии с которыми эти работы должны выполняться.
+            const prompt = `На основе следующего списка работ: "${formData.workName}", предложи список нормативных документов (СП, ГОСТ), в соответствии с которыми эти работы должны выполняться.
             Верни результат в формате JSON с одним ключом "regulations".
             
             Пример ответа:
@@ -275,21 +224,16 @@ const ActForm: React.FC<{
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         
-        const requiredFields: { key: keyof Act | 'workItems', label: string }[] = [
+        const requiredFields: { key: keyof Act, label: string }[] = [
             { key: 'number', label: 'Номер акта' },
-            { key: 'workItems', label: 'Таблица "Выполненные работы"' },
+            { key: 'workName', label: 'Наименование работ' },
             { key: 'workStartDate', label: 'Дата начала работ' },
             { key: 'workEndDate', label: 'Дата окончания работ' },
             { key: 'regulations', label: 'Нормативные документы' },
             { key: 'nextWork', label: 'Разрешается производство следующих работ' },
         ];
         
-        const missingFields = requiredFields.filter(f => {
-            if (f.key === 'workItems') {
-                return formData.workItems.length === 0 || formData.workItems.every(item => !item.name.trim());
-            }
-            return !(formData[f.key as keyof Act] as string)?.trim()
-        });
+        const missingFields = requiredFields.filter(f => !(formData[f.key as keyof Act] as string)?.trim());
 
         const warningSuppressedUntil = localStorage.getItem('suppressActWarningUntil');
         const isSuppressed = warningSuppressedUntil && new Date().getTime() < parseInt(warningSuppressedUntil, 10);
@@ -319,8 +263,6 @@ const ActForm: React.FC<{
     const textareaClass = inputClass;
     const labelClass = "block text-sm font-medium text-slate-700";
     const readOnlyTextareaClass = textareaClass + " bg-slate-100 cursor-not-allowed";
-    const tableTextareaClass = "w-full p-2 border-none focus:ring-1 focus:ring-blue-500 focus:outline-none bg-transparent resize-none h-full";
-
 
     const renderSection = (title: string, children: React.ReactNode) => (
         <div className="border border-slate-200 rounded-md p-4">
@@ -358,51 +300,25 @@ const ActForm: React.FC<{
                 </div>}
             </>)}
 
-            {/* NEW WORK ITEMS TABLE */}
-             <div className="border border-slate-200 rounded-md p-4">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4">Выполненные работы</h3>
-                 <div className="overflow-x-auto">
-                    <table className="min-w-full border-collapse border border-slate-300">
-                        <thead className="bg-slate-50">
-                            <tr>
-                                <th className="border border-slate-300 px-2 py-2 text-left text-sm font-medium text-slate-600 w-12">№</th>
-                                {visibleColumns.map(col => (
-                                    <th key={col.key} className="border border-slate-300 px-2 py-2 text-left text-sm font-medium text-slate-600">{col.label}</th>
-                                ))}
-                                <th className="border border-slate-300 px-2 py-2 text-center text-sm font-medium text-slate-600 w-16">...</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {formData.workItems.map((item, index) => (
-                                <tr key={item.id} className="group hover:bg-slate-50">
-                                    <td className="border border-slate-300 px-2 py-1 text-center text-sm text-slate-500">{index + 1}</td>
-                                    {visibleColumns.map(col => (
-                                         <td key={col.key} className="border border-slate-300 p-0 align-top">
-                                            <textarea
-                                                value={item[col.key]}
-                                                onChange={(e) => handleWorkItemChange(index, col.key, e.target.value)}
-                                                className={tableTextareaClass}
-                                                rows={2}
-                                            />
-                                         </td>
-                                    ))}
-                                    <td className="border border-slate-300 px-2 py-1 text-center align-middle">
-                                        <button type="button" onClick={() => handleRemoveWorkItem(index)} className="p-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" title="Удалить строку">
-                                            <DeleteIcon />
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+            {renderSection("Выполненные работы", <>
+                <div className="md:col-span-2">
+                    <label className={labelClass}>1. Наименование работ</label>
+                    <textarea name="workName" value={formData.workName} onChange={handleChange} className={textareaClass} rows={3} />
                 </div>
-                <div className="mt-4">
-                    <button type="button" onClick={handleAddWorkItem} className="flex items-center text-sm text-blue-600 font-medium hover:text-blue-800">
-                        <PlusIcon /> Добавить строку
-                    </button>
+                <div className="md:col-span-2">
+                    <label className={labelClass}>2. Проектная документация, шифры</label>
+                    <textarea name="projectDocs" value={formData.projectDocs} onChange={handleChange} className={textareaClass} rows={2} />
                 </div>
-            </div>
-
+                <div className="md:col-span-2">
+                    <label className={labelClass}>3. Примененные материалы/конструкции/изделия</label>
+                    <textarea name="materials" value={formData.materials} onChange={handleChange} className={textareaClass} rows={2} />
+                </div>
+                <div className="md:col-span-2">
+                    <label className={labelClass}>4. Документы о качестве (сертификаты, паспорта)</label>
+                    <textarea name="certs" value={formData.certs} onChange={handleChange} className={textareaClass} rows={2} />
+                </div>
+            </>)}
+            
             {renderSection("Информация о работах (продолжение)", <>
                  <div className="md:col-span-2">
                     <label className={labelClass}>5. Даты производства работ</label>
@@ -509,7 +425,7 @@ const ActForm: React.FC<{
                         className={readOnlyTextareaClass}
                         rows={3} 
                     />
-                    <p className="text-xs text-slate-500 mt-1">Это поле заполняется автоматически на основе таблицы работ.</p>
+                    <p className="text-xs text-slate-500 mt-1">Это поле заполняется автоматически на основе полей "Примененные материалы" и "Документы о качестве".</p>
                 </div>}
             </>)}
 
@@ -571,12 +487,8 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
         generateDocument(template, act, people);
     };
     
-    // Get the first work name for display in the list
     const getActTitle = (act: Act): string => {
-        if (act.workItems && act.workItems.length > 0 && act.workItems[0].name) {
-            return act.workItems[0].name;
-        }
-        return act.workName || '(Без наименования)'; // Fallback for old data
+        return act.workName || '(Без наименования)';
     }
 
 
@@ -662,21 +574,12 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
                         <li><CopyableTag tag="{additional_info}" />, <CopyableTag tag="{copies_count}" />, <CopyableTag tag="{attachments}" /></li>
                     </ul>
                     
-                     <h4 className="font-semibold mt-6">Таблица работ (Новый синтаксис)</h4>
-                    <div className="my-2 p-3 rounded-md bg-blue-50 border border-blue-200">
-                        <p className="text-sm mt-1">Для вставки данных о выполненных работах используется **цикл**. Это позволяет автоматически создавать столько строк в таблице вашего документа, сколько вы добавили в форме.</p>
-                    </div>
-                    <p>В вашем шаблоне .docx создайте таблицу. В первой ячейке первой строки таблицы, предназначенной для данных, поставьте тег начала цикла <CopyableTag tag="{#work_items}" />. В последней ячейке этой же строки поставьте тег конца цикла <CopyableTag tag="{/work_items}" />. Между этими тегами размещайте теги для данных строки.</p>
-                    <p className="font-medium mt-2">Пример для строки таблицы в Word:</p>
-                    <pre className="bg-slate-200 p-2 rounded mt-2 text-xs whitespace-pre-wrap"><code>{`| {#work_items}{num} | {name} | {project_docs} | {materials} | {certs} | {notes}{/work_items} |`}</code></pre>
-                    <p className="mt-3">Доступные теги внутри цикла <CopyableTag tag="{#work_items}" />:</p>
-                    <ul className="list-disc space-y-1 pl-5">
-                        <li><CopyableTag tag="{num}" /> &mdash; Порядковый номер строки.</li>
-                        <li><CopyableTag tag="{name}" /> &mdash; Наименование работ.</li>
+                    <h4 className="font-semibold mt-6">Выполненные работы</h4>
+                    <ul className="list-disc space-y-2 pl-5 mt-2">
+                        <li><CopyableTag tag="{work_name}" /> &mdash; Наименование работ.</li>
                         <li><CopyableTag tag="{project_docs}" /> &mdash; Проектная документация.</li>
                         <li><CopyableTag tag="{materials}" /> &mdash; Примененные материалы.</li>
                         <li><CopyableTag tag="{certs}" /> &mdash; Документы о качестве (сертификаты, паспорта).</li>
-                        <li><CopyableTag tag="{notes}" /> &mdash; Примечания.</li>
                     </ul>
 
                     <h4 className="font-semibold mt-6">Представители (Комиссия)</h4>

@@ -40,7 +40,7 @@ const App: React.FC = () => {
         showActDate: false,
         showParticipantDetails: false,
         geminiApiKey: '',
-        visibleWorkItemColumns: ['name', 'projectDocs', 'materials', 'certs'],
+        // FIX: Removed 'visibleWorkItemColumns' property as it's not defined in the ProjectSettings type.
     });
     const [currentPage, setCurrentPage] = useState<Page>('acts');
     const importInputRef = useRef<HTMLInputElement>(null);

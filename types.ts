@@ -29,15 +29,6 @@ export const ROLES: { [key: string]: string } = {
     i3: 'Представитель иной организации (3)',
 };
 
-export interface WorkItem {
-    id: string;
-    name: string;
-    projectDocs: string;
-    materials: string;
-    certs: string;
-    notes: string;
-}
-
 export interface Act {
     id: string;
     number: string;
@@ -48,13 +39,10 @@ export interface Act {
     designerDetails: string;
     workPerformer: string;
 
-    // DEPRECATED: These will be migrated to workItems
-    workName?: string;
-    projectDocs?: string;
-    materials?: string;
-    certs?: string;
-    
-    workItems: WorkItem[];
+    workName: string;
+    projectDocs: string;
+    materials: string;
+    certs: string;
 
     workStartDate: string; // YYYY-MM-DD
     workEndDate: string; // YYYY-MM-DD
@@ -82,7 +70,6 @@ export interface ProjectSettings {
     showParticipantDetails?: boolean;
     useShortOrgNames?: boolean;
     geminiApiKey?: string;
-    visibleWorkItemColumns?: string[];
 }
 
 // Types for Import/Export feature

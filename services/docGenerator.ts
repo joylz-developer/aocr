@@ -28,17 +28,6 @@ export const generateDocument = (templateBase64: string, act: Act, people: Perso
         const [workStartYear, workStartMonth, workStartDay] = act.workStartDate ? act.workStartDate.split('-') : ['', '', ''];
         const [workEndYear, workEndMonth, workEndDay] = act.workEndDate ? act.workEndDate.split('-') : ['', '', ''];
         
-        // Prepare work items for the template, adding item numbers
-        const workItemsForDoc = act.workItems.map((item, index) => ({
-            num: index + 1,
-            name: item.name,
-            project_docs: item.projectDocs,
-            materials: item.materials,
-            certs: item.certs,
-            notes: item.notes,
-        }));
-
-
         const data: { [key: string]: any } = {
             // Header
             object_name: act.objectName,
@@ -51,8 +40,11 @@ export const generateDocument = (templateBase64: string, act: Act, people: Perso
             act_month: actMonth,
             act_year: actYear,
             work_performer: act.workPerformer,
-            // New work items table
-            work_items: workItemsForDoc,
+            // Work details
+            work_name: act.workName,
+            project_docs: act.projectDocs,
+            materials: act.materials,
+            certs: act.certs,
             // Sections
             work_start_day: workStartDay,
             work_start_month: workStartMonth,

@@ -6,14 +6,6 @@ interface SettingsPageProps {
     onSave: (settings: ProjectSettings) => void;
 }
 
-const ALL_WORK_ITEM_COLUMNS = [
-    { key: 'name', label: 'Наименование работ' },
-    { key: 'projectDocs', label: 'Проектная документация' },
-    { key: 'materials', label: 'Примененные материалы' },
-    { key: 'certs', label: 'Документы о качестве' },
-    { key: 'notes', label: 'Примечания' },
-];
-
 const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
     const [formData, setFormData] = useState<ProjectSettings>(settings);
     const [isSaved, setIsSaved] = useState(false);
@@ -38,16 +30,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
         }));
     };
     
-    const handleColumnVisibilityChange = (columnKey: string, isVisible: boolean) => {
-        setFormData(prev => {
-            const currentVisible = prev.visibleWorkItemColumns || [];
-            const newVisible = isVisible
-                ? [...currentVisible, columnKey]
-                : currentVisible.filter(key => key !== columnKey);
-            return { ...prev, visibleWorkItemColumns: newVisible };
-        });
-    };
-
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         onSave(formData);
@@ -112,32 +94,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
                         Ключ хранится локально в вашем браузере.
                     </p>
                 </div>
-
-                 <fieldset className="space-y-4 pt-4 border-t">
-                    <legend className="text-base font-medium text-slate-800">Настройки таблицы работ в акте</legend>
-                    <p className="text-sm text-slate-500">Выберите, какие столбцы будут отображаться в таблице при создании/редактировании акта.</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {ALL_WORK_ITEM_COLUMNS.map(col => (
-                            <div key={col.key} className="relative flex items-start">
-                                <div className="flex h-6 items-center">
-                                  <input
-                                    id={`col-${col.key}`}
-                                    name={`col-${col.key}`}
-                                    type="checkbox"
-                                    checked={formData.visibleWorkItemColumns?.includes(col.key)}
-                                    onChange={(e) => handleColumnVisibilityChange(col.key, e.target.checked)}
-                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                  />
-                                </div>
-                                <div className="ml-3 text-sm leading-6">
-                                  <label htmlFor={`col-${col.key}`} className="font-medium text-gray-900">
-                                    {col.label}
-                                  </label>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                 </fieldset>
 
                 <fieldset className="space-y-4 pt-4 border-t">
                     <legend className="text-base font-medium text-slate-800">Настройки формы акта</legend>
