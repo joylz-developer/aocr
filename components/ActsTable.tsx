@@ -799,7 +799,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
 
 
     return (
-        <div ref={tableContainerRef} tabIndex={-1} className="overflow-x-auto border border-slate-200 rounded-lg select-none focus:outline-none">
+        <div ref={tableContainerRef} tabIndex={-1} className="h-full overflow-auto border border-slate-200 rounded-lg select-none focus:outline-none">
             <style>{`
                 @keyframes pulse-green-bg {
                     0% { background-color: #dcfce7; }
@@ -811,7 +811,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                 }
             `}</style>
             <table className="min-w-full text-sm table-fixed" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
-                <thead className="bg-slate-50 sticky top-0 z-10">
+                <thead className="bg-slate-50 sticky top-0 z-30">
                     <tr>
                         {columns.map(col => (
                             <th 
@@ -826,7 +826,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                 />
                             </th>
                         ))}
-                        <th className="px-4 py-3 text-right font-medium text-slate-500 uppercase tracking-wider sticky right-0 bg-slate-50 z-20 w-36">Действия</th>
+                        <th className="px-4 py-3 text-right font-medium text-slate-500 uppercase tracking-wider sticky right-0 bg-slate-50 z-30 w-36">Действия</th>
                     </tr>
                 </thead>
                 <tbody className="bg-white">

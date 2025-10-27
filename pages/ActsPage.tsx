@@ -68,8 +68,8 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
     };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md">
-            <div className="flex justify-between items-center mb-6">
+        <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
+            <div className="flex justify-between items-center mb-6 flex-shrink-0">
                 <div className="flex items-center gap-4">
                     <h1 className="text-2xl font-bold text-slate-800">Акты скрытых работ</h1>
                     <button onClick={() => setIsHelpModalOpen(true)} className="text-slate-500 hover:text-blue-600" title="Справка">
@@ -80,16 +80,18 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
                     <PlusIcon /> Создать акт
                 </button>
             </div>
-
-            <ActsTable 
-                acts={acts}
-                people={people}
-                organizations={organizations}
-                template={template}
-                settings={settings}
-                onSave={onSave}
-                onDelete={onDelete}
-            />
+            
+            <div className="flex-grow min-h-0">
+                <ActsTable 
+                    acts={acts}
+                    people={people}
+                    organizations={organizations}
+                    template={template}
+                    settings={settings}
+                    onSave={onSave}
+                    onDelete={onDelete}
+                />
+            </div>
             
             <Modal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} title="Справка по заполнению шаблона">
                 <div className="prose max-w-none text-slate-700">

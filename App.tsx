@@ -7,9 +7,10 @@ import ActsPage from './pages/ActsPage';
 import PeoplePage from './pages/PeoplePage';
 import OrganizationsPage from './pages/OrganizationsPage';
 import SettingsPage from './pages/SettingsPage';
+import Sidebar from './components/Sidebar';
 import { saveAs } from 'file-saver';
 
-type Page = 'acts' | 'people' | 'organizations' | 'settings';
+export type Page = 'acts' | 'people' | 'organizations' | 'settings';
 
 const fileToBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -40,9 +41,9 @@ const App: React.FC = () => {
         showActDate: false,
         showParticipantDetails: false,
         geminiApiKey: '',
-        // FIX: Removed 'visibleWorkItemColumns' property as it's not defined in the ProjectSettings type.
     });
     const [currentPage, setCurrentPage] = useState<Page>('acts');
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const importInputRef = useRef<HTMLInputElement>(null);
     const [importData, setImportData] = useState<ImportData | null>(null);
     
@@ -51,7 +52,6 @@ const App: React.FC = () => {
             const isFirstTime = acts.length === 0 && people.length === 0 && organizations.length === 0;
             const base64 = await fileToBase64(file);
             setTemplate(base64);
-            // If it's the first time setting up, guide user to settings page
             if (isFirstTime) {
                 setCurrentPage('settings');
             } else {
@@ -95,7 +95,6 @@ const App: React.FC = () => {
 
         if (window.confirm(`Вы уверены, что хотите удалить участника "${personToDelete.name}"? Он также будет удален из всех актов.`)) {
             setPeople(prevPeople => prevPeople.filter(p => p.id !== id));
-            // Also remove this person from any acts
             setActs(prevActs => prevActs.map(act => {
                 const newReps = { ...act.representatives };
                 Object.keys(newReps).forEach(key => {
@@ -174,9 +173,8 @@ const App: React.FC = () => {
                 
                 const data: ImportData = JSON.parse(text);
                 
-                // Basic validation
                 if (data.template !== undefined || Array.isArray(data.acts) || Array.isArray(data.people) || Array.isArray(data.organizations) || data.projectSettings) {
-                    setImportData(data); // Open modal with parsed data
+                    setImportData(data);
                 } else {
                     alert('Ошибка: Неверный формат файла.');
                 }
@@ -184,7 +182,7 @@ const App: React.FC = () => {
                 console.error('Import error:', error);
                 alert('Не удалось импортировать данные. Файл может быть поврежден или иметь неверный формат.');
             } finally {
-                if(event.target) event.target.value = ''; // Reset input to allow re-importing same file
+                if(event.target) event.target.value = '';
             }
         };
         reader.readAsText(file);
@@ -203,7 +201,7 @@ const App: React.FC = () => {
         if (importSettings.acts.import && importData.acts) {
             if (importSettings.acts.mode === 'replace') {
                 setActs(importData.acts);
-            } else { // merge
+            } else {
                 const selectedItems = importData.acts.filter(item => importSettings.acts.selectedIds?.includes(item.id));
                 setActs(prev => {
                     const itemMap = new Map(prev.map(item => [item.id, item]));
@@ -216,7 +214,7 @@ const App: React.FC = () => {
         if (importSettings.people.import && importData.people) {
             if (importSettings.people.mode === 'replace') {
                 setPeople(importData.people);
-            } else { // merge
+            } else {
                 const selectedItems = importData.people.filter(item => importSettings.people.selectedIds?.includes(item.id));
                 setPeople(prev => {
                     const itemMap = new Map(prev.map(item => [item.id, item]));
@@ -229,7 +227,7 @@ const App: React.FC = () => {
         if (importSettings.organizations.import && importData.organizations) {
             if (importSettings.organizations.mode === 'replace') {
                 setOrganizations(importData.organizations);
-            } else { // merge
+            } else {
                 const selectedItems = importData.organizations.filter(item => importSettings.organizations.selectedIds?.includes(item.id));
                 setOrganizations(prev => {
                     const itemMap = new Map(prev.map(item => [item.id, item]));
@@ -243,19 +241,11 @@ const App: React.FC = () => {
         alert('Данные успешно импортированы!');
     };
 
-    const NavButton: React.FC<{ page: Page; label: string; disabled?: boolean }> = ({ page, label, disabled }) => (
-        <button
-            onClick={() => setCurrentPage(page)}
-            disabled={disabled}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                currentPage === page && !disabled
-                    ? 'bg-blue-600 text-white'
-                    : 'text-slate-700 hover:bg-slate-200'
-            } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-            {label}
-        </button>
-    );
+    const handleChangeTemplate = () => {
+        if (window.confirm('Вы уверены, что хотите сменить шаблон? Текущий шаблон будет удален.')) {
+            setTemplate(null);
+        }
+    }
 
     const renderPage = () => {
         switch (currentPage) {
@@ -281,35 +271,30 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="bg-slate-100 min-h-screen font-sans text-slate-800">
-            <header className="bg-white shadow-sm">
-                <div className="px-4 py-4 flex justify-between items-center">
-                     <h1 className="text-xl font-bold text-blue-700">DocGen AI</h1>
-                     <nav className="flex items-center space-x-2">
-                        <NavButton page="acts" label="Акты" disabled={!template} />
-                        <NavButton page="people" label="Участники" disabled={!template} />
-                        <NavButton page="organizations" label="Организации" disabled={!template} />
-                        <NavButton page="settings" label="Настройки" disabled={!template} />
-                     </nav>
-                     <div className="flex items-center space-x-4">
-                        <input type="file" ref={importInputRef} onChange={handleImportFileSelected} className="hidden" accept=".json" />
-                        <button onClick={handleImportClick} className="text-sm text-slate-500 hover:text-blue-600">Импорт</button>
-                        {template && (
-                            <>
-                                <button onClick={handleExportData} className="text-sm text-slate-500 hover:text-blue-600">Экспорт</button>
-                                <button onClick={() => setTemplate(null)} className="text-sm text-slate-500 hover:text-red-600">Сменить шаблон</button>
-                            </>
-                        )}
-                     </div>
-                </div>
-            </header>
-            <main className="px-4 py-8">
-                {!template ? (
-                    <TemplateUploader onUpload={handleTemplateUpload} />
-                ) : (
-                    renderPage()
-                )}
-            </main>
+        <div className="flex h-screen bg-slate-100 font-sans text-slate-800">
+             <input type="file" ref={importInputRef} onChange={handleImportFileSelected} className="hidden" accept=".json" />
+             <Sidebar
+                isOpen={isSidebarOpen}
+                setIsOpen={setIsSidebarOpen}
+                currentPage={currentPage}
+                setCurrentPage={setCurrentPage}
+                isTemplateLoaded={!!template}
+                onImport={handleImportClick}
+                onExport={handleExportData}
+                onChangeTemplate={handleChangeTemplate}
+            />
+            <div className="flex-1 flex flex-col overflow-hidden">
+                 <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
+                    {!template ? (
+                        <div className="h-full flex items-center justify-center">
+                            <TemplateUploader onUpload={handleTemplateUpload} />
+                        </div>
+                    ) : (
+                        renderPage()
+                    )}
+                </main>
+            </div>
+            
             {importData && (
                 <ImportModal 
                     data={importData}
