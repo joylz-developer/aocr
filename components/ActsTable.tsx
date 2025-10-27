@@ -656,10 +656,19 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
         return coords.rowIndex >= minRow && coords.rowIndex <= maxRow && coords.colIndex >= minCol && coords.colIndex <= maxCol;
     };
 
+    const FillHandle: React.FC<{ onMouseDown: (e: React.MouseEvent) => void }> = ({ onMouseDown }) => (
+        <div
+            onMouseDown={onMouseDown}
+            className="absolute w-2.5 h-2.5 bg-blue-600 cursor-crosshair z-50 border border-white"
+            style={{ bottom: '-5px', right: '-5px' }}
+            title="Протянуть для копирования"
+        />
+    );
+
 
     return (
         <div ref={tableRef} className="overflow-x-auto border border-slate-200 rounded-lg select-none">
-            <table className="min-w-full text-sm table-fixed">
+            <table className="min-w-full text-sm table-fixed" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
                 <thead className="bg-slate-50 sticky top-0 z-10">
                     <tr>
                         {columns.map(col => (
@@ -678,23 +687,52 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                         <th className="px-4 py-3 text-right font-medium text-slate-500 uppercase tracking-wider sticky right-0 bg-slate-50 z-20 w-36">Действия</th>
                     </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-slate-200">
+                <tbody className="bg-white">
                     {acts.map((act, rowIndex) => (
                         <tr key={act.id} data-actid={act.id} className="hover:bg-slate-50">
                             {columns.map((col, colIndex) => {
                                 const coords = { rowIndex, colIndex };
                                 const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colIndex === colIndex;
                                 const isActive = activeCell?.rowIndex === rowIndex && activeCell?.colIndex === colIndex;
+                                
+                                const { minRow, maxRow, minCol, maxCol } = selectionArea ? normalizeSelection(selectionArea) : { minRow: -1, maxRow: -1, minCol: -1, maxCol: -1 };
+
                                 const isSelected = selectionArea ? isCellInArea(coords, selectionArea) : false;
                                 const isFillTarget = fillTargetArea ? isCellInArea(coords, fillTargetArea) : false;
-                                
-                                let cellClassName = "px-0 py-0 border-b border-r border-slate-200 align-top relative";
-                                if (isSelected) {
-                                    cellClassName += " bg-blue-100";
-                                }
+                                const shouldHaveFillHandle = isSelected && rowIndex === maxRow && colIndex === maxCol;
+
+                                let cellClassName = "px-0 py-0 align-top";
                                 if (isFillTarget) {
-                                     cellClassName += " bg-green-100 border-2 border-dashed border-green-400";
+                                    cellClassName += " bg-green-100";
+                                } else if (isSelected && !isActive) {
+                                    cellClassName += " bg-blue-50";
                                 }
+
+                                if (isActive) {
+                                    cellClassName += " ring-2 ring-inset ring-blue-600 z-30";
+                                }
+
+                                const cellStyle: React.CSSProperties = { position: 'relative' };
+                                const borderSlate = '1px solid #e2e8f0';
+                                const borderBlue = '2px solid #2563eb';
+
+                                cellStyle.borderBottom = borderSlate;
+                                cellStyle.borderRight = borderSlate;
+
+                                if (isFillTarget) {
+                                    cellStyle.border = '2px dashed #4ade80';
+                                } else if (isSelected) {
+                                    if (rowIndex === minRow) cellStyle.borderTop = borderBlue;
+                                    if (rowIndex === maxRow) cellStyle.borderBottom = borderBlue;
+                                    if (colIndex === minCol) cellStyle.borderLeft = borderBlue;
+                                    if (colIndex === maxCol) cellStyle.borderRight = borderBlue;
+                                }
+                                
+                                const handleFillMouseDown = (e: React.MouseEvent) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    setIsFilling(true);
+                                };
 
                                 if (col.type === 'custom_date') {
                                     return (
@@ -704,7 +742,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                             data-col-index={colIndex}
                                             onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
                                             onDoubleClick={() => handleCellDoubleClick(rowIndex, colIndex)}
-                                            className={`${cellClassName} ${isActive ? 'ring-2 ring-inset ring-blue-600 z-30' : isSelected ? 'ring-1 ring-inset ring-blue-300' : ''}`}
+                                            className={cellClassName}
+                                            style={cellStyle}
                                         >
                                             {isEditing ? (
                                                 <DateCellEditor
@@ -720,6 +759,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                                     }
                                                 </div>
                                             )}
+                                            {shouldHaveFillHandle && <FillHandle onMouseDown={handleFillMouseDown} />}
                                         </td>
                                     );
                                 }
@@ -733,7 +773,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                         data-col-index={colIndex}
                                         onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
                                         onDoubleClick={() => handleCellDoubleClick(rowIndex, colIndex)}
-                                        className={`${cellClassName} ${isActive ? 'ring-2 ring-inset ring-blue-600 z-30' : isSelected ? 'ring-1 ring-inset ring-blue-300' : ''}`}
+                                        className={cellClassName}
+                                        style={cellStyle}
                                     >
                                         {isEditing ? (
                                              col.type === 'textarea' ? (
@@ -761,17 +802,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                                 {act[columnKey] || <span className="text-slate-400">...</span>}
                                             </div>
                                         )}
-                                        {isActive && (
-                                            <div
-                                                onMouseDown={(e) => {
-                                                    e.stopPropagation();
-                                                    e.preventDefault();
-                                                    setIsFilling(true);
-                                                }}
-                                                className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-blue-600 cursor-crosshair z-50 border border-white"
-                                                title="Протянуть для копирования"
-                                            />
-                                        )}
+                                        {shouldHaveFillHandle && <FillHandle onMouseDown={handleFillMouseDown} />}
                                     </td>
                                 );
                             })}
