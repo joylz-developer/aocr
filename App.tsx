@@ -36,9 +36,11 @@ const App: React.FC = () => {
         defaultCopiesCount: 2,
         showAdditionalInfo: true,
         showAttachments: true,
+        showCopiesCount: true,
         showActDate: false,
         showParticipantDetails: false,
         geminiApiKey: '',
+        visibleWorkItemColumns: ['name', 'projectDocs', 'materials', 'certs'],
     });
     const [currentPage, setCurrentPage] = useState<Page>('acts');
     const importInputRef = useRef<HTMLInputElement>(null);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Act, Person, Organization, ROLES, ProjectSettings } from '../types';
+import { Act, Person, Organization, ROLES, ProjectSettings, WorkItem } from '../types';
 import Modal from '../components/Modal';
 import { PlusIcon, EditIcon, DeleteIcon, DownloadIcon, HelpIcon } from '../components/Icons';
 import { generateDocument } from '../services/docGenerator';
@@ -70,15 +70,33 @@ const ActForm: React.FC<{
     onSave: (act: Act) => void;
     onClose: () => void;
 }> = ({ act, people, organizations, settings, onSave, onClose }) => {
-    const [formData, setFormData] = useState<Act>(
-        act || {
+    const [formData, setFormData] = useState<Act>(() => {
+        const initialAct = act || {
             id: crypto.randomUUID(),
             number: '', date: '', objectName: settings.objectName, builderDetails: '', contractorDetails: '',
-            designerDetails: '', workPerformer: '', workName: '', projectDocs: '', materials: '',
-            certs: '', workStartDate: '', workEndDate: '', regulations: '', nextWork: '',
-            additionalInfo: '', copiesCount: String(settings.defaultCopiesCount), attachments: '', representatives: {},
+            designerDetails: '', workPerformer: '', workItems: [], workStartDate: '', workEndDate: '', 
+            regulations: '', nextWork: '', additionalInfo: '', 
+            copiesCount: String(settings.defaultCopiesCount), attachments: '', representatives: {},
+        };
+        
+        // Backward compatibility: migrate old data structure to new workItems table
+        if (act && !act.workItems && (act as any).workName) {
+            const legacyAct = act as any;
+            initialAct.workItems = [{
+                id: crypto.randomUUID(),
+                name: legacyAct.workName || '',
+                projectDocs: legacyAct.projectDocs || '',
+                materials: legacyAct.materials || '',
+                certs: legacyAct.certs || '',
+                notes: '',
+            }];
+        } else if (!initialAct.workItems || initialAct.workItems.length === 0) {
+            // Ensure there's at least one empty row for new acts
+            initialAct.workItems = [{ id: crypto.randomUUID(), name: '', projectDocs: '', materials: '', certs: '', notes: '' }];
         }
-    );
+        return initialAct;
+    });
+
     const [isAiLoading, setIsAiLoading] = useState(false);
     const [aiError, setAiError] = useState<string | null>(null);
     const [showOtherReps, setShowOtherReps] = useState(false);
@@ -87,13 +105,26 @@ const ActForm: React.FC<{
     
     const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
 
-    // Effect to auto-update attachments from materials and certs
+    const availableColumns: { key: keyof WorkItem, label: string }[] = [
+        { key: 'name', label: '1. Наименование работ' },
+        { key: 'projectDocs', label: '2. Проектная документация' },
+        { key: 'materials', label: '3. Примененные материалы' },
+        { key: 'certs', label: '4. Документы о качестве' },
+        { key: 'notes', label: 'Примечания' },
+    ];
+
+    const visibleColumns = availableColumns.filter(c => settings.visibleWorkItemColumns?.includes(c.key));
+
+    // Effect to auto-update attachments from workItems
     useEffect(() => {
-        const combined = [formData.materials, formData.certs].filter(Boolean).join('\n\n');
+        const materials = formData.workItems.map(item => item.materials).filter(Boolean).join('\n');
+        const certs = formData.workItems.map(item => item.certs).filter(Boolean).join('\n');
+        const combined = [materials, certs].filter(Boolean).join('\n\n');
+
         if (combined !== formData.attachments) {
             setFormData(prev => ({ ...prev, attachments: combined }));
         }
-    }, [formData.materials, formData.certs]);
+    }, [formData.workItems]);
 
     // Effect to sync act date with work end date
     useEffect(() => {
@@ -142,7 +173,6 @@ const ActForm: React.FC<{
     }, [formData.representatives, people, organizations, settings.useShortOrgNames]);
 
     useEffect(() => {
-        // If "show other reps" is unchecked, clear their values
         if (!showOtherReps) {
             const newReps = { ...formData.representatives };
             let changed = false;
@@ -162,6 +192,29 @@ const ActForm: React.FC<{
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
+    
+    const handleWorkItemChange = (index: number, field: keyof WorkItem, value: string) => {
+        const newWorkItems = [...formData.workItems];
+        newWorkItems[index] = { ...newWorkItems[index], [field]: value };
+        setFormData(prev => ({ ...prev, workItems: newWorkItems }));
+    };
+
+    const handleAddWorkItem = () => {
+        setFormData(prev => ({
+            ...prev,
+            workItems: [...prev.workItems, { id: crypto.randomUUID(), name: '', projectDocs: '', materials: '', certs: '', notes: '' }]
+        }));
+    };
+
+    const handleRemoveWorkItem = (index: number) => {
+        if (formData.workItems.length <= 1) {
+            alert("Нельзя удалить последнюю строку.");
+            return;
+        }
+        const newWorkItems = formData.workItems.filter((_, i) => i !== index);
+        setFormData(prev => ({ ...prev, workItems: newWorkItems }));
+    };
+
 
     const handleRepChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -176,15 +229,17 @@ const ActForm: React.FC<{
              setAiError("API-ключ для Gemini не настроен. Пожалуйста, добавьте его в Настройках.");
              return;
         }
-        if (!formData.workName) {
-            alert("Пожалуйста, сначала заполните пункт 1 'Работы, подлежащие освидетельствованию'.");
+        
+        const workNames = formData.workItems.map(item => item.name).filter(Boolean).join('; ');
+        if (!workNames) {
+            alert("Пожалуйста, заполните наименования работ в таблице 'Выполненные работы'.");
             return;
         }
 
         setIsAiLoading(true);
         setAiError(null);
         try {
-            const prompt = `На основе следующего наименования работ: "${formData.workName}", предложи список нормативных документов (СП, ГОСТ), в соответствии с которыми эти работы должны выполняться.
+            const prompt = `На основе следующего списка работ: "${workNames}", предложи список нормативных документов (СП, ГОСТ), в соответствии с которыми эти работы должны выполняться.
             Верни результат в формате JSON с одним ключом "regulations".
             
             Пример ответа:
@@ -220,25 +275,27 @@ const ActForm: React.FC<{
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         
-        const requiredFields: { key: keyof Act, label: string }[] = [
+        const requiredFields: { key: keyof Act | 'workItems', label: string }[] = [
             { key: 'number', label: 'Номер акта' },
-            { key: 'workName', label: 'Работы, подлежащие освидетельствованию' },
-            { key: 'projectDocs', label: 'Проектная документация' },
-            { key: 'materials', label: 'Примененные материалы' },
-            { key: 'certs', label: 'Предъявлены документы' },
+            { key: 'workItems', label: 'Таблица "Выполненные работы"' },
             { key: 'workStartDate', label: 'Дата начала работ' },
             { key: 'workEndDate', label: 'Дата окончания работ' },
             { key: 'regulations', label: 'Нормативные документы' },
             { key: 'nextWork', label: 'Разрешается производство следующих работ' },
         ];
         
-        const missingFields = requiredFields.filter(f => !(formData[f.key] as string)?.trim());
+        const missingFields = requiredFields.filter(f => {
+            if (f.key === 'workItems') {
+                return formData.workItems.length === 0 || formData.workItems.every(item => !item.name.trim());
+            }
+            return !(formData[f.key as keyof Act] as string)?.trim()
+        });
 
         const warningSuppressedUntil = localStorage.getItem('suppressActWarningUntil');
         const isSuppressed = warningSuppressedUntil && new Date().getTime() < parseInt(warningSuppressedUntil, 10);
 
         if (missingFields.length > 0 && !isSuppressed) {
-            const message = `Акт будет создан, но следующие поля не заполнены:\n\n- ${missingFields.map(f => f.label).join('\n- ')}\n\nПродолжить?`;
+            const message = `Акт будет создан, но следующие поля/разделы не заполнены:\n\n- ${missingFields.map(f => f.label).join('\n- ')}\n\nПродолжить?`;
             
             setConfirmation({
                 message,
@@ -262,6 +319,8 @@ const ActForm: React.FC<{
     const textareaClass = inputClass;
     const labelClass = "block text-sm font-medium text-slate-700";
     const readOnlyTextareaClass = textareaClass + " bg-slate-100 cursor-not-allowed";
+    const tableTextareaClass = "w-full p-2 border-none focus:ring-1 focus:ring-blue-500 focus:outline-none bg-transparent resize-none h-full";
+
 
     const renderSection = (title: string, children: React.ReactNode) => (
         <div className="border border-slate-200 rounded-md p-4">
@@ -299,23 +358,52 @@ const ActForm: React.FC<{
                 </div>}
             </>)}
 
-            {renderSection("Информация о работах", <>
-                <div className="md:col-span-2">
-                    <label className={labelClass}>1. Работы, подлежащие освидетельствованию</label>
-                    <textarea name="workName" value={formData.workName} onChange={handleChange} className={textareaClass} rows={3} />
+            {/* NEW WORK ITEMS TABLE */}
+             <div className="border border-slate-200 rounded-md p-4">
+                <h3 className="text-lg font-semibold text-slate-800 mb-4">Выполненные работы</h3>
+                 <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse border border-slate-300">
+                        <thead className="bg-slate-50">
+                            <tr>
+                                <th className="border border-slate-300 px-2 py-2 text-left text-sm font-medium text-slate-600 w-12">№</th>
+                                {visibleColumns.map(col => (
+                                    <th key={col.key} className="border border-slate-300 px-2 py-2 text-left text-sm font-medium text-slate-600">{col.label}</th>
+                                ))}
+                                <th className="border border-slate-300 px-2 py-2 text-center text-sm font-medium text-slate-600 w-16">...</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {formData.workItems.map((item, index) => (
+                                <tr key={item.id} className="group hover:bg-slate-50">
+                                    <td className="border border-slate-300 px-2 py-1 text-center text-sm text-slate-500">{index + 1}</td>
+                                    {visibleColumns.map(col => (
+                                         <td key={col.key} className="border border-slate-300 p-0 align-top">
+                                            <textarea
+                                                value={item[col.key]}
+                                                onChange={(e) => handleWorkItemChange(index, col.key, e.target.value)}
+                                                className={tableTextareaClass}
+                                                rows={2}
+                                            />
+                                         </td>
+                                    ))}
+                                    <td className="border border-slate-300 px-2 py-1 text-center align-middle">
+                                        <button type="button" onClick={() => handleRemoveWorkItem(index)} className="p-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" title="Удалить строку">
+                                            <DeleteIcon />
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
-                <div className="md:col-span-2">
-                    <label className={labelClass}>2. Проектная документация</label>
-                    <textarea name="projectDocs" value={formData.projectDocs} onChange={handleChange} className={textareaClass} rows={2} />
+                <div className="mt-4">
+                    <button type="button" onClick={handleAddWorkItem} className="flex items-center text-sm text-blue-600 font-medium hover:text-blue-800">
+                        <PlusIcon /> Добавить строку
+                    </button>
                 </div>
-                <div className="md:col-span-2">
-                    <label className={labelClass}>3. Примененные материалы</label>
-                    <textarea name="materials" value={formData.materials} onChange={handleChange} className={textareaClass} rows={2} />
-                </div>
-                <div className="md:col-span-2">
-                    <label className={labelClass}>4. Предъявлены документы</label>
-                    <textarea name="certs" value={formData.certs} onChange={handleChange} className={textareaClass} rows={2} />
-                </div>
+            </div>
+
+            {renderSection("Информация о работах (продолжение)", <>
                  <div className="md:col-span-2">
                     <label className={labelClass}>5. Даты производства работ</label>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-1">
@@ -333,7 +421,7 @@ const ActForm: React.FC<{
                     <label className={labelClass}>6. Работы выполнены в соответствии с</label>
                     <div className="flex items-start gap-2">
                         <textarea name="regulations" value={formData.regulations} onChange={handleChange} className={textareaClass} rows={2} style={{flexGrow: 1}}/>
-                        <button type="button" onClick={handleAiFill} disabled={isAiLoading || !ai || !formData.workName} className="mt-1 flex-shrink-0 flex justify-center items-center gap-2 px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed" title={ai ? "Заполнить с помощью Gemini" : "Введите API ключ в Настройках, чтобы включить эту функцию"}>
+                        <button type="button" onClick={handleAiFill} disabled={isAiLoading || !ai} className="mt-1 flex-shrink-0 flex justify-center items-center gap-2 px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed" title={ai ? "Заполнить с помощью Gemini" : "Введите API ключ в Настройках, чтобы включить эту функцию"}>
                              ✨
                         </button>
                     </div>
@@ -406,10 +494,12 @@ const ActForm: React.FC<{
                     <label className={labelClass}>Дополнительные сведения</label>
                     <textarea name="additionalInfo" value={formData.additionalInfo} onChange={handleChange} className={textareaClass} rows={2} />
                 </div>}
-                 <div>
-                    <label className={labelClass}>Количество экземпляров</label>
-                    <input type="number" name="copiesCount" value={formData.copiesCount} onChange={handleChange} className={inputClass} min="1" />
-                </div>
+                {settings.showCopiesCount && (
+                     <div>
+                        <label className={labelClass}>Количество экземпляров</label>
+                        <input type="number" name="copiesCount" value={formData.copiesCount} onChange={handleChange} className={inputClass} min="1" />
+                    </div>
+                )}
                 {settings.showAttachments && <div className="md:col-span-2">
                     <label className={labelClass}>Приложения</label>
                     <textarea 
@@ -419,7 +509,7 @@ const ActForm: React.FC<{
                         className={readOnlyTextareaClass}
                         rows={3} 
                     />
-                    <p className="text-xs text-slate-500 mt-1">Это поле заполняется автоматически на основе пунктов 3 и 4.</p>
+                    <p className="text-xs text-slate-500 mt-1">Это поле заполняется автоматически на основе таблицы работ.</p>
                 </div>}
             </>)}
 
@@ -480,6 +570,15 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
         }
         generateDocument(template, act, people);
     };
+    
+    // Get the first work name for display in the list
+    const getActTitle = (act: Act): string => {
+        if (act.workItems && act.workItems.length > 0 && act.workItems[0].name) {
+            return act.workItems[0].name;
+        }
+        return act.workName || '(Без наименования)'; // Fallback for old data
+    }
+
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-md">
@@ -510,7 +609,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
                             <tr key={act.id} className="hover:bg-slate-50">
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{act.number}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">{new Date(act.date).toLocaleDateString()}</td>
-                                <td className="px-6 py-4 text-sm text-slate-600 max-w-md truncate" title={act.workName}>{act.workName}</td>
+                                <td className="px-6 py-4 text-sm text-slate-600 max-w-md truncate" title={getActTitle(act)}>{getActTitle(act)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                     <div className="flex justify-end space-x-2">
                                         <button 
@@ -552,38 +651,41 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
                     <p>Для генерации документов ваш .docx шаблон должен содержать теги-заполнители. Приложение заменит эти теги на данные из формы. Нажмите на любой тег ниже, чтобы скопировать его.</p>
                     
                     <h4 className="font-semibold mt-4">Основные теги</h4>
-                    <p>Теги для основной информации об акте:</p>
-                    <ul className="list-disc space-y-2 pl-5 mt-2">
-                        <li><CopyableTag tag="{object_name}" /> &mdash; Наименование объекта (из настроек проекта).</li>
-                        <li><CopyableTag tag="{act_number}" /> &mdash; Номер акта.</li>
-                        <li><CopyableTag tag="{act_day}" />, <CopyableTag tag="{act_month}" />, <CopyableTag tag="{act_year}" /> &mdash; Дата составления акта (день, месяц, год).</li>
-                        <li><CopyableTag tag="{builder_details}" /> &mdash; Реквизиты застройщика (технического заказчика).</li>
-                        <li><CopyableTag tag="{contractor_details}" /> &mdash; Реквизиты лица, осуществляющего строительство.</li>
-                        <li><CopyableTag tag="{designer_details}" /> &mdash; Реквизиты проектировщика.</li>
-                        <li><CopyableTag tag="{work_performer}" /> &mdash; Реквизиты исполнителя работ.</li>
-                        <li><CopyableTag tag="{work_name}" /> &mdash; Наименование работ, подлежащих освидетельствованию.</li>
-                        <li><CopyableTag tag="{project_docs}" /> &mdash; Проектная документация.</li>
-                        <li><CopyableTag tag="{materials}" /> &mdash; Примененные материалы.</li>
-                        <li><CopyableTag tag="{certs}" /> &mdash; Предъявленные документы (сертификаты, паспорта).</li>
+                     <ul className="list-disc space-y-2 pl-5 mt-2">
+                        <li><CopyableTag tag="{object_name}" /> &mdash; Наименование объекта.</li>
+                        <li><CopyableTag tag="{act_number}" />, <CopyableTag tag="{act_day}" />, <CopyableTag tag="{act_month}" />, <CopyableTag tag="{act_year}" /></li>
+                        <li><CopyableTag tag="{builder_details}" />, <CopyableTag tag="{contractor_details}" />, <CopyableTag tag="{designer_details}" />, <CopyableTag tag="{work_performer}" /></li>
                         <li><CopyableTag tag="{work_start_day}" />, <CopyableTag tag="{work_start_month}" />, <CopyableTag tag="{work_start_year}" /> &mdash; Дата начала работ.</li>
                         <li><CopyableTag tag="{work_end_day}" />, <CopyableTag tag="{work_end_month}" />, <CopyableTag tag="{work_end_year}" /> &mdash; Дата окончания работ.</li>
-                        <li><CopyableTag tag="{regulations}" /> &mdash; Нормативные документы (СП, ГОСТ).</li>
+                        <li><CopyableTag tag="{regulations}" /> &mdash; Нормативные документы.</li>
                         <li><CopyableTag tag="{next_work}" /> &mdash; Разрешается производство следующих работ.</li>
-                        <li><CopyableTag tag="{additional_info}" /> &mdash; Дополнительные сведения.</li>
-                        <li><CopyableTag tag="{copies_count}" /> &mdash; Количество экземпляров акта.</li>
-                        <li><CopyableTag tag="{attachments}" /> &mdash; Приложения к акту.</li>
+                        <li><CopyableTag tag="{additional_info}" />, <CopyableTag tag="{copies_count}" />, <CopyableTag tag="{attachments}" /></li>
+                    </ul>
+                    
+                     <h4 className="font-semibold mt-6">Таблица работ (Новый синтаксис)</h4>
+                    <div className="my-2 p-3 rounded-md bg-blue-50 border border-blue-200">
+                        <p className="text-sm mt-1">Для вставки данных о выполненных работах используется **цикл**. Это позволяет автоматически создавать столько строк в таблице вашего документа, сколько вы добавили в форме.</p>
+                    </div>
+                    <p>В вашем шаблоне .docx создайте таблицу. В первой ячейке первой строки таблицы, предназначенной для данных, поставьте тег начала цикла <CopyableTag tag="{#work_items}" />. В последней ячейке этой же строки поставьте тег конца цикла <CopyableTag tag="{/work_items}" />. Между этими тегами размещайте теги для данных строки.</p>
+                    <p className="font-medium mt-2">Пример для строки таблицы в Word:</p>
+                    <pre className="bg-slate-200 p-2 rounded mt-2 text-xs whitespace-pre-wrap"><code>{`| {#work_items}{num} | {name} | {project_docs} | {materials} | {certs} | {notes}{/work_items} |`}</code></pre>
+                    <p className="mt-3">Доступные теги внутри цикла <CopyableTag tag="{#work_items}" />:</p>
+                    <ul className="list-disc space-y-1 pl-5">
+                        <li><CopyableTag tag="{num}" /> &mdash; Порядковый номер строки.</li>
+                        <li><CopyableTag tag="{name}" /> &mdash; Наименование работ.</li>
+                        <li><CopyableTag tag="{project_docs}" /> &mdash; Проектная документация.</li>
+                        <li><CopyableTag tag="{materials}" /> &mdash; Примененные материалы.</li>
+                        <li><CopyableTag tag="{certs}" /> &mdash; Документы о качестве (сертификаты, паспорта).</li>
+                        <li><CopyableTag tag="{notes}" /> &mdash; Примечания.</li>
                     </ul>
 
-                    <h4 className="font-semibold mt-4">Представители (Комиссия)</h4>
+                    <h4 className="font-semibold mt-6">Представители (Комиссия)</h4>
                      <div className="my-2 p-3 rounded-md bg-blue-50 border border-blue-200">
                         <h5 className="font-semibold text-blue-800">✨ Важное обновление синтаксиса</h5>
                         <p className="text-sm mt-1">Для вставки данных представителей теперь рекомендуется использовать синтаксис с подчеркиванием, например <CopyableTag tag="{tnz_name}" />. Этот формат более надежен.</p>
-                        <p className="text-sm mt-1">Прежний синтаксис с точкой (например, <code>{`{tnz.name}`}</code>) может не работать. Пожалуйста, обновите ваш шаблон.</p>
                     </div>
 
                      <p className="mt-2">Используйте <strong>условные блоки</strong>, чтобы скрыть строки, если представитель не выбран. Для этого оберните нужный текст в теги <code>{`{#ключ}...{/ключ}`}</code>, где "ключ" - это код роли (например, <code>tnz</code>).</p>
-                        <pre className="bg-slate-200 p-2 rounded mt-2 text-xs"><code>{`{#i1}
-Представитель иной организации: {i1_position}, {i1_name}{/i1}`}</code></pre>
 
                      <p className="mt-2 font-medium">Расшифровка ключей ролей:</p>
                      <ul className="list-disc space-y-2 pl-5 mt-2">
@@ -595,11 +697,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
                     </ul>
                     <p className="mt-3">Полный список тегов для представителя (замените <strong>tnz</strong> на нужный ключ из списка выше):</p>
                     <ul className="list-disc space-y-1 pl-5">
-                        <li><CopyableTag tag="{tnz_name}" />: ФИО представителя.</li>
-                        <li><CopyableTag tag="{tnz_position}" />: Должность.</li>
-                        <li><CopyableTag tag="{tnz_org}" />: Организация.</li>
-                        <li><CopyableTag tag="{tnz_auth_doc}" />: Документ о полномочиях.</li>
-                        <li><CopyableTag tag="{tnz_details}" />: Сводная строка (должность, ФИО, документ).</li>
+                        <li><CopyableTag tag="{tnz_name}" />: ФИО, <CopyableTag tag="{tnz_position}" />: Должность, <CopyableTag tag="{tnz_org}" />: Организация, <CopyableTag tag="{tnz_auth_doc}" />: Документ, <CopyableTag tag="{tnz_details}" />: Сводная строка.</li>
                     </ul>
                 </div>
             </Modal>

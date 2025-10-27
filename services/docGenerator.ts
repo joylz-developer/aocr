@@ -21,14 +21,23 @@ export const generateDocument = (templateBase64: string, act: Act, people: Perso
         const doc = new Docxtemplater(zip, {
             paragraphLoop: true,
             linebreaks: true,
-            // Используется nullGetter, чтобы теги, для которых нет данных, были falsy.
-            // Это необходимо для корректной работы условных блоков в шаблоне.
             nullGetter: () => null, 
         });
 
         const [actYear, actMonth, actDay] = act.date ? act.date.split('-') : ['', '', ''];
         const [workStartYear, workStartMonth, workStartDay] = act.workStartDate ? act.workStartDate.split('-') : ['', '', ''];
         const [workEndYear, workEndMonth, workEndDay] = act.workEndDate ? act.workEndDate.split('-') : ['', '', ''];
+        
+        // Prepare work items for the template, adding item numbers
+        const workItemsForDoc = act.workItems.map((item, index) => ({
+            num: index + 1,
+            name: item.name,
+            project_docs: item.projectDocs,
+            materials: item.materials,
+            certs: item.certs,
+            notes: item.notes,
+        }));
+
 
         const data: { [key: string]: any } = {
             // Header
@@ -42,11 +51,9 @@ export const generateDocument = (templateBase64: string, act: Act, people: Perso
             act_month: actMonth,
             act_year: actYear,
             work_performer: act.workPerformer,
+            // New work items table
+            work_items: workItemsForDoc,
             // Sections
-            work_name: act.workName,
-            project_docs: act.projectDocs,
-            materials: act.materials,
-            certs: act.certs,
             work_start_day: workStartDay,
             work_start_month: workStartMonth,
             work_start_year: workStartYear,
@@ -61,12 +68,7 @@ export const generateDocument = (templateBase64: string, act: Act, people: Perso
             attachments: act.attachments,
         };
 
-        // Добавляем данные о представителях.
-        // Мы предоставляем данные в двух форматах для максимальной совместимости с шаблонами:
-        // 1. Вложенные объекты (например, data.tnz = { name: '...' }): 
-        //    Это позволяет использовать условные блоки {#tnz}...{/tnz}.
-        // 2. "Плоские" переменные с подчеркиванием (например, data.tnz_name = '...'):
-        //    Это более надежный способ вставки данных, который решает проблемы с полями через точку.
+        // Add representatives data
         ROLES_KEYS.forEach(roleKey => {
             const personId = act.representatives[roleKey];
             const person = people.find(p => p.id === personId);
@@ -80,18 +82,13 @@ export const generateDocument = (templateBase64: string, act: Act, people: Perso
                     details: `${person.position}, ${person.name}, ${person.authDoc || '(нет данных о документе)'}`
                 };
                 
-                // 1. Вложенный объект для условных блоков {#tnz}
                 data[roleKey] = personData;
-
-                // 2. Плоские переменные для прямой вставки {tnz_name}
                 data[`${roleKey}_name`] = personData.name;
                 data[`${roleKey}_position`] = personData.position;
                 data[`${roleKey}_org`] = personData.org;
                 data[`${roleKey}_auth_doc`] = personData.auth_doc;
                 data[`${roleKey}_details`] = personData.details;
             } else {
-                // Если представитель не выбран, устанавливаем null для условных блоков
-                // и для всех связанных "плоских" переменных.
                 data[roleKey] = null;
                 data[`${roleKey}_name`] = null;
                 data[`${roleKey}_position`] = null;
@@ -115,7 +112,6 @@ export const generateDocument = (templateBase64: string, act: Act, people: Perso
 
         let userMessage = 'Не удалось сгенерировать документ. Проверьте шаблон и данные. Подробности в консоли.';
         
-        // docxtemplater aggregates parsing errors in `error.properties.errors`
         const errors = error.properties?.errors;
 
         if (Array.isArray(errors) && errors.length > 0) {
@@ -124,7 +120,7 @@ export const generateDocument = (templateBase64: string, act: Act, people: Perso
             
             switch (id) {
                 case 'unbalanced_loop_tags':
-                    userMessage = `Ошибка в шаблоне: Несбалансированные теги.\n\nПроверьте, что для каждого открывающего тега цикла (например, {#items}) есть соответствующий закрывающий ({/items}).\n\nДетали: ${explanation}`;
+                    userMessage = `Ошибка в шаблоне: Несбалансированные теги.\n\nПроверьте, что для каждого открывающего тега цикла (например, {#work_items}) есть соответствующий закрывающий ({/work_items}).\n\nДетали: ${explanation}`;
                     break;
                 case 'duplicate_open_tag':
                     userMessage = `Ошибка в шаблоне: Найден дублирующийся открывающий тег "${xtag}".\n\nВозможно, вы случайно напечатали '{{{' вместо '{' или использовали неверный синтаксис.\n\nДетали: ${explanation}`;
@@ -135,12 +131,14 @@ export const generateDocument = (templateBase64: string, act: Act, people: Perso
                 case 'closing_tag_does_not_match_opening_tag':
                      userMessage = `Ошибка в шаблоне: Закрывающий тег не соответствует открывающему.\n\nПроверьте парные теги, например {#users} ... {/users}.\n\nДетали: ${explanation}`;
                     break;
+                 case 'loop_outside_of_table':
+                    userMessage = `Ошибка в шаблоне: Тег цикла {#${xtag}} должен находиться внутри ячейки таблицы, а не охватывать несколько строк.\n\nПравильно: в первой ячейке строки ставится {#work_items}, а в последней {/work_items}.\n\nДетали: ${explanation}`;
+                    break;
                 default:
                     userMessage = `В шаблоне обнаружена ошибка: ${firstError.message}. Пожалуйста, проверьте синтаксис тегов.`;
                     break;
             }
         } else if (error.properties?.id === 'scope_error') {
-            // Handle scope errors (data not found for a tag) separately
             const { xtag, explanation } = error.properties;
             userMessage = `Ошибка в данных: Не удалось найти данные для тега "${xtag}".\n\nУбедитесь, что все поля в акте заполнены.\n\nДетали: ${explanation}`;
         }
