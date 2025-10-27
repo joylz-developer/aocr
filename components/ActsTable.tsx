@@ -565,14 +565,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                 updatedActs.forEach(onSave);
             }
             
-            // Handle Copy
-            if (e.key === 'c' && isCtrlKey) {
+            // Handle Copy - use e.code for layout-independent key presses
+            if (e.code === 'KeyC' && isCtrlKey) {
                  e.preventDefault();
                  handleCopy();
             }
             
-            // Handle Paste
-            if (e.key === 'v' && isCtrlKey) {
+            // Handle Paste - use e.code for layout-independent key presses
+            if (e.code === 'KeyV' && isCtrlKey) {
                 e.preventDefault();
                 handlePaste();
             }
@@ -801,13 +801,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
     return (
         <div ref={tableContainerRef} tabIndex={-1} className="overflow-x-auto border border-slate-200 rounded-lg select-none focus:outline-none">
             <style>{`
-                @keyframes marching-ants {
-                    to {
-                        stroke-dashoffset: -8;
-                    }
+                @keyframes pulse-green-bg {
+                    0% { background-color: #dcfce7; }
+                    50% { background-color: #bbf7d0; }
+                    100% { background-color: #dcfce7; }
                 }
-                .marching-ants-rect {
-                    animation: marching-ants 0.5s linear infinite;
+                .copied-cell-bg {
+                    animation: pulse-green-bg 2s ease-in-out infinite;
                 }
             `}</style>
             <table className="min-w-full text-sm table-fixed" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
@@ -842,32 +842,38 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                 
                                 let cellClassName = "px-0 py-0 align-top";
                                 if (isFillTarget) {
-                                     cellClassName += " bg-green-100";
+                                    cellClassName += " bg-green-100";
+                                } else if (isCopied) {
+                                    cellClassName += " copied-cell-bg"; // Animation class for copied cells
                                 } else if (isSelected) {
                                     cellClassName += " bg-blue-100";
                                 }
 
-                                const cellStyle: React.CSSProperties = { position: 'relative' };
-                                const borderSlate = '1px solid #e2e8f0';
-                                const borderBlueSolid = '2px solid #2563eb';
-                                const borderBlueDashed = '2px dashed #2563eb';
+                                const cellStyle: React.CSSProperties = { 
+                                    position: 'relative',
+                                    borderBottom: '1px solid #e2e8f0', // Default grid lines
+                                    borderRight: '1px solid #e2e8f0',
+                                };
 
-                                const borderSet = isCopied ? copiedCells : selectedCells;
-                                const borderStyle = isCopied ? borderBlueDashed : borderBlueSolid;
+                                if (isSelected || isCopied) {
+                                    const borderSet = isCopied ? copiedCells : selectedCells;
+                                    const color = isCopied ? '#16a34a' : '#2563eb'; // Green for copied, blue for selected
+                                    const width = '2px';
+                                    const shadows = [];
 
-                                const hasTop = !borderSet.has(getCellId(rowIndex - 1, colIndex));
-                                const hasBottom = !borderSet.has(getCellId(rowIndex + 1, colIndex));
-                                const hasLeft = !borderSet.has(getCellId(rowIndex, colIndex - 1));
-                                const hasRight = !borderSet.has(getCellId(rowIndex, colIndex + 1));
+                                    const hasTop = !borderSet.has(getCellId(rowIndex - 1, colIndex));
+                                    const hasBottom = !borderSet.has(getCellId(rowIndex + 1, colIndex));
+                                    const hasLeft = !borderSet.has(getCellId(rowIndex, colIndex - 1));
+                                    const hasRight = !borderSet.has(getCellId(rowIndex, colIndex + 1));
 
-                                if(isSelected || isCopied) {
-                                    if(hasTop) cellStyle.borderTop = borderStyle;
-                                    if(hasBottom) cellStyle.borderBottom = borderStyle;
-                                    if(hasLeft) cellStyle.borderLeft = borderStyle;
-                                    if(hasRight) cellStyle.borderRight = borderStyle;
-                                } else {
-                                    cellStyle.borderBottom = borderSlate;
-                                    cellStyle.borderRight = borderSlate;
+                                    if (hasTop) shadows.push(`inset 0 ${width} 0 0 ${color}`);
+                                    if (hasBottom) shadows.push(`inset 0 -${width} 0 0 ${color}`);
+                                    if (hasLeft) shadows.push(`inset ${width} 0 0 0 ${color}`);
+                                    if (hasRight) shadows.push(`inset -${width} 0 0 0 ${color}`);
+                                    
+                                    if (shadows.length > 0) {
+                                        cellStyle.boxShadow = shadows.join(', ');
+                                    }
                                 }
 
                                 const handleFillMouseDown = (e: React.MouseEvent) => {
