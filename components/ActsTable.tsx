@@ -350,6 +350,54 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
         window.addEventListener('mouseup', handleMouseUp);
     }, []);
 
+    useEffect(() => {
+        if (!dragState) {
+            return;
+        }
+
+        const handleMouseMove = (e: MouseEvent) => {
+            const targetRow = (e.target as HTMLElement).closest('tr');
+            if (targetRow && targetRow.dataset.actid) {
+                setDragState(prev => (prev ? { ...prev, endActId: targetRow.dataset.actid! } : null));
+            }
+        };
+
+        const handleMouseUp = () => {
+            setDragState(currentDragState => {
+                if (currentDragState) {
+                    const { startActId, endActId, startColumn, value } = currentDragState;
+                    const startIndex = acts.findIndex(a => a.id === startActId);
+                    const endIndex = endActId ? acts.findIndex(a => a.id === endActId) : -1;
+
+                    if (startIndex !== -1 && endIndex !== -1) {
+                        const minIndex = Math.min(startIndex, endIndex);
+                        const maxIndex = Math.max(startIndex, endIndex);
+                        
+                        for (let i = minIndex; i <= maxIndex; i++) {
+                            const actToUpdate = acts[i];
+                            if (actToUpdate[startColumn] !== value) {
+                                const updatedAct = { ...actToUpdate, [startColumn]: value };
+                                if (startColumn === 'workEndDate') {
+                                    updatedAct.date = value as string;
+                                }
+                                onSave(updatedAct);
+                            }
+                        }
+                    }
+                }
+                return null;
+            });
+        };
+        
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [dragState, acts, onSave]);
+
     // Filter columns based on settings
     const columns = ALL_COLUMNS.filter(col => {
         if (col.key === 'date' && !settings.showActDate) {
@@ -358,51 +406,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
         return true;
     });
 
-    const handleSaveCell = (act: Act, column: ActTableColumnKey, value: any) => {
-        const updatedAct = { ...act, [column]: value };
-        // Auto-update act date if work end date changes
-        if(column === 'workEndDate') {
-            updatedAct.date = value;
-        }
-        onSave(updatedAct);
-        setEditingCell(null);
-    };
-
     const handleMouseDownOnHandle = (e: React.MouseEvent, actId: string, column: ActTableColumnKey) => {
         e.preventDefault();
         const act = acts.find(a => a.id === actId);
         if (act) {
             setDragState({ startActId: actId, startColumn: column, value: act[column], endActId: actId });
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
         }
-    };
-    
-    const handleMouseMove = (e: MouseEvent) => {
-        const targetRow = (e.target as HTMLElement).closest('tr');
-        if (targetRow && targetRow.dataset.actid) {
-            setDragState(prev => prev ? { ...prev, endActId: targetRow.dataset.actid! } : null);
-        }
-    };
-    
-    const handleMouseUp = () => {
-        if (dragState) {
-            const { startActId, endActId, startColumn, value } = dragState;
-            const startIndex = acts.findIndex(a => a.id === startActId);
-            const endIndex = acts.findIndex(a => a.id === endActId);
-
-            if (startIndex !== -1 && endIndex !== -1) {
-                const minIndex = Math.min(startIndex, endIndex);
-                const maxIndex = Math.max(startIndex, endIndex);
-                
-                for (let i = minIndex; i <= maxIndex; i++) {
-                    handleSaveCell(acts[i], startColumn, value);
-                }
-            }
-        }
-        setDragState(null);
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
     };
     
     const handleGenerate = (act: Act) => {
@@ -427,7 +436,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
         if (!dragState) return [];
         const { startActId, endActId } = dragState;
         const startIndex = acts.findIndex(a => a.id === startActId);
-        const endIndex = acts.findIndex(a => a.id === endActId);
+        const endIndex = endActId ? acts.findIndex(a => a.id === endActId) : -1;
         if (startIndex === -1 || endIndex === -1) return [];
 
         const min = Math.min(startIndex, endIndex);
