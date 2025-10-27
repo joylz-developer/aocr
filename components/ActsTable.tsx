@@ -344,6 +344,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
     const [actForModal, setActForModal] = useState<Act | null>(null);
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const tableContainerRef = useRef<HTMLDivElement>(null);
+    const editorRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        if (editingCell && editorRef.current) {
+            editorRef.current.focus();
+            editorRef.current.select();
+        }
+    }, [editingCell]);
 
     const columns = useMemo(() => ALL_COLUMNS.filter(col => {
         if (col.key === 'date' && !settings.showActDate) {
@@ -373,7 +381,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
     };
 
     const handleCellMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
-        setEditingCell(null);
+        // We no longer set editingCell to null here to allow double-click to work reliably.
+        // Exiting edit mode is handled by onBlur on the editor itself.
         setCopiedCells(null); // Clear copy selection on any new click
     
         const cellId = getCellId(rowIndex, colIndex);
@@ -934,22 +943,22 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                         {isEditing ? (
                                              col.type === 'textarea' ? (
                                                 <textarea
+                                                    ref={editorRef as React.RefObject<HTMLTextAreaElement>}
                                                     value={act[columnKey] || ''}
                                                     onChange={(e) => onSave({ ...act, [columnKey]: e.target.value })}
                                                     onBlur={() => setEditingCell(null)}
                                                     onKeyDown={(e) => { if(e.key === 'Escape') setEditingCell(null); }}
-                                                    autoFocus
-                                                    className="absolute inset-0 w-full h-24 p-2 border-2 border-blue-500 rounded-md resize-y focus:outline-none z-40"
+                                                    className="w-full h-full p-2 border-2 border-blue-500 rounded-md resize-y focus:outline-none"
                                                 />
                                              ) : (
                                                 <input
+                                                    ref={editorRef as React.RefObject<HTMLInputElement>}
                                                     type={col.type}
                                                     value={act[columnKey] || ''}
                                                     onChange={(e) => onSave({ ...act, [columnKey]: e.target.value })}
                                                     onBlur={() => setEditingCell(null)}
                                                     onKeyDown={(e) => { if(e.key === 'Escape') setEditingCell(null); }}
-                                                    autoFocus
-                                                    className="absolute inset-0 w-full h-full p-2 border-2 border-blue-500 rounded-md focus:outline-none z-40"
+                                                    className="w-full h-full p-2 border-2 border-blue-500 rounded-md focus:outline-none"
                                                 />
                                              )
                                         ) : (
