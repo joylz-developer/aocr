@@ -352,9 +352,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
         return true;
     }), [settings.showActDate]);
 
-    const actIdToIndex = useMemo(() => new Map(acts.map((act, i) => [act.id, i])), [acts]);
-    const colKeyToIndex = useMemo(() => new Map(columns.map((col, i) => [col.key, i])), [columns]);
-
+    const normalizeSelection = (area: { start: Coords, end: Coords }): { minRow: number, maxRow: number, minCol: number, maxCol: number } => {
+        const minRow = Math.min(area.start.rowIndex, area.end.rowIndex);
+        const maxRow = Math.max(area.start.rowIndex, area.end.rowIndex);
+        const minCol = Math.min(area.start.colIndex, area.end.colIndex);
+        const maxCol = Math.max(area.start.colIndex, area.end.colIndex);
+        return { minRow, maxRow, minCol, maxCol };
+    };
 
     const getCellCoordsFromEvent = (e: MouseEvent): Coords | null => {
         const target = e.target as HTMLElement;
@@ -364,19 +368,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
             rowIndex: parseInt(cell.dataset.rowIndex, 10),
             colIndex: parseInt(cell.dataset.colIndex, 10),
         };
-    };
-
-    const normalizeSelection = (area: { start: Coords, end: Coords }): { minRow: number, maxRow: number, minCol: number, maxCol: number } => {
-        const minRow = Math.min(area.start.rowIndex, area.end.rowIndex);
-        const maxRow = Math.max(area.start.rowIndex, area.end.rowIndex);
-        const minCol = Math.min(area.start.colIndex, area.end.colIndex);
-        const maxCol = Math.max(area.start.colIndex, area.end.colIndex);
-        return { minRow, maxRow, minCol, maxCol };
-    };
-
-    const isCellInArea = (coords: Coords, area: { start: Coords, end: Coords }): boolean => {
-        const { minRow, maxRow, minCol, maxCol } = normalizeSelection(area);
-        return coords.rowIndex >= minRow && coords.rowIndex <= maxRow && coords.colIndex >= minCol && coords.colIndex <= maxCol;
     };
 
     const handleCellMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
@@ -393,6 +384,124 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
     const handleCellDoubleClick = (rowIndex: number, colIndex: number) => {
         setEditingCell({ rowIndex, colIndex });
     };
+
+     // Keyboard controls: Copy, Paste, Delete
+    useEffect(() => {
+        const handleKeyDown = async (e: KeyboardEvent) => {
+            if (editingCell || (e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') {
+                return;
+            }
+
+            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+            const isCtrlKey = isMac ? e.metaKey : e.ctrlKey;
+
+            // Handle Delete
+            if ((e.key === 'Delete' || e.key === 'Backspace') && selectionArea) {
+                e.preventDefault();
+                const { minRow, maxRow, minCol, maxCol } = normalizeSelection(selectionArea);
+                const updatedActs = new Map<string, Act>();
+
+                for (let r = minRow; r <= maxRow; r++) {
+                    const originalAct = acts[r];
+                    if (!originalAct) continue;
+                    
+                    let updatedAct = updatedActs.get(originalAct.id) || { ...originalAct };
+
+                    for (let c = minCol; c <= maxCol; c++) {
+                        const col = columns[c];
+                        if (!col) continue;
+
+                        if (col.key === 'workDates') {
+                            updatedAct.workStartDate = '';
+                            updatedAct.workEndDate = '';
+                            updatedAct.date = ''; 
+                        } else {
+                            const columnKey = col.key as Exclude<ActTableColumnKey, 'workDates'>;
+                            (updatedAct as any)[columnKey] = '';
+                        }
+                    }
+                    updatedActs.set(originalAct.id, updatedAct);
+                }
+                updatedActs.forEach(onSave);
+            }
+            
+            // Handle Copy
+            if (e.key === 'c' && isCtrlKey && selectionArea) {
+                 e.preventDefault();
+                 const { minRow, maxRow, minCol, maxCol } = normalizeSelection(selectionArea);
+                 const copyData = [];
+                 for (let r = minRow; r <= maxRow; r++) {
+                     const rowData = [];
+                     const act = acts[r];
+                     for (let c = minCol; c <= maxCol; c++) {
+                         const col = columns[c];
+                         if (col.key === 'workDates') {
+                             rowData.push(`${act.workStartDate || ''} - ${act.workEndDate || ''}`);
+                         } else {
+                             rowData.push(act[col.key as Exclude<ActTableColumnKey, 'workDates'>] || '');
+                         }
+                     }
+                     copyData.push(rowData.join('\t'));
+                 }
+                 await navigator.clipboard.writeText(copyData.join('\n'));
+            }
+            
+            // Handle Paste
+            if (e.key === 'v' && isCtrlKey && activeCell) {
+                e.preventDefault();
+                const pastedText = await navigator.clipboard.readText();
+                const pastedRows = pastedText.replace(/\r\n/g, '\n').split('\n').map(row => row.split('\t'));
+                
+                const startRow = activeCell.rowIndex;
+                const startCol = activeCell.colIndex;
+                const updatedActs = new Map<string, Act>();
+
+                pastedRows.forEach((rowData, rOffset) => {
+                    const targetRowIndex = startRow + rOffset;
+                    if (targetRowIndex >= acts.length) return;
+                    
+                    const originalAct = acts[targetRowIndex];
+                    let updatedAct = updatedActs.get(originalAct.id) || { ...originalAct };
+
+                    rowData.forEach((cellData, cOffset) => {
+                        const targetColIndex = startCol + cOffset;
+                        if (targetColIndex >= columns.length) return;
+                        
+                        const col = columns[targetColIndex];
+                         if (col.key === 'workDates') {
+                            const [start, end] = cellData.split(' - ').map(s => s.trim());
+                            updatedAct.workStartDate = start || '';
+                            updatedAct.workEndDate = end || '';
+                            updatedAct.date = end || '';
+                        } else {
+                            const columnKey = col.key as Exclude<ActTableColumnKey, 'workDates'>;
+                            (updatedAct as any)[columnKey] = cellData;
+                        }
+                    });
+                    updatedActs.set(originalAct.id, updatedAct);
+                });
+                updatedActs.forEach(onSave);
+                
+                // Expand selection to pasted area
+                const endRow = startRow + pastedRows.length - 1;
+                const maxCols = pastedRows.length > 0 ? Math.max(...pastedRows.map(r => r.length)) : 0;
+                const endCol = startCol + maxCols - 1;
+                setSelectionArea({
+                    start: activeCell,
+                    end: { 
+                        rowIndex: Math.min(endRow, acts.length - 1), 
+                        colIndex: Math.min(endCol, columns.length - 1)
+                    }
+                });
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [selectionArea, activeCell, editingCell, acts, columns, onSave]);
+
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
@@ -424,14 +533,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
             if (!isFilling || !selectionArea) return;
             const coords = getCellCoordsFromEvent(e);
             if (coords) {
-                const { minRow, maxRow, minCol, maxCol } = normalizeSelection(selectionArea);
-                const startRow = activeCell?.rowIndex === minRow ? maxRow + 1 : minRow - 1;
-                const direction = activeCell?.rowIndex === minRow ? 1 : -1;
-                
-                if (direction === 1 && coords.rowIndex > maxRow) { // Drag down
+                const { maxRow, minCol, maxCol } = normalizeSelection(selectionArea);
+                if (coords.rowIndex > maxRow) { // Only support dragging down for now
                      setFillTargetArea({ start: {rowIndex: maxRow + 1, colIndex: minCol}, end: {rowIndex: coords.rowIndex, colIndex: maxCol} });
-                } else if (direction === -1 && coords.rowIndex < minRow) { // Drag up
-                     setFillTargetArea({ start: {rowIndex: minRow -1, colIndex: minCol}, end: {rowIndex: coords.rowIndex, colIndex: maxCol} });
                 } else {
                     setFillTargetArea(null);
                 }
@@ -439,24 +543,57 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
         };
 
         const handleMouseUp = () => {
-            if (isFilling && selectionArea && fillTargetArea && activeCell) {
-                const { minRow: selMinRow, maxRow: selMaxRow, minCol: selMinCol, maxCol: selMaxCol } = normalizeSelection(selectionArea);
-                const { minRow: fillMinRow, maxRow: fillMaxRow } = normalizeSelection(fillTargetArea);
+            if (!isFilling || !selectionArea || !fillTargetArea) {
+                setIsFilling(false);
+                setFillTargetArea(null);
+                return;
+            }
 
-                for (let r = fillMinRow; r <= fillMaxRow; r++) {
-                    const actToUpdate = acts[r];
-                    let updatedAct = { ...actToUpdate };
-                    for (let c = selMinCol; c <= selMaxCol; c++) {
-                        const sourceRowIndex = activeCell.rowIndex;
-                        const colKey = columns[c].key;
-                        if (colKey !== 'workDates') {
-                            const sourceValue = acts[sourceRowIndex][colKey as keyof Act];
-                             updatedAct = {...updatedAct, [colKey]: sourceValue};
+            const { minCol: selMinCol, maxCol: selMaxCol } = normalizeSelection(selectionArea);
+            const { minRow: fillMinRow, maxRow: fillMaxRow } = normalizeSelection(fillTargetArea);
+
+            const { minRow: selMinRow, maxRow: selMaxRow } = normalizeSelection(selectionArea);
+            const patternHeight = selMaxRow - selMinRow + 1;
+            
+            const actsToUpdate: Act[] = [];
+
+            for (let r = fillMinRow; r <= fillMaxRow; r++) {
+                const targetAct = acts[r];
+                let updatedAct = { ...targetAct };
+                let hasChanges = false;
+                
+                const patternRowIndex = selMinRow + ((r - fillMinRow) % patternHeight);
+                const sourceAct = acts[patternRowIndex];
+
+                if (!sourceAct) continue;
+
+                for (let c = selMinCol; c <= selMaxCol; c++) {
+                    const colKey = columns[c]?.key;
+                    if (!colKey) continue;
+
+                    if (colKey === 'workDates') {
+                        if (updatedAct.workStartDate !== sourceAct.workStartDate || updatedAct.workEndDate !== sourceAct.workEndDate) {
+                            updatedAct.workStartDate = sourceAct.workStartDate;
+                            updatedAct.workEndDate = sourceAct.workEndDate;
+                            updatedAct.date = sourceAct.workEndDate; 
+                            hasChanges = true;
+                        }
+                    } else {
+                        const typedColKey = colKey as keyof Act;
+                        const sourceValue = sourceAct[typedColKey];
+                        if (updatedAct[typedColKey] !== sourceValue) {
+                            (updatedAct as any)[typedColKey] = sourceValue;
+                            hasChanges = true;
                         }
                     }
-                     onSave(updatedAct);
+                }
+                if (hasChanges) {
+                    actsToUpdate.push(updatedAct);
                 }
             }
+            
+            actsToUpdate.forEach(onSave);
+
             setIsFilling(false);
             setFillTargetArea(null);
         };
@@ -470,7 +607,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isFilling, selectionArea, fillTargetArea, activeCell, acts, columns, onSave]);
+    }, [isFilling, selectionArea, fillTargetArea, acts, columns, onSave]);
 
 
     const handleResizeStart = useCallback((e: React.MouseEvent, columnKey: string) => {
@@ -513,6 +650,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
         setActForModal(null);
         setIsModalOpen(false);
     };
+    
+    const isCellInArea = (coords: Coords, area: { start: Coords, end: Coords }): boolean => {
+        const { minRow, maxRow, minCol, maxCol } = normalizeSelection(area);
+        return coords.rowIndex >= minRow && coords.rowIndex <= maxRow && coords.colIndex >= minCol && coords.colIndex <= maxCol;
+    };
+
 
     return (
         <div ref={tableRef} className="overflow-x-auto border border-slate-200 rounded-lg select-none">
@@ -545,9 +688,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                 const isSelected = selectionArea ? isCellInArea(coords, selectionArea) : false;
                                 const isFillTarget = fillTargetArea ? isCellInArea(coords, fillTargetArea) : false;
                                 
-                                let cellClassName = "px-0 py-0 border-b border-slate-200 align-top relative";
+                                let cellClassName = "px-0 py-0 border-b border-r border-slate-200 align-top relative";
                                 if (isSelected) {
-                                    cellClassName += " bg-blue-50";
+                                    cellClassName += " bg-blue-100";
                                 }
                                 if (isFillTarget) {
                                      cellClassName += " bg-green-100 border-2 border-dashed border-green-400";
@@ -561,7 +704,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                             data-col-index={colIndex}
                                             onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
                                             onDoubleClick={() => handleCellDoubleClick(rowIndex, colIndex)}
-                                            className={`${cellClassName} ${isActive ? 'ring-2 ring-inset ring-blue-600' : isSelected ? 'ring-1 ring-inset ring-blue-300' : ''}`}
+                                            className={`${cellClassName} ${isActive ? 'ring-2 ring-inset ring-blue-600 z-30' : isSelected ? 'ring-1 ring-inset ring-blue-300' : ''}`}
                                         >
                                             {isEditing ? (
                                                 <DateCellEditor
@@ -590,25 +733,27 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                         data-col-index={colIndex}
                                         onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
                                         onDoubleClick={() => handleCellDoubleClick(rowIndex, colIndex)}
-                                        className={`${cellClassName} ${isActive ? 'ring-2 ring-inset ring-blue-600' : isSelected ? 'ring-1 ring-inset ring-blue-300' : ''}`}
+                                        className={`${cellClassName} ${isActive ? 'ring-2 ring-inset ring-blue-600 z-30' : isSelected ? 'ring-1 ring-inset ring-blue-300' : ''}`}
                                     >
                                         {isEditing ? (
                                              col.type === 'textarea' ? (
                                                 <textarea
-                                                    value={act[columnKey]}
+                                                    value={act[columnKey] || ''}
                                                     onChange={(e) => onSave({ ...act, [columnKey]: e.target.value })}
                                                     onBlur={() => setEditingCell(null)}
+                                                    onKeyDown={(e) => { if(e.key === 'Escape') setEditingCell(null); }}
                                                     autoFocus
-                                                    className="absolute inset-0 w-full h-24 p-2 border-2 border-blue-500 rounded-md resize-y focus:outline-none z-20"
+                                                    className="absolute inset-0 w-full h-24 p-2 border-2 border-blue-500 rounded-md resize-y focus:outline-none z-40"
                                                 />
                                              ) : (
                                                 <input
                                                     type={col.type}
-                                                    value={act[columnKey]}
+                                                    value={act[columnKey] || ''}
                                                     onChange={(e) => onSave({ ...act, [columnKey]: e.target.value })}
                                                     onBlur={() => setEditingCell(null)}
+                                                    onKeyDown={(e) => { if(e.key === 'Escape') setEditingCell(null); }}
                                                     autoFocus
-                                                    className="absolute inset-0 w-full h-full p-2 border-2 border-blue-500 rounded-md focus:outline-none z-20"
+                                                    className="absolute inset-0 w-full h-full p-2 border-2 border-blue-500 rounded-md focus:outline-none z-40"
                                                 />
                                              )
                                         ) : (
@@ -616,14 +761,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                                 {act[columnKey] || <span className="text-slate-400">...</span>}
                                             </div>
                                         )}
-                                        {isActive && selectionArea && (
+                                        {isActive && (
                                             <div
                                                 onMouseDown={(e) => {
                                                     e.stopPropagation();
                                                     e.preventDefault();
                                                     setIsFilling(true);
                                                 }}
-                                                className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-blue-600 cursor-crosshair z-30 border border-white"
+                                                className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-blue-600 cursor-crosshair z-50 border border-white"
                                                 title="Протянуть для копирования"
                                             />
                                         )}
