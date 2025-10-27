@@ -283,7 +283,7 @@ const App: React.FC = () => {
     return (
         <div className="bg-slate-100 min-h-screen font-sans text-slate-800">
             <header className="bg-white shadow-sm">
-                <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+                <div className="px-4 py-4 flex justify-between items-center">
                      <h1 className="text-xl font-bold text-blue-700">DocGen AI</h1>
                      <nav className="flex items-center space-x-2">
                         <NavButton page="acts" label="Акты" disabled={!template} />
@@ -303,7 +303,7 @@ const App: React.FC = () => {
                      </div>
                 </div>
             </header>
-            <main className="container mx-auto px-4 py-8">
+            <main className="px-4 py-8">
                 {!template ? (
                     <TemplateUploader onUpload={handleTemplateUpload} />
                 ) : (
