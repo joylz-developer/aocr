@@ -34,10 +34,18 @@ export interface Act {
     number: string;
     date: string; // YYYY-MM-DD
     objectName: string;
+    
+    // Legacy/generated fields
     builderDetails: string;
     contractorDetails: string;
     designerDetails: string;
     workPerformer: string;
+    
+    // IDs for selected orgs
+    builderOrgId?: string;
+    contractorOrgId?: string;
+    designerOrgId?: string;
+    workPerformerOrgId?: string;
 
     workName: string;
     projectDocs: string;

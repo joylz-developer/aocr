@@ -17,7 +17,7 @@ interface ActsTableProps {
 }
 
 // FIX: Define a more specific type for columns to exclude non-string properties like 'representatives'.
-type ActTableColumnKey = Exclude<keyof Act, 'representatives' | 'id'>;
+type ActTableColumnKey = Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId'>;
 
 
 // Props for the full ActForm, used inside a modal for complex edits
@@ -39,20 +39,39 @@ const ActForm: React.FC<{
         }
     );
 
-    const [isAiLoading, setIsAiLoading] = useState(false);
-    const [aiError, setAiError] = useState<string | null>(null);
     const [showOtherReps, setShowOtherReps] = useState(false);
     
-    const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
+    const getOrgDetailsString = useCallback((org: Organization, useShort: boolean | undefined): string => {
+        if (useShort) {
+            return org.name;
+        }
+        return `${org.name}, ИНН ${org.inn}, ОГРН ${org.ogrn}, ${org.address}`;
+    }, []);
 
     useEffect(() => {
-        if(act) setFormData(act)
-    }, [act]);
+        if(act) {
+            const initialFormData = { ...act };
+            // For backward compatibility, try to match details string to an org ID
+            if (!act.builderOrgId && act.builderDetails) {
+                 const foundOrg = organizations.find(org => getOrgDetailsString(org, false) === act.builderDetails || getOrgDetailsString(org, true) === act.builderDetails);
+                 if (foundOrg) initialFormData.builderOrgId = foundOrg.id;
+            }
+             if (!act.contractorOrgId && act.contractorDetails) {
+                 const foundOrg = organizations.find(org => getOrgDetailsString(org, false) === act.contractorDetails || getOrgDetailsString(org, true) === act.contractorDetails);
+                 if (foundOrg) initialFormData.contractorOrgId = foundOrg.id;
+            }
+             if (!act.designerOrgId && act.designerDetails) {
+                 const foundOrg = organizations.find(org => getOrgDetailsString(org, false) === act.designerDetails || getOrgDetailsString(org, true) === act.designerDetails);
+                 if (foundOrg) initialFormData.designerOrgId = foundOrg.id;
+            }
+            if (!act.workPerformerOrgId && act.workPerformer) {
+                 const foundOrg = organizations.find(org => getOrgDetailsString(org, false) === act.workPerformer || getOrgDetailsString(org, true) === act.workPerformer);
+                 if (foundOrg) initialFormData.workPerformerOrgId = foundOrg.id;
+            }
+            setFormData(initialFormData);
+        }
+    }, [act, organizations, getOrgDetailsString]);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
-    };
 
     const handleRepChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -61,15 +80,53 @@ const ActForm: React.FC<{
             representatives: { ...prev.representatives, [name]: value }
         }));
     };
+
+    const handleOrgChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            [name]: value
+        }));
+    };
     
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(formData);
+        
+        const finalAct = { ...formData };
+        
+        const orgMap = new Map(organizations.map(org => [org.id, org]));
+        
+        const useShort = settings.useShortOrgNames;
+
+        if (finalAct.builderOrgId && orgMap.has(finalAct.builderOrgId)) {
+            finalAct.builderDetails = getOrgDetailsString(orgMap.get(finalAct.builderOrgId)!, useShort);
+        } else {
+             finalAct.builderDetails = '';
+        }
+
+        if (finalAct.contractorOrgId && orgMap.has(finalAct.contractorOrgId)) {
+            finalAct.contractorDetails = getOrgDetailsString(orgMap.get(finalAct.contractorOrgId)!, useShort);
+        } else {
+            finalAct.contractorDetails = '';
+        }
+
+        if (finalAct.designerOrgId && orgMap.has(finalAct.designerOrgId)) {
+            finalAct.designerDetails = getOrgDetailsString(orgMap.get(finalAct.designerOrgId)!, useShort);
+        } else {
+            finalAct.designerDetails = '';
+        }
+        
+        if (finalAct.workPerformerOrgId && orgMap.has(finalAct.workPerformerOrgId)) {
+            finalAct.workPerformer = getOrgDetailsString(orgMap.get(finalAct.workPerformerOrgId)!, useShort);
+        } else {
+            finalAct.workPerformer = '';
+        }
+
+        onSave(finalAct);
         onClose();
     };
 
-    const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900";
-    const selectClass = inputClass + " bg-white";
+    const selectClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 bg-white";
     const labelClass = "block text-sm font-medium text-slate-700";
 
     const renderSection = (title: string, children: React.ReactNode) => (
@@ -83,6 +140,39 @@ const ActForm: React.FC<{
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6 max-h-[80vh] overflow-y-auto pr-4">
+            {renderSection("Организации-участники",
+                <>
+                    <div>
+                        <label className={labelClass}>Застройщик (технический заказчик)</label>
+                        <select name="builderOrgId" value={formData.builderOrgId || ''} onChange={handleOrgChange} className={selectClass}>
+                            <option value="">Не выбрано</option>
+                            {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className={labelClass}>Лицо, осуществляющее строительство (Подрядчик)</label>
+                        <select name="contractorOrgId" value={formData.contractorOrgId || ''} onChange={handleOrgChange} className={selectClass}>
+                            <option value="">Не выбрано</option>
+                            {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+                        </select>
+                    </div>
+                     <div>
+                        <label className={labelClass}>Лицо, осуществившее подготовку проекта</label>
+                        <select name="designerOrgId" value={formData.designerOrgId || ''} onChange={handleOrgChange} className={selectClass}>
+                            <option value="">Не выбрано</option>
+                            {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+                        </select>
+                    </div>
+                     <div>
+                        <label className={labelClass}>Лицо, выполнившее работы</label>
+                        <select name="workPerformerOrgId" value={formData.workPerformerOrgId || ''} onChange={handleOrgChange} className={selectClass}>
+                            <option value="">Не выбрано</option>
+                            {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+                        </select>
+                    </div>
+                </>
+            )}
+
             {renderSection("Представители (комиссия)", 
                 <>
                 {Object.entries(ROLES).filter(([key]) => !['i1','i2','i3'].includes(key)).map(([key, description]) => (
@@ -129,18 +219,14 @@ const ActForm: React.FC<{
 
 const ALL_COLUMNS: { key: ActTableColumnKey; label: string; type: 'text' | 'date' | 'textarea', widthClass: string }[] = [
     { key: 'number', label: '№', type: 'text', widthClass: 'w-24' },
-    { key: 'builderDetails', label: 'Застройщик (Заказчик)', type: 'textarea', widthClass: 'w-80' },
-    { key: 'contractorDetails', label: 'Подрядчик', type: 'textarea', widthClass: 'w-80' },
-    { key: 'designerDetails', label: 'Проектировщик', type: 'textarea', widthClass: 'w-80' },
-    { key: 'workPerformer', label: 'Исполнитель работ', type: 'textarea', widthClass: 'w-80' },
     { key: 'workName', label: '1. Наименование работ', type: 'textarea', widthClass: 'w-96 min-w-[24rem]' },
-    { key: 'projectDocs', label: '2. Проектная док-ция', type: 'textarea', widthClass: 'w-64' },
-    { key: 'materials', label: '3. Материалы', type: 'textarea', widthClass: 'w-64' },
-    { key: 'certs', label: '4. Сертификаты', type: 'textarea', widthClass: 'w-64' },
-    { key: 'regulations', label: '6. Нормативы', type: 'textarea', widthClass: 'w-80' },
-    { key: 'nextWork', label: '7. След. работы', type: 'textarea', widthClass: 'w-80' },
+    { key: 'projectDocs', label: '2. Проектная документация', type: 'textarea', widthClass: 'w-80' },
+    { key: 'materials', label: '3. Материалы', type: 'textarea', widthClass: 'w-80' },
+    { key: 'certs', label: '4. Документы о качестве', type: 'textarea', widthClass: 'w-80' },
     { key: 'workStartDate', label: '5. Начало работ', type: 'date', widthClass: 'w-40' },
     { key: 'workEndDate', label: '5. Окончание работ', type: 'date', widthClass: 'w-40' },
+    { key: 'regulations', label: '6. Нормативы', type: 'textarea', widthClass: 'w-80' },
+    { key: 'nextWork', label: '7. Следующие работы', type: 'textarea', widthClass: 'w-80' },
     { key: 'date', label: 'Дата акта', type: 'date', widthClass: 'w-40' },
 ];
 
@@ -339,7 +425,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                             <td className="px-4 py-2 whitespace-nowrap text-right font-medium align-middle sticky right-0 bg-white z-20 w-36">
                                 <div className="flex justify-end space-x-1">
                                     <button onClick={() => handleGenerate(act)} className="p-2 text-green-600 hover:bg-green-100 rounded-full" title="Скачать .docx"><DownloadIcon /></button>
-                                    <button onClick={() => handleOpenModal(act)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full" title="Редактировать комиссию"><EditIcon /></button>
+                                    <button onClick={() => handleOpenModal(act)} className="p-2 text-blue-600 hover:bg-blue-100 rounded-full" title="Редактировать участников"><EditIcon /></button>
                                     <button onClick={() => onDelete(act.id)} className="p-2 text-red-600 hover:bg-red-100 rounded-full" title="Удалить"><DeleteIcon /></button>
                                 </div>
                             </td>
@@ -352,7 +438,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                     Пока нет ни одного акта. Нажмите "Создать акт", чтобы добавить новую строку.
                 </div>
             )}
-            <Modal isOpen={isModalOpen} onClose={handleCloseModal} title="Редактирование представителей">
+            <Modal isOpen={isModalOpen} onClose={handleCloseModal} title="Редактирование участников акта">
                 <ActForm
                     act={actForModal}
                     people={people}
