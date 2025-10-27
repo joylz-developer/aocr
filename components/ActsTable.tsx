@@ -132,15 +132,15 @@ const ALL_COLUMNS: { key: ActTableColumnKey; label: string; type: 'text' | 'date
     { key: 'builderDetails', label: 'Застройщик (Заказчик)', type: 'textarea', widthClass: 'w-80' },
     { key: 'contractorDetails', label: 'Подрядчик', type: 'textarea', widthClass: 'w-80' },
     { key: 'designerDetails', label: 'Проектировщик', type: 'textarea', widthClass: 'w-80' },
-    { key: 'workPerformer', label: '2. Исполнитель работ', type: 'textarea', widthClass: 'w-80' },
-    { key: 'workName', label: '3. Наименование работ', type: 'textarea', widthClass: 'w-96 min-w-[24rem]' },
-    { key: 'materials', label: '4. Материалы', type: 'textarea', widthClass: 'w-64' },
-    { key: 'projectDocs', label: '5.1 Проектная док-ция', type: 'textarea', widthClass: 'w-64' },
-    { key: 'certs', label: '5.2 Сертификаты', type: 'textarea', widthClass: 'w-64' },
-    { key: 'regulations', label: '7. Нормативы', type: 'textarea', widthClass: 'w-80' },
-    { key: 'nextWork', label: '8. След. работы', type: 'textarea', widthClass: 'w-80' },
-    { key: 'workStartDate', label: '6. Начало работ', type: 'date', widthClass: 'w-40' },
-    { key: 'workEndDate', label: '6. Окончание работ', type: 'date', widthClass: 'w-40' },
+    { key: 'workPerformer', label: 'Исполнитель работ', type: 'textarea', widthClass: 'w-80' },
+    { key: 'workName', label: '1. Наименование работ', type: 'textarea', widthClass: 'w-96 min-w-[24rem]' },
+    { key: 'projectDocs', label: '2. Проектная док-ция', type: 'textarea', widthClass: 'w-64' },
+    { key: 'materials', label: '3. Материалы', type: 'textarea', widthClass: 'w-64' },
+    { key: 'certs', label: '4. Сертификаты', type: 'textarea', widthClass: 'w-64' },
+    { key: 'regulations', label: '6. Нормативы', type: 'textarea', widthClass: 'w-80' },
+    { key: 'nextWork', label: '7. След. работы', type: 'textarea', widthClass: 'w-80' },
+    { key: 'workStartDate', label: '5. Начало работ', type: 'date', widthClass: 'w-40' },
+    { key: 'workEndDate', label: '5. Окончание работ', type: 'date', widthClass: 'w-40' },
     { key: 'date', label: 'Дата акта', type: 'date', widthClass: 'w-40' },
 ];
 
@@ -148,9 +148,33 @@ const ALL_COLUMNS: { key: ActTableColumnKey; label: string; type: 'text' | 'date
 const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, template, settings, onSave, onDelete }) => {
     const [editingCell, setEditingCell] = useState<{ actId: string; column: ActTableColumnKey } | null>(null);
     const [dragState, setDragState] = useState<{ startActId: string; startColumn: ActTableColumnKey; value: any; endActId: string | null } | null>(null);
-    const tableRef = useRef<HTMLTableElement>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [actForModal, setActForModal] = useState<Act | null>(null);
+    const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+
+    const handleResizeStart = useCallback((e: React.MouseEvent, columnKey: ActTableColumnKey) => {
+        e.preventDefault();
+        const thElement = (e.target as HTMLElement).parentElement;
+        if (!thElement) return;
+
+        const startX = e.clientX;
+        const startWidth = thElement.offsetWidth;
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            const newWidth = startWidth + (moveEvent.clientX - startX);
+            if (newWidth > 60) { // Minimum column width
+                setColumnWidths(prev => ({ ...prev, [columnKey]: newWidth }));
+            }
+        };
+
+        const handleMouseUp = () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+    }, []);
 
     // Filter columns based on settings
     const columns = ALL_COLUMNS.filter(col => {
@@ -242,12 +266,20 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
 
     return (
         <div className="overflow-x-auto border border-slate-200 rounded-lg">
-            <table ref={tableRef} className="min-w-full text-sm">
+            <table className="min-w-full text-sm table-fixed">
                 <thead className="bg-slate-50 sticky top-0 z-10">
                     <tr>
                         {columns.map(col => (
-                            <th key={col.key} className={`px-4 py-3 text-left font-medium text-slate-500 uppercase tracking-wider ${col.widthClass}`}>
+                            <th 
+                                key={col.key} 
+                                className={`px-4 py-3 text-left font-medium text-slate-500 uppercase tracking-wider relative ${col.widthClass}`}
+                                style={{ width: columnWidths[col.key] ? `${columnWidths[col.key]}px` : undefined }}
+                            >
                                 {col.label}
+                                <div
+                                    className="absolute top-0 right-0 h-full w-2 cursor-col-resize select-none"
+                                    onMouseDown={(e) => handleResizeStart(e, col.key)}
+                                />
                             </th>
                         ))}
                         <th className="px-4 py-3 text-right font-medium text-slate-500 uppercase tracking-wider sticky right-0 bg-slate-50 z-20 w-36">Действия</th>
@@ -265,7 +297,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                     <td
                                         key={col.key}
                                         onClick={() => setEditingCell({ actId: act.id, column: col.key })}
-                                        className={`px-0 py-0 border-b border-slate-200 align-top relative ${col.widthClass}
+                                        className={`px-0 py-0 border-b border-slate-200 align-top relative
                                             ${isDragStart ? 'border-2 border-blue-500' : ''}
                                             ${isDraggingOver && !isDragStart ? 'bg-blue-100' : ''}
                                             ${!isEditing ? 'cursor-pointer' : ''}
