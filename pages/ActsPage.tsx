@@ -112,7 +112,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
                         <li><CopyableTag tag="{work_name}" /> &mdash; Наименование работ.</li>
                         <li><CopyableTag tag="{project_docs}" /> &mdash; Проектная документация.</li>
                         <li><CopyableTag tag="{materials}" /> &mdash; Примененные материалы.</li>
-                        <li><CopyableTag tag="{certs}" /> &mdash; Документы о качестве (сертификаты, паспорта).</li>
+                        <li><CopyableTag tag="{certs}" /> &mdash; Исполнительные схемы.</li>
                     </ul>
 
                     <h4 className="font-semibold mt-6">Представители (Комиссия)</h4>

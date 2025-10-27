@@ -217,14 +217,102 @@ const ActForm: React.FC<{
     )
 }
 
-const ALL_COLUMNS: { key: ActTableColumnKey; label: string; type: 'text' | 'date' | 'textarea', widthClass: string }[] = [
+const DateCellEditor: React.FC<{
+    act: Act;
+    onSave: (act: Act) => void;
+    onClose: () => void;
+}> = ({ act, onSave, onClose }) => {
+    const [startDate, setStartDate] = useState(act.workStartDate || '');
+    const [endDate, setEndDate] = useState(act.workEndDate || '');
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+                handleSave();
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [startDate, endDate]); // Re-add listener if dates change to save latest state
+
+    const handleSave = () => {
+        if (act.workStartDate !== startDate || act.workEndDate !== endDate) {
+            onSave({ ...act, workStartDate: startDate, workEndDate: endDate, date: endDate });
+        }
+        onClose();
+    };
+
+    const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newStartDate = e.target.value;
+        setStartDate(newStartDate);
+        if (!endDate || new Date(endDate) < new Date(newStartDate)) {
+            setEndDate(newStartDate);
+        }
+    };
+    
+    const addTime = (amount: number, unit: 'day' | 'week' | 'month') => {
+        if (!startDate) return;
+        const [year, month, day] = startDate.split('-').map(Number);
+        const utcDate = new Date(Date.UTC(year, month - 1, day));
+
+        if (unit === 'day') {
+            utcDate.setUTCDate(utcDate.getUTCDate() + amount);
+        } else if (unit === 'week') {
+            utcDate.setUTCDate(utcDate.getUTCDate() + amount * 7);
+        } else if (unit === 'month') {
+            utcDate.setUTCMonth(utcDate.getUTCMonth() + amount);
+        }
+        
+        setEndDate(utcDate.toISOString().split('T')[0]);
+    };
+
+    const QuickAddButton: React.FC<{ children: React.ReactNode; onClick: () => void }> = ({ children, onClick }) => (
+        <button type="button" onClick={onClick} className="px-2 py-1 text-xs bg-slate-200 hover:bg-slate-300 rounded">
+            {children}
+        </button>
+    );
+
+    return (
+        <div ref={containerRef} className="absolute inset-0 bg-white p-2 border-2 border-blue-500 rounded-md z-40 flex flex-col gap-2 shadow-lg" onClick={e => e.stopPropagation()}>
+            <div>
+                <label className="text-xs font-medium text-slate-600">Начало</label>
+                <input
+                    type="date"
+                    value={startDate}
+                    onChange={handleStartDateChange}
+                    autoFocus
+                    className="w-full p-1 border border-slate-300 rounded text-sm"
+                />
+            </div>
+             <div>
+                <label className="text-xs font-medium text-slate-600">Окончание</label>
+                <input
+                    type="date"
+                    value={endDate}
+                    min={startDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full p-1 border border-slate-300 rounded text-sm"
+                />
+            </div>
+            <div className="flex justify-start items-center gap-1">
+                <QuickAddButton onClick={() => addTime(1, 'day')}>+1Д</QuickAddButton>
+                <QuickAddButton onClick={() => addTime(1, 'week')}>+1Н</QuickAddButton>
+                <QuickAddButton onClick={() => addTime(1, 'month')}>+1М</QuickAddButton>
+            </div>
+        </div>
+    );
+};
+
+const ALL_COLUMNS: { key: string; label: string; type: 'text' | 'date' | 'textarea' | 'custom_date', widthClass: string }[] = [
     { key: 'number', label: '№', type: 'text', widthClass: 'w-24' },
     { key: 'workName', label: '1. Наименование работ', type: 'textarea', widthClass: 'w-96 min-w-[24rem]' },
     { key: 'projectDocs', label: '2. Проектная документация', type: 'textarea', widthClass: 'w-80' },
     { key: 'materials', label: '3. Материалы', type: 'textarea', widthClass: 'w-80' },
-    { key: 'certs', label: '4. Документы о качестве', type: 'textarea', widthClass: 'w-80' },
-    { key: 'workStartDate', label: '5. Начало работ', type: 'date', widthClass: 'w-40' },
-    { key: 'workEndDate', label: '5. Окончание работ', type: 'date', widthClass: 'w-40' },
+    { key: 'certs', label: '4. исполнительные схемы', type: 'textarea', widthClass: 'w-80' },
+    { key: 'workDates', label: '5. Даты работ', type: 'custom_date', widthClass: 'w-64' },
     { key: 'regulations', label: '6. Нормативы', type: 'textarea', widthClass: 'w-80' },
     { key: 'nextWork', label: '7. Следующие работы', type: 'textarea', widthClass: 'w-80' },
     { key: 'date', label: 'Дата акта', type: 'date', widthClass: 'w-40' },
@@ -232,13 +320,13 @@ const ALL_COLUMNS: { key: ActTableColumnKey; label: string; type: 'text' | 'date
 
 // Main Table Component
 const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, template, settings, onSave, onDelete }) => {
-    const [editingCell, setEditingCell] = useState<{ actId: string; column: ActTableColumnKey } | null>(null);
+    const [editingCell, setEditingCell] = useState<{ actId: string; column: string } | null>(null);
     const [dragState, setDragState] = useState<{ startActId: string; startColumn: ActTableColumnKey; value: any; endActId: string | null } | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [actForModal, setActForModal] = useState<Act | null>(null);
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
 
-    const handleResizeStart = useCallback((e: React.MouseEvent, columnKey: ActTableColumnKey) => {
+    const handleResizeStart = useCallback((e: React.MouseEvent, columnKey: string) => {
         e.preventDefault();
         const thElement = (e.target as HTMLElement).parentElement;
         if (!thElement) return;
@@ -376,8 +464,35 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                         <tr key={act.id} data-actid={act.id} className="hover:bg-slate-50">
                             {columns.map(col => {
                                 const isEditing = editingCell?.actId === act.id && editingCell?.column === col.key;
-                                const isDraggingOver = dragRangeIds.includes(act.id) && dragState?.startColumn === col.key;
-                                const isDragStart = dragState?.startActId === act.id && dragState?.startColumn === col.key;
+                                
+                                if (col.type === 'custom_date') {
+                                    return (
+                                        <td
+                                            key={col.key}
+                                            onClick={() => !isEditing && setEditingCell({ actId: act.id, column: col.key })}
+                                            className={`px-0 py-0 border-b border-slate-200 align-top relative ${!isEditing ? 'cursor-pointer' : ''}`}
+                                        >
+                                            {isEditing ? (
+                                                <DateCellEditor
+                                                    act={act}
+                                                    onSave={onSave}
+                                                    onClose={() => setEditingCell(null)}
+                                                />
+                                            ) : (
+                                                <div className="w-full h-full p-2 whitespace-pre-wrap truncate">
+                                                    {(act.workStartDate || act.workEndDate)
+                                                        ? `${act.workStartDate || '...'} - ${act.workEndDate || '...'}`
+                                                        : <span className="text-slate-400">...</span>
+                                                    }
+                                                </div>
+                                            )}
+                                        </td>
+                                    );
+                                }
+                                
+                                const columnKey = col.key as ActTableColumnKey;
+                                const isDraggingOver = dragRangeIds.includes(act.id) && dragState?.startColumn === columnKey;
+                                const isDragStart = dragState?.startActId === act.id && dragState?.startColumn === columnKey;
 
                                 return (
                                     <td
@@ -392,8 +507,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                         {isEditing ? (
                                              col.type === 'textarea' ? (
                                                 <textarea
-                                                    value={act[col.key]}
-                                                    onChange={(e) => onSave({ ...act, [col.key]: e.target.value })}
+                                                    value={act[columnKey]}
+                                                    onChange={(e) => onSave({ ...act, [columnKey]: e.target.value })}
                                                     onBlur={() => setEditingCell(null)}
                                                     autoFocus
                                                     className="w-full h-24 p-2 border-2 border-blue-500 rounded-md resize-y focus:outline-none"
@@ -401,8 +516,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                              ) : (
                                                 <input
                                                     type={col.type}
-                                                    value={act[col.key]}
-                                                    onChange={(e) => onSave({ ...act, [col.key]: e.target.value })}
+                                                    value={act[columnKey]}
+                                                    onChange={(e) => onSave({ ...act, [columnKey]: e.target.value })}
                                                     onBlur={() => setEditingCell(null)}
                                                     autoFocus
                                                     className="w-full h-full p-2 border-2 border-blue-500 rounded-md focus:outline-none"
@@ -410,11 +525,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                              )
                                         ) : (
                                             <div className="w-full h-full p-2 whitespace-pre-wrap truncate">
-                                                {act[col.key] || <span className="text-slate-400">...</span>}
+                                                {act[columnKey] || <span className="text-slate-400">...</span>}
                                             </div>
                                         )}
                                          <div
-                                            onMouseDown={(e) => handleMouseDownOnHandle(e, act.id, col.key)}
+                                            onMouseDown={(e) => handleMouseDownOnHandle(e, act.id, columnKey)}
                                             className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-blue-600 cursor-crosshair z-30"
                                             style={{ display: isEditing || isDragStart ? 'block' : 'none' }}
                                             title="Протянуть для копирования"
