@@ -127,6 +127,23 @@ const ActForm: React.FC<{
     )
 }
 
+const ALL_COLUMNS: { key: ActTableColumnKey; label: string; type: 'text' | 'date' | 'textarea', widthClass: string }[] = [
+    { key: 'number', label: '№', type: 'text', widthClass: 'w-24' },
+    { key: 'builderDetails', label: 'Застройщик (Заказчик)', type: 'textarea', widthClass: 'w-80' },
+    { key: 'contractorDetails', label: 'Подрядчик', type: 'textarea', widthClass: 'w-80' },
+    { key: 'designerDetails', label: 'Проектировщик', type: 'textarea', widthClass: 'w-80' },
+    { key: 'workPerformer', label: '2. Исполнитель работ', type: 'textarea', widthClass: 'w-80' },
+    { key: 'workName', label: '3. Наименование работ', type: 'textarea', widthClass: 'w-96 min-w-[24rem]' },
+    { key: 'materials', label: '4. Материалы', type: 'textarea', widthClass: 'w-64' },
+    { key: 'projectDocs', label: '5.1 Проектная док-ция', type: 'textarea', widthClass: 'w-64' },
+    { key: 'certs', label: '5.2 Сертификаты', type: 'textarea', widthClass: 'w-64' },
+    { key: 'regulations', label: '7. Нормативы', type: 'textarea', widthClass: 'w-80' },
+    { key: 'nextWork', label: '8. След. работы', type: 'textarea', widthClass: 'w-80' },
+    { key: 'workStartDate', label: '6. Начало работ', type: 'date', widthClass: 'w-40' },
+    { key: 'workEndDate', label: '6. Окончание работ', type: 'date', widthClass: 'w-40' },
+    { key: 'date', label: 'Дата акта', type: 'date', widthClass: 'w-40' },
+];
+
 // Main Table Component
 const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, template, settings, onSave, onDelete }) => {
     const [editingCell, setEditingCell] = useState<{ actId: string; column: ActTableColumnKey } | null>(null);
@@ -134,6 +151,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
     const tableRef = useRef<HTMLTableElement>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [actForModal, setActForModal] = useState<Act | null>(null);
+
+    // Filter columns based on settings
+    const columns = ALL_COLUMNS.filter(col => {
+        if (col.key === 'date' && !settings.showActDate) {
+            return false;
+        }
+        return true;
+    });
 
     const handleSaveCell = (act: Act, column: ActTableColumnKey, value: any) => {
         const updatedAct = { ...act, [column]: value };
@@ -199,23 +224,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
         setActForModal(null);
         setIsModalOpen(false);
     };
-
-    const columns: { key: ActTableColumnKey; label: string; type: 'text' | 'date' | 'textarea', widthClass: string }[] = [
-        { key: 'number', label: '№', type: 'text', widthClass: 'w-24' },
-        { key: 'date', label: 'Дата акта', type: 'date', widthClass: 'w-40' },
-        { key: 'builderDetails', label: 'Застройщик (Заказчик)', type: 'textarea', widthClass: 'w-80' },
-        { key: 'contractorDetails', label: 'Подрядчик', type: 'textarea', widthClass: 'w-80' },
-        { key: 'designerDetails', label: 'Проектировщик', type: 'textarea', widthClass: 'w-80' },
-        { key: 'workPerformer', label: '2. Исполнитель работ', type: 'textarea', widthClass: 'w-80' },
-        { key: 'workName', label: '3.1. Наименование работ', type: 'textarea', widthClass: 'w-96 min-w-[24rem]' },
-        { key: 'workStartDate', label: '3.5. Начало работ', type: 'date', widthClass: 'w-40' },
-        { key: 'workEndDate', label: '3.5. Окончание работ', type: 'date', widthClass: 'w-40' },
-        { key: 'projectDocs', label: '3.2. Проектная док-ция', type: 'textarea', widthClass: 'w-64' },
-        { key: 'materials', label: '3.3. Материалы', type: 'textarea', widthClass: 'w-64' },
-        { key: 'certs', label: '3.4. Сертификаты', type: 'textarea', widthClass: 'w-64' },
-        { key: 'regulations', label: '3.6. Нормативы', type: 'textarea', widthClass: 'w-80' },
-        { key: 'nextWork', label: '3.7. След. работы', type: 'textarea', widthClass: 'w-80' },
-    ];
     
     const getDragRange = () => {
         if (!dragState) return [];
