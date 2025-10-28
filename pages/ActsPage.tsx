@@ -59,9 +59,9 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
             workEndDate: '', 
             regulations: '', 
             nextWork: '', 
-            additionalInfo: '', 
+            additionalInfo: settings.defaultAdditionalInfo || '', 
             copiesCount: String(settings.defaultCopiesCount), 
-            attachments: '', 
+            attachments: settings.defaultAttachments || '', 
             representatives: {},
         };
         onSave(newAct);

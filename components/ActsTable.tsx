@@ -39,10 +39,7 @@ const ActForm: React.FC<{
 
     const [showOtherReps, setShowOtherReps] = useState(false);
     
-    const getOrgDetailsString = useCallback((org: Organization, useShort: boolean | undefined): string => {
-        if (useShort) {
-            return org.name;
-        }
+    const getOrgDetailsString = useCallback((org: Organization): string => {
         return `${org.name}, ИНН ${org.inn}, ОГРН ${org.ogrn}, ${org.address}`;
     }, []);
 
@@ -51,19 +48,19 @@ const ActForm: React.FC<{
             const initialFormData = { ...act };
             // For backward compatibility, try to match details string to an org ID
             if (!act.builderOrgId && act.builderDetails) {
-                 const foundOrg = organizations.find(org => getOrgDetailsString(org, false) === act.builderDetails || getOrgDetailsString(org, true) === act.builderDetails);
+                 const foundOrg = organizations.find(org => getOrgDetailsString(org) === act.builderDetails);
                  if (foundOrg) initialFormData.builderOrgId = foundOrg.id;
             }
              if (!act.contractorOrgId && act.contractorDetails) {
-                 const foundOrg = organizations.find(org => getOrgDetailsString(org, false) === act.contractorDetails || getOrgDetailsString(org, true) === act.contractorDetails);
+                 const foundOrg = organizations.find(org => getOrgDetailsString(org) === act.contractorDetails);
                  if (foundOrg) initialFormData.contractorOrgId = foundOrg.id;
             }
              if (!act.designerOrgId && act.designerDetails) {
-                 const foundOrg = organizations.find(org => getOrgDetailsString(org, false) === act.designerDetails || getOrgDetailsString(org, true) === act.designerDetails);
+                 const foundOrg = organizations.find(org => getOrgDetailsString(org) === act.designerDetails);
                  if (foundOrg) initialFormData.designerOrgId = foundOrg.id;
             }
             if (!act.workPerformerOrgId && act.workPerformer) {
-                 const foundOrg = organizations.find(org => getOrgDetailsString(org, false) === act.workPerformer || getOrgDetailsString(org, true) === act.workPerformer);
+                 const foundOrg = organizations.find(org => getOrgDetailsString(org) === act.workPerformer);
                  if (foundOrg) initialFormData.workPerformerOrgId = foundOrg.id;
             }
             setFormData(initialFormData);
@@ -94,28 +91,26 @@ const ActForm: React.FC<{
         
         const orgMap = new Map(organizations.map(org => [org.id, org]));
         
-        const useShort = settings.useShortOrgNames;
-
         if (finalAct.builderOrgId && orgMap.has(finalAct.builderOrgId)) {
-            finalAct.builderDetails = getOrgDetailsString(orgMap.get(finalAct.builderOrgId)!, useShort);
+            finalAct.builderDetails = getOrgDetailsString(orgMap.get(finalAct.builderOrgId)!);
         } else {
              finalAct.builderDetails = '';
         }
 
         if (finalAct.contractorOrgId && orgMap.has(finalAct.contractorOrgId)) {
-            finalAct.contractorDetails = getOrgDetailsString(orgMap.get(finalAct.contractorOrgId)!, useShort);
+            finalAct.contractorDetails = getOrgDetailsString(orgMap.get(finalAct.contractorOrgId)!);
         } else {
             finalAct.contractorDetails = '';
         }
 
         if (finalAct.designerOrgId && orgMap.has(finalAct.designerOrgId)) {
-            finalAct.designerDetails = getOrgDetailsString(orgMap.get(finalAct.designerOrgId)!, useShort);
+            finalAct.designerDetails = getOrgDetailsString(orgMap.get(finalAct.designerOrgId)!);
         } else {
             finalAct.designerDetails = '';
         }
         
         if (finalAct.workPerformerOrgId && orgMap.has(finalAct.workPerformerOrgId)) {
-            finalAct.workPerformer = getOrgDetailsString(orgMap.get(finalAct.workPerformerOrgId)!, useShort);
+            finalAct.workPerformer = getOrgDetailsString(orgMap.get(finalAct.workPerformerOrgId)!);
         } else {
             finalAct.workPerformer = '';
         }
@@ -138,7 +133,7 @@ const ActForm: React.FC<{
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6 max-h-[80vh] overflow-y-auto pr-4">
-            {renderSection("Организации-участники",
+            {settings.showParticipantDetails && renderSection("Организации-участники",
                 <>
                     <div>
                         <label className={labelClass}>Застройщик (технический заказчик)</label>
@@ -318,6 +313,7 @@ const DateCellEditor: React.FC<{
 
 const ALL_COLUMNS: { key: ActTableColumnKey; label: string; type: 'text' | 'date' | 'textarea' | 'custom_date', widthClass: string }[] = [
     { key: 'number', label: '№', type: 'text', widthClass: 'w-24' },
+    { key: 'date', label: 'Дата акта', type: 'date', widthClass: 'w-40' },
     { key: 'workName', label: '1. Наименование работ', type: 'textarea', widthClass: 'w-96 min-w-[24rem]' },
     { key: 'projectDocs', label: '2. Проектная документация', type: 'textarea', widthClass: 'w-80' },
     { key: 'materials', label: '3. Материалы', type: 'textarea', widthClass: 'w-80' },
@@ -325,7 +321,9 @@ const ALL_COLUMNS: { key: ActTableColumnKey; label: string; type: 'text' | 'date
     { key: 'workDates', label: '5. Даты работ', type: 'custom_date', widthClass: 'w-64' },
     { key: 'regulations', label: '6. Нормативы', type: 'textarea', widthClass: 'w-80' },
     { key: 'nextWork', label: '7. Следующие работы', type: 'textarea', widthClass: 'w-80' },
-    { key: 'date', label: 'Дата акта', type: 'date', widthClass: 'w-40' },
+    { key: 'additionalInfo', label: 'Доп. сведения', type: 'textarea', widthClass: 'w-80' },
+    { key: 'attachments', label: 'Приложения', type: 'textarea', widthClass: 'w-80' },
+    { key: 'copiesCount', label: 'Кол-во экз.', type: 'text', widthClass: 'w-32' },
 ];
 
 type Coords = { rowIndex: number; colIndex: number };
@@ -349,11 +347,35 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
 
     // FIX: Moved 'columns' declaration before its use in the following useEffect hook.
     const columns = useMemo(() => ALL_COLUMNS.filter(col => {
-        if (col.key === 'date' && !settings.showActDate) {
-            return false;
-        }
+        if (col.key === 'date' && !settings.showActDate) return false;
+        if (col.key === 'additionalInfo' && !settings.showAdditionalInfo) return false;
+        if (col.key === 'attachments' && !settings.showAttachments) return false;
+        if (col.key === 'copiesCount' && !settings.showCopiesCount) return false;
         return true;
-    }), [settings.showActDate]);
+    }), [settings]);
+
+    const handleSaveWithTemplateResolution = useCallback((actToSave: Act) => {
+        const resolvedAct = { ...actToSave };
+
+        const resolve = (template: string, contextAct: Act) => {
+            if (!template || typeof template !== 'string') return template;
+            return template.replace(/\{(\w+)\}/g, (_, key) => {
+                const value = (contextAct as any)[key];
+                return value !== undefined && value !== null ? String(value) : '';
+            });
+        };
+        
+        const context = actToSave;
+
+        if (settings.showAttachments && settings.defaultAttachments) {
+            resolvedAct.attachments = resolve(settings.defaultAttachments, context);
+        }
+        if (settings.showAdditionalInfo && settings.defaultAdditionalInfo) {
+            resolvedAct.additionalInfo = resolve(settings.defaultAdditionalInfo, context);
+        }
+        
+        onSave(resolvedAct);
+    }, [onSave, settings]);
 
     useEffect(() => {
         if (editingCell && editorRef.current) {
@@ -401,7 +423,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
         
         const currentValue = act[columnKey] || '';
         if (currentValue !== editorValue) {
-            onSave({ ...act, [columnKey]: editorValue });
+            handleSaveWithTemplateResolution({ ...act, [columnKey]: editorValue });
         }
         setEditingCell(null);
     };
@@ -546,7 +568,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                 
                 const startRow = activeCell.rowIndex;
                 const startCol = activeCell.colIndex;
-                const updatedActs = new Map<string, Act>();
+                const updatedActsMap = new Map<string, Act>();
 
                 pastedRows.forEach((rowData, rOffset) => {
                     const targetRowIndex = startRow + rOffset;
@@ -554,7 +576,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                     
                     const originalAct = acts[targetRowIndex];
                     if(!originalAct) return;
-                    let updatedAct = updatedActs.get(originalAct.id) || { ...originalAct };
+                    let updatedAct = updatedActsMap.get(originalAct.id) || { ...originalAct };
 
                     rowData.forEach((cellData, cOffset) => {
                         const targetColIndex = startCol + cOffset;
@@ -575,9 +597,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                             (updatedAct as any)[columnKey] = cellData;
                         }
                     });
-                    updatedActs.set(originalAct.id, updatedAct);
+                    updatedActsMap.set(originalAct.id, updatedAct);
                 });
-                updatedActs.forEach(onSave);
+                
+                const actsToSave = Array.from(updatedActsMap.values());
+                actsToSave.forEach(handleSaveWithTemplateResolution);
+
                 setCopiedCells(null);
                 
                 // Expand selection to pasted area
@@ -612,14 +637,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
             // Handle Delete
             if ((e.key === 'Delete' || e.key === 'Backspace') && selectedCells.size > 0) {
                 e.preventDefault();
-                const updatedActs = new Map<string, Act>();
+                const updatedActsMap = new Map<string, Act>();
 
                 selectedCells.forEach(cellId => {
                     const [r, c] = cellId.split(':').map(Number);
                     const originalAct = acts[r];
                     if (!originalAct) return;
 
-                    let updatedAct = updatedActs.get(originalAct.id) || { ...originalAct };
+                    let updatedAct = updatedActsMap.get(originalAct.id) || { ...originalAct };
                     const col = columns[c];
                     if (!col) return;
 
@@ -631,10 +656,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                         const columnKey = col.key as Exclude<ActTableColumnKey, 'workDates'>;
                         (updatedAct as any)[columnKey] = '';
                     }
-                    updatedActs.set(originalAct.id, updatedAct);
+                    updatedActsMap.set(originalAct.id, updatedAct);
                 });
                 
-                updatedActs.forEach(onSave);
+                const actsToSave = Array.from(updatedActsMap.values());
+                actsToSave.forEach(handleSaveWithTemplateResolution);
             }
             
             // Handle Copy - use e.code for layout-independent key presses
@@ -654,7 +680,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
         };
-    }, [selectedCells, activeCell, editingCell, acts, columns, onSave]);
+    }, [selectedCells, activeCell, editingCell, acts, columns, handleSaveWithTemplateResolution]);
 
 
     useEffect(() => {
@@ -739,14 +765,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
             const { minRow: fillMinRow, maxRow: fillMaxRow } = normalizeSelection(fillTargetArea.start, fillTargetArea.end);
             
             const isFillingUpwards = fillMaxRow < selMinRow;
-            const actsToUpdate: Act[] = [];
+            const actsToUpdate = new Map<string, Act>();
 
             for (let r = fillMinRow; r <= fillMaxRow; r++) {
                 const targetAct = acts[r];
                 if (!targetAct) continue;
                 
-                let updatedAct = { ...targetAct };
-                let hasChanges = false;
+                let updatedAct = actsToUpdate.get(targetAct.id) || { ...targetAct };
                 
                 const patternRowIndex = isFillingUpwards
                     ? selMaxRow - ((selMinRow - 1 - r) % patternHeight)
@@ -763,27 +788,19 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                     if (!colKey) continue;
 
                     if (colKey === 'workDates') {
-                        if (updatedAct.workStartDate !== sourceAct.workStartDate || updatedAct.workEndDate !== sourceAct.workEndDate) {
-                            updatedAct.workStartDate = sourceAct.workStartDate;
-                            updatedAct.workEndDate = sourceAct.workEndDate;
-                            updatedAct.date = sourceAct.workEndDate; 
-                            hasChanges = true;
-                        }
+                        updatedAct.workStartDate = sourceAct.workStartDate;
+                        updatedAct.workEndDate = sourceAct.workEndDate;
+                        updatedAct.date = sourceAct.workEndDate; 
                     } else {
                         const typedColKey = colKey as keyof Act;
                         const sourceValue = sourceAct[typedColKey];
-                        if (updatedAct[typedColKey] !== sourceValue) {
-                            (updatedAct as any)[typedColKey] = sourceValue;
-                            hasChanges = true;
-                        }
+                        (updatedAct as any)[typedColKey] = sourceValue;
                     }
                 }
-                if (hasChanges) {
-                    actsToUpdate.push(updatedAct);
-                }
+                actsToUpdate.set(updatedAct.id, updatedAct);
             }
             
-            actsToUpdate.forEach(onSave);
+            Array.from(actsToUpdate.values()).forEach(handleSaveWithTemplateResolution);
 
             setIsFilling(false);
             setFillTargetArea(null);
@@ -798,7 +815,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isFilling, selectedCells, fillTargetArea, acts, columns, onSave]);
+    }, [isFilling, selectedCells, fillTargetArea, acts, columns, handleSaveWithTemplateResolution]);
 
 
     const handleResizeStart = useCallback((e: React.MouseEvent, columnKey: string) => {
@@ -974,7 +991,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                         editorContent = (
                                             <DateCellEditor
                                                 act={act}
-                                                onSave={onSave}
+                                                onSave={handleSaveWithTemplateResolution}
                                                 onClose={() => setEditingCell(null)}
                                             />
                                         );
@@ -1053,7 +1070,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                     people={people}
                     organizations={organizations}
                     settings={settings}
-                    onSave={onSave}
+                    onSave={handleSaveWithTemplateResolution}
                     onClose={handleCloseModal}
                 />
             </Modal>

@@ -76,8 +76,9 @@ export interface ProjectSettings {
     showCopiesCount?: boolean;
     showActDate?: boolean;
     showParticipantDetails?: boolean;
-    useShortOrgNames?: boolean;
     geminiApiKey?: string;
+    defaultAttachments?: string;
+    defaultAdditionalInfo?: string;
 }
 
 // Types for Import/Export feature
