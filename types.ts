@@ -7,7 +7,7 @@ export interface Person {
 }
 
 export interface Organization {
-    id: string;
+    id:string;
     name: string;
     ogrn: string;
     inn: string;
@@ -79,6 +79,7 @@ export interface ProjectSettings {
     geminiApiKey?: string;
     defaultAttachments?: string;
     defaultAdditionalInfo?: string;
+    defaultActDate?: string;
 }
 
 // Types for Import/Export feature

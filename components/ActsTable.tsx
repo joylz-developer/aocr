@@ -245,7 +245,7 @@ const DateCellEditor: React.FC<{
 
     const handleSave = () => {
         if (act.workStartDate !== startDate || act.workEndDate !== endDate) {
-            onSave({ ...act, workStartDate: startDate, workEndDate: endDate, date: endDate });
+            onSave({ ...act, workStartDate: startDate, workEndDate: endDate });
         }
         onClose();
     };
@@ -374,6 +374,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
             resolvedAct.additionalInfo = resolve(settings.defaultAdditionalInfo, context);
         }
         
+        // Apply date template. If `defaultActDate` is not set (e.g. for old projects),
+        // fallback to old behavior of `date = workEndDate`.
+        const dateTemplate = settings.defaultActDate !== undefined ? settings.defaultActDate : '{workEndDate}';
+        resolvedAct.date = resolve(dateTemplate, context);
+
         onSave(resolvedAct);
     }, [onSave, settings]);
 
@@ -591,7 +596,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                             const end = parts.length > 1 ? (parts[1] || start) : start;
                             updatedAct.workStartDate = start;
                             updatedAct.workEndDate = end;
-                            updatedAct.date = end; // Act date follows end date
                         } else {
                             const columnKey = col.key as Exclude<ActTableColumnKey, 'workDates'>;
                             (updatedAct as any)[columnKey] = cellData;

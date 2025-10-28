@@ -39,8 +39,9 @@ const App: React.FC = () => {
         showAttachments: true,
         showCopiesCount: true,
         showActDate: false,
-        showParticipantDetails: false,
+        showParticipantDetails: true,
         geminiApiKey: '',
+        defaultActDate: '{workEndDate}',
     });
     const [currentPage, setCurrentPage] = useState<Page>('acts');
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);

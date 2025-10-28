@@ -62,7 +62,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
                     {label}
                 </label>
                 {description && <p className="text-xs text-slate-500">{description}</p>}
-                {formData[id] && children}
+                {children}
             </div>
         </div>
     );
@@ -144,7 +144,26 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
                         </div>
                     </SettingToggle>
                     
-                    <SettingToggle id="showActDate" label='Показывать поле "Дата акта"' description="Полезно, если нужно вручную корректировать дату, которая по умолчанию равна дате окончания работ." />
+                    <SettingToggle id="showActDate" label='Показывать поле "Дата акта"' description="Полезно, если нужно вручную корректировать дату.">
+                        <div className="mt-2">
+                            <label htmlFor="defaultActDate" className="block text-xs font-medium text-slate-600 mb-1">
+                                Значение по умолчанию
+                            </label>
+                            <input 
+                                type="text" 
+                                id="defaultActDate" 
+                                name="defaultActDate" 
+                                value={formData.defaultActDate || ''} 
+                                onChange={handleChange} 
+                                className={`${inputClass} text-sm`} 
+                                placeholder="По умолчанию: {workEndDate}" 
+                            />
+                            <p className="text-xs text-slate-500 mt-1">
+                                Можно использовать переменные, например: <code>{`{workEndDate}`}</code>.
+                                <br />По умолчанию дата акта равна дате окончания работ.
+                            </p>
+                        </div>
+                    </SettingToggle>
                        
                     <SettingToggle id="showParticipantDetails" label='Показывать раздел "Реквизиты участников"' description="Этот раздел в модальном окне редактирования участников заполняется автоматически, его можно скрыть для экономии места." />
 
