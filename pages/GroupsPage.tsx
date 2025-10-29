@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { CommissionGroup, Person, ROLES } from '../types';
+import { CommissionGroup, Person, ROLES, Organization } from '../types';
 import Modal from '../components/Modal';
 import { PlusIcon, EditIcon, DeleteIcon } from '../components/Icons';
 
 interface GroupsPageProps {
     groups: CommissionGroup[];
     people: Person[];
+    organizations: Organization[];
     onSave: (group: CommissionGroup) => void;
     onDelete: (id: string) => void;
 }
@@ -13,11 +14,20 @@ interface GroupsPageProps {
 const GroupForm: React.FC<{
     group: CommissionGroup | null;
     people: Person[];
+    organizations: Organization[];
     onSave: (group: CommissionGroup) => void;
     onClose: () => void;
-}> = ({ group, people, onSave, onClose }) => {
+}> = ({ group, people, organizations, onSave, onClose }) => {
     const [formData, setFormData] = useState<CommissionGroup>(
-        group || { id: crypto.randomUUID(), name: '', representatives: {} }
+        group || { 
+            id: crypto.randomUUID(), 
+            name: '', 
+            representatives: {},
+            builderOrgId: '',
+            contractorOrgId: '',
+            designerOrgId: '',
+            workPerformerOrgId: '',
+        }
     );
 
     const [showOtherReps, setShowOtherReps] = useState(false);
@@ -60,6 +70,41 @@ const GroupForm: React.FC<{
                     required
                 />
             </div>
+
+            <div className="border border-slate-200 rounded-md p-4">
+                <h3 className="text-lg font-semibold text-slate-800 mb-4">Организации-участники</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className={labelClass}>Застройщик (технический заказчик)</label>
+                        <select name="builderOrgId" value={formData.builderOrgId || ''} onChange={handleChange} className={selectClass}>
+                            <option value="">Не выбрано</option>
+                            {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className={labelClass}>Лицо, осуществляющее строительство (Подрядчик)</label>
+                        <select name="contractorOrgId" value={formData.contractorOrgId || ''} onChange={handleChange} className={selectClass}>
+                            <option value="">Не выбрано</option>
+                            {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+                        </select>
+                    </div>
+                     <div>
+                        <label className={labelClass}>Лицо, осуществившее подготовку проекта</label>
+                        <select name="designerOrgId" value={formData.designerOrgId || ''} onChange={handleChange} className={selectClass}>
+                            <option value="">Не выбрано</option>
+                            {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+                        </select>
+                    </div>
+                     <div>
+                        <label className={labelClass}>Лицо, выполнившее работы</label>
+                        <select name="workPerformerOrgId" value={formData.workPerformerOrgId || ''} onChange={handleChange} className={selectClass}>
+                            <option value="">Не выбрано</option>
+                            {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
             <div className="border border-slate-200 rounded-md p-4">
                 <h3 className="text-lg font-semibold text-slate-800 mb-4">Состав комиссии</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -105,11 +150,12 @@ const GroupForm: React.FC<{
     );
 };
 
-const GroupsPage: React.FC<GroupsPageProps> = ({ groups, people, onSave, onDelete }) => {
+const GroupsPage: React.FC<GroupsPageProps> = ({ groups, people, organizations, onSave, onDelete }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingGroup, setEditingGroup] = useState<CommissionGroup | null>(null);
 
     const peopleMap = useMemo(() => new Map(people.map(p => [p.id, p])), [people]);
+    const orgsMap = useMemo(() => new Map(organizations.map(o => [o.id, o])), [organizations]);
 
     const handleOpenModal = (group: CommissionGroup | null = null) => {
         setEditingGroup(group);
@@ -120,6 +166,8 @@ const GroupsPage: React.FC<GroupsPageProps> = ({ groups, people, onSave, onDelet
         setEditingGroup(null);
         setIsModalOpen(false);
     };
+
+    const hasOrgs = (group: CommissionGroup) => group.builderOrgId || group.contractorOrgId || group.designerOrgId || group.workPerformerOrgId;
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-md">
@@ -153,6 +201,17 @@ const GroupsPage: React.FC<GroupsPageProps> = ({ groups, people, onSave, onDelet
                                             </li>
                                         ))}
                                     </ul>
+                                    {hasOrgs(group) && (
+                                    <div className="mt-2 pt-2 border-t border-slate-200">
+                                        <h4 className="text-xs font-semibold text-slate-500">Организации:</h4>
+                                        <ul className="list-disc pl-5 space-y-1 mt-1 text-xs">
+                                            {group.builderOrgId && orgsMap.has(group.builderOrgId) && <li><strong>Застройщик:</strong> {orgsMap.get(group.builderOrgId)?.name}</li>}
+                                            {group.contractorOrgId && orgsMap.has(group.contractorOrgId) && <li><strong>Подрядчик:</strong> {orgsMap.get(group.contractorOrgId)?.name}</li>}
+                                            {group.designerOrgId && orgsMap.has(group.designerOrgId) && <li><strong>Проектировщик:</strong> {orgsMap.get(group.designerOrgId)?.name}</li>}
+                                            {group.workPerformerOrgId && orgsMap.has(group.workPerformerOrgId) && <li><strong>Исполнитель работ:</strong> {orgsMap.get(group.workPerformerOrgId)?.name}</li>}
+                                        </ul>
+                                    </div>
+                                    )}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium align-top">
                                     <div className="flex justify-end space-x-2">
@@ -176,6 +235,7 @@ const GroupsPage: React.FC<GroupsPageProps> = ({ groups, people, onSave, onDelet
                 <GroupForm
                     group={editingGroup}
                     people={people}
+                    organizations={organizations}
                     onSave={onSave}
                     onClose={handleCloseModal}
                 />

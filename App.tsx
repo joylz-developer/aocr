@@ -284,7 +284,7 @@ const App: React.FC = () => {
             case 'organizations':
                  return <OrganizationsPage organizations={organizations} settings={settings} onSave={handleSaveOrganization} onDelete={handleDeleteOrganization} />;
              case 'groups':
-                return <GroupsPage groups={groups} people={people} onSave={handleSaveGroup} onDelete={handleDeleteGroup} />;
+                return <GroupsPage groups={groups} people={people} organizations={organizations} onSave={handleSaveGroup} onDelete={handleDeleteGroup} />;
             case 'settings':
                 return <SettingsPage settings={settings} onSave={handleSaveSettings} />;
             default:

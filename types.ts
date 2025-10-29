@@ -75,6 +75,10 @@ export interface CommissionGroup {
     representatives: {
         [key: string]: string;
     };
+    builderOrgId?: string;
+    contractorOrgId?: string;
+    designerOrgId?: string;
+    workPerformerOrgId?: string;
 }
 
 // Types for Project Settings
@@ -125,4 +129,4 @@ export type ActTableColumnKey = Exclude<keyof Act,
     'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 
     'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 
     'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId'
-> | 'workDates';
+> | 'workDates' | 'commissionGroup';

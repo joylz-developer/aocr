@@ -2,6 +2,7 @@ import { ActTableColumnKey } from '../types';
 
 export const ALL_COLUMNS: { key: ActTableColumnKey; label: string; type: 'text' | 'date' | 'textarea' | 'custom_date', widthClass: string }[] = [
     { key: 'number', label: '№', type: 'text', widthClass: 'w-24' },
+    { key: 'commissionGroup', label: 'Группа', type: 'text', widthClass: 'w-64' },
     { key: 'date', label: 'Дата акта', type: 'date', widthClass: 'w-40' },
     { key: 'workName', label: '1. Наименование работ', type: 'textarea', widthClass: 'w-96 min-w-[24rem]' },
     { key: 'projectDocs', label: '2. Проектная документация', type: 'textarea', widthClass: 'w-80' },
