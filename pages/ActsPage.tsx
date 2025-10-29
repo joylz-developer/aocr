@@ -1,14 +1,16 @@
-import React, { useState, useCallback } from 'react';
-// FIX: Import ROLES to resolve reference error.
-import { Act, Person, Organization, ProjectSettings, ROLES } from '../types';
+import React, { useState, useMemo } from 'react';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup } from '../types';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 import Modal from '../components/Modal';
-import { PlusIcon, HelpIcon } from '../components/Icons';
+import { PlusIcon, HelpIcon, ColumnsIcon } from '../components/Icons';
 import ActsTable from '../components/ActsTable';
+import { ALL_COLUMNS } from '../components/ActsTableConfig';
 
 interface ActsPageProps {
     acts: Act[];
     people: Person[];
     organizations: Organization[];
+    groups: CommissionGroup[];
     template: string | null;
     settings: ProjectSettings;
     onSave: (act: Act) => void;
@@ -36,9 +38,86 @@ const CopyableTag: React.FC<{ tag: string }> = ({ tag }) => {
     );
 };
 
+const ColumnPicker: React.FC<{
+    visibleColumns: Set<string>;
+    setVisibleColumns: (updater: (prev: Set<string>) => Set<string>) => void;
+}> = ({ visibleColumns, setVisibleColumns }) => {
+    const [isOpen, setIsOpen] = useState(false);
 
-const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, template, settings, onSave, onDelete }) => {
+    const handleToggleColumn = (key: string) => {
+        setVisibleColumns(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(key)) {
+                newSet.delete(key);
+            } else {
+                newSet.add(key);
+            }
+            return newSet;
+        });
+    };
+
+    const columnsToShow = useMemo(() => {
+       return ALL_COLUMNS.filter(c => !['additionalInfo', 'attachments', 'copiesCount', 'date'].includes(c.key))
+    }, []);
+    
+    const settingsColumns = useMemo(() => {
+        return ALL_COLUMNS.filter(c => ['additionalInfo', 'attachments', 'copiesCount', 'date'].includes(c.key))
+    }, []);
+
+    return (
+        <div className="relative">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="flex items-center gap-2 bg-white text-slate-700 px-4 py-2 rounded-md hover:bg-slate-100 border border-slate-300"
+                title="Настроить видимость колонок"
+            >
+                <ColumnsIcon /> Колонки
+            </button>
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-md shadow-lg z-50 p-4">
+                    <h4 className="font-semibold text-slate-800 mb-2">Основные колонки</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                    {columnsToShow.map(col => (
+                        <label key={col.key} className="flex items-center space-x-2 text-sm text-slate-700">
+                            <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                checked={visibleColumns.has(col.key)}
+                                onChange={() => handleToggleColumn(col.key)}
+                            />
+                            <span>{col.label}</span>
+                        </label>
+                    ))}
+                    </div>
+                    <h4 className="font-semibold text-slate-800 mt-4 pt-2 border-t mb-2">Дополнительные колонки</h4>
+                     <div className="space-y-2">
+                     {settingsColumns.map(col => (
+                        <label key={col.key} className="flex items-center space-x-2 text-sm text-slate-700">
+                            <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                checked={visibleColumns.has(col.key)}
+                                onChange={() => handleToggleColumn(col.key)}
+                            />
+                            <span>{col.label}</span>
+                        </label>
+                    ))}
+                    </div>
+
+                    <button onClick={() => setIsOpen(false)} className="mt-4 w-full text-center bg-slate-100 py-1 rounded-md text-sm hover:bg-slate-200">Закрыть</button>
+                </div>
+            )}
+        </div>
+    );
+};
+
+
+const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onDelete }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+    const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
+        'acts_table_visible_columns', 
+        new Set(ALL_COLUMNS.map(c => c.key))
+    );
     
     // This is a new handler to add an empty act row to the table
     const handleCreateNewAct = () => {
@@ -76,9 +155,12 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
                         <HelpIcon />
                     </button>
                 </div>
-                <button onClick={handleCreateNewAct} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
-                    <PlusIcon /> Создать акт
-                </button>
+                <div className="flex items-center gap-3">
+                    <ColumnPicker visibleColumns={visibleColumns} setVisibleColumns={setVisibleColumns} />
+                    <button onClick={handleCreateNewAct} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                        <PlusIcon /> Создать акт
+                    </button>
+                </div>
             </div>
             
             <div className="flex-grow min-h-0">
@@ -86,8 +168,10 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, templa
                     acts={acts}
                     people={people}
                     organizations={organizations}
+                    groups={groups}
                     template={template}
                     settings={settings}
+                    visibleColumns={visibleColumns}
                     onSave={onSave}
                     onDelete={onDelete}
                 />

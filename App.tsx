@@ -1,16 +1,17 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings } from './types';
+import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup } from './types';
 import TemplateUploader from './components/TemplateUploader';
 import ImportModal from './components/ImportModal';
 import ActsPage from './pages/ActsPage';
 import PeoplePage from './pages/PeoplePage';
 import OrganizationsPage from './pages/OrganizationsPage';
 import SettingsPage from './pages/SettingsPage';
+import GroupsPage from './pages/GroupsPage';
 import Sidebar from './components/Sidebar';
 import { saveAs } from 'file-saver';
 
-export type Page = 'acts' | 'people' | 'organizations' | 'settings';
+export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups';
 
 const fileToBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -32,6 +33,7 @@ const App: React.FC = () => {
     const [acts, setActs] = useLocalStorage<Act[]>('acts_data', []);
     const [people, setPeople] = useLocalStorage<Person[]>('people_data', []);
     const [organizations, setOrganizations] = useLocalStorage<Organization[]>('organizations_data', []);
+    const [groups, setGroups] = useLocalStorage<CommissionGroup[]>('commission_groups', []);
     const [settings, setSettings] = useLocalStorage<ProjectSettings>('project_settings', {
         objectName: '',
         defaultCopiesCount: 2,
@@ -135,6 +137,34 @@ const App: React.FC = () => {
         }
     }, [organizations, people, setOrganizations]);
 
+    const handleSaveGroup = useCallback((groupToSave: CommissionGroup) => {
+        setGroups(prevGroups => {
+            const exists = prevGroups.some(g => g.id === groupToSave.id);
+            if (exists) {
+                return prevGroups.map(g => (g.id === groupToSave.id ? groupToSave : g));
+            }
+            return [...prevGroups, groupToSave].sort((a,b) => a.name.localeCompare(b.name));
+        });
+    }, [setGroups]);
+
+    const handleDeleteGroup = useCallback((id: string) => {
+        const groupToDelete = groups.find(g => g.id === id);
+        if(!groupToDelete) return;
+
+        const isGroupInUse = acts.some(a => a.commissionGroupId === id);
+        const confirmMessage = isGroupInUse 
+            ? `Группа "${groupToDelete.name}" используется в некоторых актах. Вы уверены, что хотите ее удалить? Связь с актами будет потеряна.`
+            : `Вы уверены, что хотите удалить группу "${groupToDelete.name}"?`;
+
+        if (window.confirm(confirmMessage)) {
+            setGroups(prev => prev.filter(g => g.id !== id));
+            // Unlink from acts
+            if (isGroupInUse) {
+                setActs(prev => prev.map(act => act.commissionGroupId === id ? { ...act, commissionGroupId: undefined } : act));
+            }
+        }
+    }, [groups, acts, setGroups, setActs]);
+
     const handleSaveSettings = useCallback((newSettings: ProjectSettings) => {
         setSettings(newSettings);
     }, [setSettings]);
@@ -146,6 +176,7 @@ const App: React.FC = () => {
                 acts,
                 people,
                 organizations,
+                groups,
                 projectSettings: settings,
             };
             const jsonString = JSON.stringify(dataToExport, null, 2);
@@ -174,7 +205,7 @@ const App: React.FC = () => {
                 
                 const data: ImportData = JSON.parse(text);
                 
-                if (data.template !== undefined || Array.isArray(data.acts) || Array.isArray(data.people) || Array.isArray(data.organizations) || data.projectSettings) {
+                if (data.template !== undefined || Array.isArray(data.acts) || Array.isArray(data.people) || Array.isArray(data.organizations) || Array.isArray(data.groups) || data.projectSettings) {
                     setImportData(data);
                 } else {
                     alert('Ошибка: Неверный формат файла.');
@@ -199,44 +230,31 @@ const App: React.FC = () => {
             setSettings(importData.projectSettings);
         }
         
-        if (importSettings.acts.import && importData.acts) {
-            if (importSettings.acts.mode === 'replace') {
-                setActs(importData.acts);
-            } else {
-                const selectedItems = importData.acts.filter(item => importSettings.acts.selectedIds?.includes(item.id));
-                setActs(prev => {
-                    const itemMap = new Map(prev.map(item => [item.id, item]));
-                    selectedItems.forEach(item => itemMap.set(item.id, item));
-                    return Array.from(itemMap.values()).sort((a,b) => a.date.localeCompare(b.date));
-                });
+        const mergeOrReplace = <T extends {id: string}>(
+            key: 'acts' | 'people' | 'organizations' | 'groups',
+            setData: React.Dispatch<React.SetStateAction<T[]>>,
+            sortFn: (a: T, b: T) => number
+        ) => {
+            if (importSettings[key]?.import && importData[key]) {
+                 if (importSettings[key].mode === 'replace') {
+                    // FIX: Cast to unknown first to satisfy TypeScript's strict type checking for generic unions.
+                    setData(importData[key] as unknown as T[]);
+                } else {
+                    // FIX: Cast to unknown first to satisfy TypeScript's strict type checking for generic unions.
+                    const selectedItems = (importData[key] as unknown as T[]).filter(item => importSettings[key].selectedIds?.includes(item.id));
+                    setData(prev => {
+                        const itemMap = new Map(prev.map(item => [item.id, item]));
+                        selectedItems.forEach(item => itemMap.set(item.id, item));
+                        return Array.from(itemMap.values()).sort(sortFn);
+                    });
+                }
             }
-        }
+        };
 
-        if (importSettings.people.import && importData.people) {
-            if (importSettings.people.mode === 'replace') {
-                setPeople(importData.people);
-            } else {
-                const selectedItems = importData.people.filter(item => importSettings.people.selectedIds?.includes(item.id));
-                setPeople(prev => {
-                    const itemMap = new Map(prev.map(item => [item.id, item]));
-                    selectedItems.forEach(item => itemMap.set(item.id, item));
-                    return Array.from(itemMap.values()).sort((a,b) => a.name.localeCompare(b.name));
-                });
-            }
-        }
-        
-        if (importSettings.organizations.import && importData.organizations) {
-            if (importSettings.organizations.mode === 'replace') {
-                setOrganizations(importData.organizations);
-            } else {
-                const selectedItems = importData.organizations.filter(item => importSettings.organizations.selectedIds?.includes(item.id));
-                setOrganizations(prev => {
-                    const itemMap = new Map(prev.map(item => [item.id, item]));
-                    selectedItems.forEach(item => itemMap.set(item.id, item));
-                    return Array.from(itemMap.values()).sort((a,b) => a.name.localeCompare(b.name));
-                });
-            }
-        }
+        mergeOrReplace('acts', setActs, (a, b) => a.date.localeCompare(b.date));
+        mergeOrReplace('people', setPeople, (a,b) => a.name.localeCompare(b.name));
+        mergeOrReplace('organizations', setOrganizations, (a,b) => a.name.localeCompare(b.name));
+        mergeOrReplace('groups', setGroups, (a,b) => a.name.localeCompare(b.name));
         
         setImportData(null);
         alert('Данные успешно импортированы!');
@@ -255,6 +273,7 @@ const App: React.FC = () => {
                             acts={acts} 
                             people={people} 
                             organizations={organizations}
+                            groups={groups}
                             template={template}
                             settings={settings}
                             onSave={handleSaveAct} 
@@ -264,6 +283,8 @@ const App: React.FC = () => {
                 return <PeoplePage people={people} organizations={organizations} settings={settings} onSave={handleSavePerson} onDelete={handleDeletePerson} />;
             case 'organizations':
                  return <OrganizationsPage organizations={organizations} settings={settings} onSave={handleSaveOrganization} onDelete={handleDeleteOrganization} />;
+             case 'groups':
+                return <GroupsPage groups={groups} people={people} onSave={handleSaveGroup} onDelete={handleDeleteGroup} />;
             case 'settings':
                 return <SettingsPage settings={settings} onSave={handleSaveSettings} />;
             default:

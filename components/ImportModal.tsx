@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Modal from './Modal';
-import { ImportData, ImportSettings, ImportMode, ImportSettingsCategory, Act, Person, Organization, ProjectSettings } from '../types';
+import { ImportData, ImportSettings, ImportMode, ImportSettingsCategory, Act, Person, Organization, ProjectSettings, CommissionGroup } from '../types';
 
 interface ImportModalProps {
     data: ImportData;
@@ -8,8 +8,8 @@ interface ImportModalProps {
     onImport: (settings: ImportSettings) => void;
 }
 
-type CategoryKey = 'acts' | 'people' | 'organizations';
-type CategoryItem = Act | Person | Organization;
+type CategoryKey = 'acts' | 'people' | 'organizations' | 'groups';
+type CategoryItem = Act | Person | Organization | CommissionGroup;
 
 const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) => {
 
@@ -19,6 +19,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
         acts: { import: !!data.acts?.length, mode: 'merge', selectedIds: data.acts?.map(i => i.id) },
         people: { import: !!data.people?.length, mode: 'merge', selectedIds: data.people?.map(i => i.id) },
         organizations: { import: !!data.organizations?.length, mode: 'merge', selectedIds: data.organizations?.map(i => i.id) },
+        groups: { import: !!data.groups?.length, mode: 'merge', selectedIds: data.groups?.map(i => i.id) },
     });
     
     const isDataPresent =
@@ -26,7 +27,8 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
         (data.projectSettings !== null && data.projectSettings !== undefined) ||
         (data.acts && data.acts.length > 0) ||
         (data.people && data.people.length > 0) ||
-        (data.organizations && data.organizations.length > 0);
+        (data.organizations && data.organizations.length > 0) ||
+        (data.groups && data.groups.length > 0);
 
 
     const handleCheckboxChange = (category: CategoryKey, value: boolean) => {
@@ -143,8 +145,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
                         </div>
                         <div className="max-h-40 overflow-y-auto space-y-1 p-1 pr-2 rounded-md border bg-white">
                             {items.map(item => {
-                                // FIX: Simplified logic to avoid unreachable code path causing `item` to be inferred as `never`.
-                                const displayName = 'name' in item ? item.name : `Акт №${item.number}`;
+                                const displayName = 'name' in item ? item.name : ('number' in item ? `Акт №${item.number}`: 'Неизвестная запись');
                                 return (
                                 <div key={item.id} className="flex items-center p-2 rounded hover:bg-slate-100">
                                     <input
@@ -208,6 +209,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
                     <ImportOptionRow category="acts" label="Акты" items={data.acts} />
                     <ImportOptionRow category="people" label="Участники" items={data.people} />
                     <ImportOptionRow category="organizations" label="Организации" items={data.organizations} />
+                    <ImportOptionRow category="groups" label="Группы комиссий" items={data.groups} />
                     </>
                 )}
 

@@ -1,21 +1,22 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Act, Person, Organization, ProjectSettings, ROLES } from '../types';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup } from '../types';
 import { EditIcon, DeleteIcon, DownloadIcon } from './Icons';
 import { generateDocument } from '../services/docGenerator';
 import Modal from './Modal';
+import { ALL_COLUMNS } from './ActsTableConfig';
 
 // Props for the main table component
 interface ActsTableProps {
     acts: Act[];
     people: Person[];
     organizations: Organization[];
+    groups: CommissionGroup[];
     template: string | null;
     settings: ProjectSettings;
+    visibleColumns: Set<string>;
     onSave: (act: Act) => void;
     onDelete: (id: string) => void;
 }
-
-type ActTableColumnKey = Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId'> | 'workDates';
 
 
 // Props for the full ActForm, used inside a modal for complex edits
@@ -23,10 +24,11 @@ const ActForm: React.FC<{
     act: Act | null;
     people: Person[];
     organizations: Organization[];
+    groups: CommissionGroup[];
     settings: ProjectSettings;
     onSave: (act: Act) => void;
     onClose: () => void;
-}> = ({ act, people, organizations, settings, onSave, onClose }) => {
+}> = ({ act, people, organizations, groups, settings, onSave, onClose }) => {
     const [formData, setFormData] = useState<Act>(() => 
         act || {
             id: '', number: '', date: '', objectName: settings.objectName, builderDetails: '', contractorDetails: '',
@@ -67,11 +69,21 @@ const ActForm: React.FC<{
         }
     }, [act, organizations, getOrgDetailsString]);
 
+    const handleGroupChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const groupId = e.target.value;
+        const selectedGroup = groups.find(g => g.id === groupId);
+        setFormData(prev => ({
+            ...prev,
+            commissionGroupId: groupId || undefined,
+            representatives: selectedGroup ? { ...selectedGroup.representatives } : {}
+        }));
+    };
 
     const handleRepChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({
             ...prev,
+            commissionGroupId: undefined, // Unlink from group on manual change
             representatives: { ...prev.representatives, [name]: value }
         }));
     };
@@ -122,9 +134,12 @@ const ActForm: React.FC<{
     const selectClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 bg-white";
     const labelClass = "block text-sm font-medium text-slate-700";
 
-    const renderSection = (title: string, children: React.ReactNode) => (
+    const renderSection = (title: string, children: React.ReactNode, extraControls?: React.ReactNode) => (
         <div className="border border-slate-200 rounded-md p-4">
-            <h3 className="text-lg font-semibold text-slate-800 mb-4">{title}</h3>
+            <div className="flex justify-between items-center mb-4">
+                 <h3 className="text-lg font-semibold text-slate-800">{title}</h3>
+                 {extraControls}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {children}
             </div>
@@ -200,7 +215,14 @@ const ActForm: React.FC<{
                         </select>
                     </div>
                 ))}
-                </>
+                </>,
+                <div className="w-full md:w-auto">
+                    <label className={labelClass}>Загрузить из группы</label>
+                    <select value={formData.commissionGroupId || ''} onChange={handleGroupChange} className={selectClass}>
+                        <option value="">-- Не выбрано --</option>
+                        {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
+                </div>
             )}
              <div className="flex justify-end space-x-3 pt-4 sticky bottom-0 bg-white py-4">
                 <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-md hover:bg-slate-300">Отмена</button>
@@ -311,25 +333,11 @@ const DateCellEditor: React.FC<{
     );
 };
 
-const ALL_COLUMNS: { key: ActTableColumnKey; label: string; type: 'text' | 'date' | 'textarea' | 'custom_date', widthClass: string }[] = [
-    { key: 'number', label: '№', type: 'text', widthClass: 'w-24' },
-    { key: 'date', label: 'Дата акта', type: 'date', widthClass: 'w-40' },
-    { key: 'workName', label: '1. Наименование работ', type: 'textarea', widthClass: 'w-96 min-w-[24rem]' },
-    { key: 'projectDocs', label: '2. Проектная документация', type: 'textarea', widthClass: 'w-80' },
-    { key: 'materials', label: '3. Материалы', type: 'textarea', widthClass: 'w-80' },
-    { key: 'certs', label: '4. исполнительные схемы', type: 'textarea', widthClass: 'w-80' },
-    { key: 'workDates', label: '5. Даты работ', type: 'custom_date', widthClass: 'w-64' },
-    { key: 'regulations', label: '6. Нормативы', type: 'textarea', widthClass: 'w-80' },
-    { key: 'nextWork', label: '7. Следующие работы', type: 'textarea', widthClass: 'w-80' },
-    { key: 'additionalInfo', label: 'Доп. сведения', type: 'textarea', widthClass: 'w-80' },
-    { key: 'attachments', label: 'Приложения', type: 'textarea', widthClass: 'w-80' },
-    { key: 'copiesCount', label: 'Кол-во экз.', type: 'text', widthClass: 'w-32' },
-];
 
 type Coords = { rowIndex: number; colIndex: number };
 
 // Main Table Component
-const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, template, settings, onSave, onDelete }) => {
+const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, onSave, onDelete }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
@@ -345,14 +353,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
     const tableContainerRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
-    // FIX: Moved 'columns' declaration before its use in the following useEffect hook.
     const columns = useMemo(() => ALL_COLUMNS.filter(col => {
+        if (!visibleColumns.has(col.key)) return false;
         if (col.key === 'date' && !settings.showActDate) return false;
         if (col.key === 'additionalInfo' && !settings.showAdditionalInfo) return false;
         if (col.key === 'attachments' && !settings.showAttachments) return false;
         if (col.key === 'copiesCount' && !settings.showCopiesCount) return false;
         return true;
-    }), [settings]);
+    }), [settings, visibleColumns]);
 
     const handleSaveWithTemplateResolution = useCallback((actToSave: Act) => {
         const resolvedAct = { ...actToSave };
@@ -388,9 +396,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
             const act = acts[rowIndex];
             const col = columns[colIndex];
             
-            const columnKey = col.key as Exclude<ActTableColumnKey, 'workDates'>;
+            const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
             const initialValue = act[columnKey] || '';
-            setEditorValue(initialValue);
+            setEditorValue(String(initialValue));
             
             editorRef.current.focus();
     
@@ -424,10 +432,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
         const { rowIndex, colIndex } = editingCell;
         const act = acts[rowIndex];
         const col = columns[colIndex];
-        const columnKey = col.key as Exclude<ActTableColumnKey, 'workDates'>;
+        const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
         
         const currentValue = act[columnKey] || '';
-        if (currentValue !== editorValue) {
+        if (String(currentValue) !== editorValue) {
             handleSaveWithTemplateResolution({ ...act, [columnKey]: editorValue });
         }
         setEditingCell(null);
@@ -535,7 +543,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                 if (col.key === 'workDates') {
                                     rowData.push(`${act.workStartDate || ''} - ${act.workEndDate || ''}`);
                                 } else {
-                                    rowData.push(act[col.key as Exclude<ActTableColumnKey, 'workDates'>] || '');
+                                     const key = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
+                                    rowData.push(act[key] || '');
                                 }
                             } else {
                                  rowData.push('');
@@ -597,7 +606,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                             updatedAct.workStartDate = start;
                             updatedAct.workEndDate = end;
                         } else {
-                            const columnKey = col.key as Exclude<ActTableColumnKey, 'workDates'>;
+                            const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
                             (updatedAct as any)[columnKey] = cellData;
                         }
                     });
@@ -657,7 +666,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                         updatedAct.workEndDate = '';
                         updatedAct.date = ''; 
                     } else {
-                        const columnKey = col.key as Exclude<ActTableColumnKey, 'workDates'>;
+                        const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
                         (updatedAct as any)[columnKey] = '';
                     }
                     updatedActsMap.set(originalAct.id, updatedAct);
@@ -903,7 +912,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                     animation: pulse-green-bg 2s ease-in-out infinite;
                 }
             `}</style>
-            <table className="min-w-full text-sm table-fixed" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+            <table className="text-sm table-fixed" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
                 <thead className="bg-slate-50 sticky top-0 z-30">
                     <tr>
                         {columns.map(col => (
@@ -1001,7 +1010,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                                         );
                                     }
                                 } else {
-                                    const columnKey = col.key as Exclude<ActTableColumnKey, 'workDates'>;
+                                     const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
                                     displayContent = act[columnKey] || <span className="text-slate-400">...</span>;
                                     if (isEditing) {
                                         if (col.type === 'textarea') {
@@ -1073,6 +1082,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, temp
                     act={actForModal}
                     people={people}
                     organizations={organizations}
+                    groups={groups}
                     settings={settings}
                     onSave={handleSaveWithTemplateResolution}
                     onClose={handleCloseModal}

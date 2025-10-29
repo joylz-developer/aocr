@@ -65,6 +65,16 @@ export interface Act {
     representatives: {
         [key: string]: string; // e.g., { tnz: 'person-uuid-1', g: 'person-uuid-2' }
     };
+    
+    commissionGroupId?: string;
+}
+
+export interface CommissionGroup {
+    id: string;
+    name: string;
+    representatives: {
+        [key: string]: string;
+    };
 }
 
 // Types for Project Settings
@@ -97,6 +107,7 @@ export interface ImportSettings {
     acts: ImportSettingsCategory;
     people: ImportSettingsCategory;
     organizations: ImportSettingsCategory;
+    groups: ImportSettingsCategory;
 }
 
 
@@ -106,4 +117,12 @@ export interface ImportData {
     acts?: Act[];
     people?: Person[];
     organizations?: Organization[];
+    groups?: CommissionGroup[];
 }
+
+// Defines which fields from the Act can be columns in the table
+export type ActTableColumnKey = Exclude<keyof Act, 
+    'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 
+    'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 
+    'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId'
+> | 'workDates';
