@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { CommissionGroup, Person, ROLES, Organization } from '../types';
 import Modal from '../components/Modal';
+import CustomSelect from '../components/CustomSelect';
 import { PlusIcon, EditIcon, DeleteIcon } from '../components/Icons';
 
 interface GroupsPageProps {
@@ -32,16 +33,28 @@ const GroupForm: React.FC<{
 
     const [showOtherReps, setShowOtherReps] = useState(false);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const orgOptions = useMemo(() => {
+        return organizations.map(org => ({ value: org.id, label: org.name }));
+    }, [organizations]);
+
+    const peopleOptions = useMemo(() => {
+        return people.map(p => ({ value: p.id, label: `${p.name}, ${p.position}` }));
+    }, [people]);
+
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
     
-    const handleRepChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const { name, value } = e.target;
+    const handleOrgChange = (field: keyof CommissionGroup, value: string) => {
+         setFormData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleRepChange = (role: string, value: string) => {
         setFormData(prev => ({
             ...prev,
-            representatives: { ...prev.representatives, [name]: value }
+            representatives: { ...prev.representatives, [role]: value }
         }));
     };
 
@@ -52,7 +65,6 @@ const GroupForm: React.FC<{
     };
 
     const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900";
-    const selectClass = inputClass;
     const labelClass = "block text-sm font-medium text-slate-700";
 
     return (
@@ -76,31 +88,19 @@ const GroupForm: React.FC<{
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label className={labelClass}>Застройщик (технический заказчик)</label>
-                        <select name="builderOrgId" value={formData.builderOrgId || ''} onChange={handleChange} className={selectClass}>
-                            <option value="">Не выбрано</option>
-                            {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
-                        </select>
+                        <CustomSelect options={orgOptions} value={formData.builderOrgId || ''} onChange={(value) => handleOrgChange('builderOrgId', value)} placeholder="Не выбрано" className="mt-1" />
                     </div>
                     <div>
                         <label className={labelClass}>Лицо, осуществляющее строительство (Подрядчик)</label>
-                        <select name="contractorOrgId" value={formData.contractorOrgId || ''} onChange={handleChange} className={selectClass}>
-                            <option value="">Не выбрано</option>
-                            {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
-                        </select>
+                        <CustomSelect options={orgOptions} value={formData.contractorOrgId || ''} onChange={(value) => handleOrgChange('contractorOrgId', value)} placeholder="Не выбрано" className="mt-1" />
                     </div>
                      <div>
                         <label className={labelClass}>Лицо, осуществившее подготовку проекта</label>
-                        <select name="designerOrgId" value={formData.designerOrgId || ''} onChange={handleChange} className={selectClass}>
-                            <option value="">Не выбрано</option>
-                            {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
-                        </select>
+                        <CustomSelect options={orgOptions} value={formData.designerOrgId || ''} onChange={(value) => handleOrgChange('designerOrgId', value)} placeholder="Не выбрано" className="mt-1" />
                     </div>
                      <div>
                         <label className={labelClass}>Лицо, выполнившее работы</label>
-                        <select name="workPerformerOrgId" value={formData.workPerformerOrgId || ''} onChange={handleChange} className={selectClass}>
-                            <option value="">Не выбрано</option>
-                            {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
-                        </select>
+                        <CustomSelect options={orgOptions} value={formData.workPerformerOrgId || ''} onChange={(value) => handleOrgChange('workPerformerOrgId', value)} placeholder="Не выбрано" className="mt-1" />
                     </div>
                 </div>
             </div>
@@ -111,10 +111,7 @@ const GroupForm: React.FC<{
                     {Object.entries(ROLES).filter(([key]) => !['i1','i2','i3'].includes(key)).map(([key, description]) => (
                         <div key={key}>
                             <label className={labelClass}>{description}</label>
-                            <select name={key} value={formData.representatives[key] || ''} onChange={handleRepChange} className={selectClass}>
-                                <option value="">Не выбрано</option>
-                                {people.map(p => <option key={p.id} value={p.id}>{p.name}, {p.position}</option>)}
-                            </select>
+                            <CustomSelect options={peopleOptions} value={formData.representatives[key] || ''} onChange={(value) => handleRepChange(key, value)} placeholder="Не выбрано" className="mt-1" />
                         </div>
                     ))}
                     <div className="md:col-span-2 border-t pt-4 mt-2">
@@ -134,10 +131,7 @@ const GroupForm: React.FC<{
                     {showOtherReps && Object.entries(ROLES).filter(([key]) => ['i1','i2','i3'].includes(key)).map(([key, description]) => (
                         <div key={key}>
                             <label className={labelClass}>{description}</label>
-                            <select name={key} value={formData.representatives[key] || ''} onChange={handleRepChange} className={selectClass}>
-                                <option value="">Не выбрано</option>
-                                {people.map(p => <option key={p.id} value={p.id}>{p.name}, {p.position}</option>)}
-                            </select>
+                            <CustomSelect options={peopleOptions} value={formData.representatives[key] || ''} onChange={(value) => handleRepChange(key, value)} placeholder="Не выбрано" className="mt-1" />
                         </div>
                     ))}
                 </div>

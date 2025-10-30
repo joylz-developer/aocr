@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup } from '../types';
 import { DeleteIcon, DownloadIcon } from './Icons';
+import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
 import { ALL_COLUMNS } from './ActsTableConfig';
 
@@ -144,6 +145,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (col.key === 'copiesCount' && !settings.showCopiesCount) return false;
         return true;
     }), [settings, visibleColumns]);
+
+    const groupOptions = useMemo(() => {
+        return groups.map(g => ({ value: g.id, label: g.name }));
+    }, [groups]);
 
     const handleSaveWithTemplateResolution = useCallback((actToSave: Act) => {
         const resolvedAct = { ...actToSave };
@@ -713,225 +718,171 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         generateDocument(template, act, people);
     };
 
-    const isSelectionContiguous = useMemo((): boolean => {
-        if (selectedCells.size === 0) return false;
-        
+    const isSelectionContiguous = useMemo(() => {
+        if (selectedCells.size <= 1) return true;
         const coordsList = Array.from(selectedCells).map(id => {
-            const [rowIndex, colIndex] = id.split(':').map(Number);
-            return { rowIndex, colIndex };
+            const [r, c] = id.split(':').map(Number);
+            return { r, c };
         });
-        
-        const minRow = Math.min(...coordsList.map(c => c.rowIndex));
-        const maxRow = Math.max(...coordsList.map(c => c.rowIndex));
-        const minCol = Math.min(...coordsList.map(c => c.colIndex));
-        const maxCol = Math.max(...coordsList.map(c => c.colIndex));
-        
-        const expectedSize = (maxRow - minRow + 1) * (maxCol - minCol + 1);
-        return selectedCells.size === expectedSize;
+        const minRow = Math.min(...coordsList.map(c => c.r));
+        const maxRow = Math.max(...coordsList.map(c => c.r));
+        const minCol = Math.min(...coordsList.map(c => c.c));
+        const maxCol = Math.max(...coordsList.map(c => c.c));
+
+        return (maxRow - minRow + 1) * (maxCol - minCol + 1) === selectedCells.size;
     }, [selectedCells]);
 
+    const fillHandleCoords = useMemo(() => {
+        if (!activeCell || !isSelectionContiguous || selectedCells.size === 0) return null;
+        
+        const cellId = getCellId(activeCell.rowIndex, activeCell.colIndex);
+        if (!selectedCells.has(cellId)) {
+            // Active cell is outside of selection, don't show handle
+            const coordsList = Array.from(selectedCells).map(id => {
+                const [r, c] = id.split(':').map(Number);
+                return { r, c };
+            });
+             const maxRow = Math.max(...coordsList.map(c => c.r));
+             const maxCol = Math.max(...coordsList.map(c => c.c));
+             const cellElement = tableContainerRef.current?.querySelector(`[data-row-index="${maxRow}"][data-col-index="${maxCol}"]`);
+             if (cellElement) {
+                return {
+                    top: (cellElement as HTMLElement).offsetTop + (cellElement as HTMLElement).offsetHeight - 4,
+                    left: (cellElement as HTMLElement).offsetLeft + (cellElement as HTMLElement).offsetWidth - 4,
+                };
+             }
+        }
+        
+        const cellElement = tableContainerRef.current?.querySelector(`[data-row-index="${activeCell.rowIndex}"][data-col-index="${activeCell.colIndex}"]`);
+        if (cellElement) {
+             return {
+                top: (cellElement as HTMLElement).offsetTop + (cellElement as HTMLElement).offsetHeight - 4,
+                left: (cellElement as HTMLElement).offsetLeft + (cellElement as HTMLElement).offsetWidth - 4,
+            };
+        }
+        
+        return null;
 
-    const FillHandle: React.FC<{ onMouseDown: (e: React.MouseEvent) => void }> = ({ onMouseDown }) => (
-        <div
-            onMouseDown={onMouseDown}
-            className="absolute w-2.5 h-2.5 bg-blue-600 cursor-crosshair z-50 border border-white"
-            style={{ bottom: '-5px', right: '-5px' }}
-            title="Протянуть для копирования"
-        />
-    );
-
+    }, [activeCell, isSelectionContiguous, selectedCells]);
 
     return (
-        <div ref={tableContainerRef} tabIndex={-1} className="h-full overflow-auto border border-slate-200 rounded-lg select-none focus:outline-none">
-            <style>{`
-                @keyframes pulse-green-bg {
-                    0% { background-color: #dcfce7; }
-                    50% { background-color: #bbf7d0; }
-                    100% { background-color: #dcfce7; }
-                }
-                .copied-cell-bg {
-                    animation: pulse-green-bg 2s ease-in-out infinite;
-                }
-            `}</style>
-            <table className="text-sm table-fixed" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
-                <thead className="bg-slate-50 sticky top-0 z-30">
+        <div className="h-full overflow-auto border border-slate-200 rounded-md relative" ref={tableContainerRef} tabIndex={-1}>
+            <table className="min-w-full text-sm border-separate border-spacing-0">
+                <thead className="sticky top-0 bg-slate-50 z-20 shadow-sm">
                     <tr>
-                        {columns.map(col => (
+                        <th className="sticky left-0 bg-slate-50 p-0 w-16 min-w-[4rem] z-30 border-r border-b border-slate-200">
+                             <div className="w-full h-full flex items-center justify-center text-xs font-medium text-slate-500 uppercase tracking-wider">Действия</div>
+                        </th>
+                        {columns.map((col, colIndex) => (
                             <th 
                                 key={col.key} 
-                                className={`px-4 py-3 text-left font-medium text-slate-500 uppercase tracking-wider relative ${col.widthClass}`}
+                                className={`px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 relative ${colIndex < columns.length -1 ? 'border-r' : ''}`}
                                 style={{ width: columnWidths[col.key] ? `${columnWidths[col.key]}px` : undefined }}
                             >
                                 {col.label}
-                                <div
-                                    className="absolute top-0 right-0 h-full w-2 cursor-col-resize"
+                                 <div 
                                     onMouseDown={(e) => handleResizeStart(e, col.key)}
-                                />
+                                    className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize"
+                                 />
                             </th>
                         ))}
-                        <th className="px-4 py-3 text-right font-medium text-slate-500 uppercase tracking-wider sticky right-0 bg-slate-50 z-30 w-36">Действия</th>
                     </tr>
                 </thead>
                 <tbody className="bg-white">
                     {acts.map((act, rowIndex) => (
-                        <tr key={act.id} data-actid={act.id} className="hover:bg-slate-50">
+                        <tr key={act.id}>
+                            <td className="sticky left-0 bg-white p-2 w-16 min-w-[4rem] z-10 border-r border-b border-slate-200">
+                                <div className="flex items-center justify-center space-x-1">
+                                    <button onClick={() => handleGenerate(act)} className="p-1.5 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-full" title="Скачать .docx"><DownloadIcon /></button>
+                                    <button onClick={() => onDelete(act.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full" title="Удалить акт"><DeleteIcon /></button>
+                                </div>
+                            </td>
                             {columns.map((col, colIndex) => {
-                                const cellId = getCellId(rowIndex, colIndex);
                                 const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colIndex === colIndex;
-                                
+                                const cellId = getCellId(rowIndex, colIndex);
+                                const isActive = activeCell?.rowIndex === rowIndex && activeCell?.colIndex === colIndex;
                                 const isSelected = selectedCells.has(cellId);
-                                const isCopied = copiedCells?.has(cellId) ?? false;
-                                const isFillTarget = fillTargetArea ? normalizeSelection(fillTargetArea.start, fillTargetArea.end).minRow <= rowIndex && rowIndex <= normalizeSelection(fillTargetArea.start, fillTargetArea.end).maxRow && normalizeSelection(fillTargetArea.start, fillTargetArea.end).minCol <= colIndex && colIndex <= normalizeSelection(fillTargetArea.start, fillTargetArea.end).maxCol : false;
-                                
-                                let cellClassName = "px-0 py-0 align-top";
-                                if (isFillTarget) {
-                                    cellClassName += " bg-green-100";
-                                } else if (isCopied) {
-                                    cellClassName += " copied-cell-bg"; // Animation class for copied cells
-                                } else if (isSelected) {
-                                    cellClassName += " bg-blue-100";
-                                }
+                                const isCopied = copiedCells?.has(cellId);
 
-                                const cellStyle: React.CSSProperties = { 
-                                    position: 'relative',
-                                    borderBottom: '1px solid #e2e8f0', // Default grid lines
-                                    borderRight: '1px solid #e2e8f0',
-                                };
+                                const { minRow, maxRow, minCol, maxCol } = fillTargetArea ? normalizeSelection(fillTargetArea.start, fillTargetArea.end) : { minRow: -1, maxRow: -1, minCol: -1, maxCol: -1 };
+                                const isFillTarget = rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol;
 
-                                if (isSelected || isCopied) {
-                                    const borderSet = isCopied ? copiedCells : selectedCells;
-                                    const color = isCopied ? '#16a34a' : '#2563eb'; // Green for copied, blue for selected
-                                    const width = '2px';
-                                    const shadows = [];
+                                const cellClass = [
+                                    "p-0 border-b border-slate-200 relative",
+                                    colIndex < columns.length -1 ? 'border-r' : '',
+                                    isSelected ? 'bg-blue-50' : 'bg-white',
+                                    isCopied ? 'outline outline-2 outline-dashed outline-green-500 outline-offset-[-2px]' : '',
+                                    isActive ? 'outline outline-2 outline-blue-500 outline-offset-[-2px]' : '',
+                                    isFillTarget ? 'bg-blue-200' : ''
+                                ].filter(Boolean).join(' ');
 
-                                    const hasTop = !borderSet.has(getCellId(rowIndex - 1, colIndex));
-                                    const hasBottom = !borderSet.has(getCellId(rowIndex + 1, colIndex));
-                                    const hasLeft = !borderSet.has(getCellId(rowIndex, colIndex - 1));
-                                    const hasRight = !borderSet.has(getCellId(rowIndex, colIndex + 1));
-
-                                    if (hasTop) shadows.push(`inset 0 ${width} 0 0 ${color}`);
-                                    if (hasBottom) shadows.push(`inset 0 -${width} 0 0 ${color}`);
-                                    if (hasLeft) shadows.push(`inset ${width} 0 0 0 ${color}`);
-                                    if (hasRight) shadows.push(`inset -${width} 0 0 0 ${color}`);
-                                    
-                                    if (shadows.length > 0) {
-                                        cellStyle.boxShadow = shadows.join(', ');
-                                    }
-                                }
-
-                                const handleFillMouseDown = (e: React.MouseEvent) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    setIsFilling(true);
-                                };
-                                
-                                const selectionBounds = isSelectionContiguous ? normalizeSelection(
-                                    {rowIndex: Math.min(...Array.from(selectedCells).map(id => parseInt(id.split(':')[0],10))), colIndex: Math.min(...Array.from(selectedCells).map(id => parseInt(id.split(':')[1],10)))},
-                                    {rowIndex: Math.max(...Array.from(selectedCells).map(id => parseInt(id.split(':')[0],10))), colIndex: Math.max(...Array.from(selectedCells).map(id => parseInt(id.split(':')[1],10)))}
-                                ) : null;
-
-                                const shouldHaveFillHandle = isSelectionContiguous && selectionBounds && rowIndex === selectionBounds.maxRow && colIndex === selectionBounds.maxCol;
-
-                                let displayContent;
-                                let editorContent = null;
-                                let cellPaddingClass = 'p-2';
-                                
-                                if (col.key === 'commissionGroup') {
-                                    cellPaddingClass = 'p-1';
-                                    displayContent = (
-                                        <select
-                                            value={act.commissionGroupId || ''}
-                                            onChange={(e) => handleGroupChange(act, e.target.value)}
-                                            onClick={(e) => e.stopPropagation()}
-                                            onMouseDown={(e) => e.stopPropagation()}
-                                            onDoubleClick={(e) => e.stopPropagation()}
-                                            className="w-full h-full p-1 border-transparent rounded text-sm bg-transparent focus:ring-blue-500 focus:border-blue-500 focus:bg-white focus:shadow"
-                                        >
-                                            <option value="">-- Не выбрано --</option>
-                                            {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                                        </select>
-                                    );
-                                } else if (col.type === 'custom_date') {
-                                    displayContent = (
-                                        (act.workStartDate || act.workEndDate)
-                                            ? `${act.workStartDate || '...'} - ${act.workEndDate || '...'}`
-                                            : <span className="text-slate-400">...</span>
-                                    );
-                                    if (isEditing) {
-                                        editorContent = (
-                                            <DateCellEditor
-                                                act={act}
-                                                onSave={handleSaveWithTemplateResolution}
-                                                onClose={() => setEditingCell(null)}
+                                let cellContent;
+                                if (isEditing) {
+                                    if(col.type === 'custom_date') {
+                                        cellContent = <DateCellEditor act={act} onSave={handleSaveWithTemplateResolution} onClose={() => setEditingCell(null)} />
+                                    } else {
+                                        const EditorComponent = col.type === 'textarea' ? 'textarea' : 'input';
+                                        cellContent = (
+                                            <EditorComponent
+                                                ref={editorRef as any}
+                                                value={editorValue}
+                                                onChange={handleEditorChange}
+                                                onBlur={handleEditorSaveAndClose}
+                                                onKeyDown={handleEditorKeyDown}
+                                                type={col.type === 'date' ? 'date' : 'text'}
+                                                className={`absolute inset-0 w-full h-full p-2 border-2 border-blue-500 rounded-md z-30 resize-none text-sm outline-none`}
+                                                onClick={e => e.stopPropagation()}
                                             />
                                         );
                                     }
                                 } else {
-                                     const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'commissionGroup'>;
-                                    displayContent = act[columnKey] || <span className="text-slate-400">...</span>;
-                                    if (isEditing) {
-                                        if (col.type === 'textarea') {
-                                            editorContent = (
-                                                <textarea
-                                                    ref={editorRef as React.RefObject<HTMLTextAreaElement>}
-                                                    value={editorValue}
-                                                    onChange={handleEditorChange}
-                                                    onBlur={handleEditorSaveAndClose}
-                                                    onKeyDown={handleEditorKeyDown}
-                                                    className="absolute top-0 left-0 w-full p-2 ring-2 ring-blue-500 rounded-md resize-none focus:outline-none z-10 overflow-hidden"
-                                                    style={{ minHeight: '100%' }}
-                                                />
-                                            );
-                                        } else {
-                                            editorContent = (
-                                                <input
-                                                    ref={editorRef as React.RefObject<HTMLInputElement>}
-                                                    type={col.type}
-                                                    value={editorValue}
-                                                    onChange={handleEditorChange}
-                                                    onBlur={handleEditorSaveAndClose}
-                                                    onKeyDown={handleEditorKeyDown}
-                                                    className="absolute top-0 left-0 w-full h-full p-2 ring-2 ring-blue-500 rounded-md focus:outline-none z-10"
-                                                />
-                                            );
-                                        }
+                                    if(col.key === 'workDates') {
+                                         cellContent = `${act.workStartDate || '...'} - ${act.workEndDate || '...'}`;
+                                    } else if (col.key === 'commissionGroup') {
+                                        cellContent = (
+                                            <CustomSelect 
+                                                options={groupOptions} 
+                                                value={act.commissionGroupId || ''}
+                                                onChange={(value) => handleGroupChange(act, value)}
+                                                placeholder="-- Выберите группу --"
+                                                buttonClassName="w-full h-full text-left bg-transparent border-none shadow-none py-2 px-3 focus:outline-none focus:ring-0 text-slate-900 flex justify-between items-center"
+                                                dropdownClassName="absolute z-50 mt-1 w-auto min-w-full bg-white shadow-lg rounded-md border border-slate-200 max-h-60"
+                                            />
+                                        );
+                                    } else {
+                                        const key = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
+                                        cellContent = act[key] || '';
                                     }
                                 }
-
+                                
                                 return (
-                                    <td
+                                    <td 
                                         key={col.key}
+                                        className={cellClass}
                                         data-row-index={rowIndex}
                                         data-col-index={colIndex}
                                         onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
                                         onDoubleClick={() => handleCellDoubleClick(rowIndex, colIndex)}
-                                        className={cellClassName}
-                                        style={cellStyle}
                                     >
-                                        <div className={`w-full min-h-[2.5rem] h-full ${cellPaddingClass} whitespace-pre-wrap break-words flex items-center`}>
-                                            {displayContent}
+                                        <div className="px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug">
+                                             {cellContent}
                                         </div>
-                                        
-                                        {editorContent}
-
-                                        {shouldHaveFillHandle && <FillHandle onMouseDown={handleFillMouseDown} />}
                                     </td>
                                 );
                             })}
-                            <td className="px-4 py-2 whitespace-nowrap text-right font-medium align-middle sticky right-0 bg-white z-20 w-36">
-                                <div className="flex justify-end space-x-1">
-                                    <button onClick={() => handleGenerate(act)} className="p-2 text-green-600 hover:bg-green-100 rounded-full" title="Скачать .docx"><DownloadIcon /></button>
-                                    <button onClick={() => onDelete(act.id)} className="p-2 text-red-600 hover:bg-red-100 rounded-full" title="Удалить"><DeleteIcon /></button>
-                                </div>
-                            </td>
                         </tr>
                     ))}
                 </tbody>
             </table>
-            {acts.length === 0 && (
-                <div className="text-center py-10 text-slate-500">
-                    Пока нет ни одного акта. Нажмите "Создать акт", чтобы добавить новую строку.
-                </div>
+             {fillHandleCoords && (
+                 <div
+                    className="absolute w-2 h-2 bg-blue-600 border border-white cursor-crosshair z-30"
+                    style={{ top: fillHandleCoords.top, left: fillHandleCoords.left }}
+                    onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setIsFilling(true);
+                    }}
+                 />
             )}
         </div>
     );

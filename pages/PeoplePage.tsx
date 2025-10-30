@@ -1,6 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { Person, Organization, ProjectSettings } from '../types';
 import Modal from '../components/Modal';
+import CustomSelect from '../components/CustomSelect';
 import { PlusIcon, EditIcon, DeleteIcon } from '../components/Icons';
 import { GoogleGenAI } from '@google/genai';
 
@@ -54,6 +55,13 @@ const PersonForm: React.FC<{
     const ocrInputRef = useRef<HTMLInputElement>(null);
     const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
 
+    const orgOptions = useMemo(() => {
+        return organizations.map(org => ({
+            value: org.name,
+            label: org.name
+        }));
+    }, [organizations]);
+
     // Helper function for more robust string comparison
     const normalizeOrgName = (name: string): string => {
         if (!name) return '';
@@ -69,7 +77,7 @@ const PersonForm: React.FC<{
             .trim();
     };
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
@@ -143,13 +151,16 @@ const PersonForm: React.FC<{
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (!formData.name || !formData.position || !formData.organization) {
+            alert('Пожалуйста, заполните все обязательные поля: ФИО, Должность и Организация.');
+            return;
+        }
         onSave(formData);
         onClose();
     };
 
     const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900";
-    const selectClass = inputClass;
-
+    
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             {ai && (
@@ -172,12 +183,13 @@ const PersonForm: React.FC<{
             </div>
             <div>
                 <label className="block text-sm font-medium text-slate-700">Организация</label>
-                <select name="organization" value={formData.organization} onChange={handleChange} className={selectClass} required>
-                    <option value="">-- Выберите организацию --</option>
-                    {organizations.map(org => (
-                        <option key={org.id} value={org.name}>{org.name}</option>
-                    ))}
-                </select>
+                 <CustomSelect
+                    options={orgOptions}
+                    value={formData.organization}
+                    onChange={(value) => setFormData(prev => ({ ...prev, organization: value }))}
+                    placeholder="-- Выберите организацию --"
+                    className="mt-1"
+                />
             </div>
             <div>
                 <label className="block text-sm font-medium text-slate-700">Реквизиты документа о полномочиях</label>
