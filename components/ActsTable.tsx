@@ -141,6 +141,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const tableContainerRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+    const editorContainerRef = useRef<HTMLDivElement>(null);
 
     const columns = useMemo(() => ALL_COLUMNS.filter(col => {
         if (!visibleColumns.has(col.key)) return false;
@@ -220,6 +221,38 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
         handleSaveWithTemplateResolution(updatedAct);
     };
+    
+    const handleEditorSaveAndClose = useCallback(() => {
+        if (!editingCell) return;
+        const { rowIndex, colIndex } = editingCell;
+        const act = acts[rowIndex];
+        const col = columns[colIndex];
+        const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
+        
+        const currentValue = act[columnKey] || '';
+        if (String(currentValue) !== editorValue) {
+            handleSaveWithTemplateResolution({ ...act, [columnKey]: editorValue });
+        }
+        setEditingCell(null);
+    }, [acts, columns, editingCell, editorValue, handleSaveWithTemplateResolution]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const col = editingCell ? columns[editingCell.colIndex] : null;
+            if (col && col.type === 'custom_date') {
+                return;
+            }
+
+            if (editingCell && editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
+                handleEditorSaveAndClose();
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [editingCell, columns, handleEditorSaveAndClose]);
+
 
     useEffect(() => {
         if (editingCell && editorRef.current) {
@@ -252,20 +285,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             e.target.style.height = 'auto';
             e.target.style.height = `${e.target.scrollHeight}px`;
         }
-    };
-    
-    const handleEditorSaveAndClose = () => {
-        if (!editingCell) return;
-        const { rowIndex, colIndex } = editingCell;
-        const act = acts[rowIndex];
-        const col = columns[colIndex];
-        const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
-        
-        const currentValue = act[columnKey] || '';
-        if (String(currentValue) !== editorValue) {
-            handleSaveWithTemplateResolution({ ...act, [columnKey]: editorValue });
-        }
-        setEditingCell(null);
     };
     
     const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -922,17 +941,18 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                             } else {
                                                 const EditorComponent = col.type === 'textarea' ? 'textarea' : 'input';
                                                 cellContent = (
-                                                    <EditorComponent
-                                                        ref={editorRef as any}
-                                                        value={editorValue}
-                                                        onChange={handleEditorChange}
-                                                        onBlur={handleEditorSaveAndClose}
-                                                        onKeyDown={handleEditorKeyDown}
-                                                        type={col.type === 'date' ? 'date' : 'text'}
-                                                        className={`w-full block bg-white box-border px-2 py-1.5 border-2 border-blue-500 rounded-md z-30 resize-none text-sm outline-none`}
-                                                        rows={col.type === 'textarea' ? 1 : undefined}
-                                                        onClick={e => e.stopPropagation()}
-                                                    />
+                                                    <div ref={editorContainerRef}>
+                                                        <EditorComponent
+                                                            ref={editorRef as any}
+                                                            value={editorValue}
+                                                            onChange={handleEditorChange}
+                                                            onKeyDown={handleEditorKeyDown}
+                                                            type={col.type === 'date' ? 'date' : 'text'}
+                                                            className={`w-full block bg-white box-border px-2 py-1.5 border-2 border-blue-500 rounded-md z-30 resize-none text-sm outline-none`}
+                                                            rows={col.type === 'textarea' ? 1 : undefined}
+                                                            onClick={e => e.stopPropagation()}
+                                                        />
+                                                    </div>
                                                 );
                                             }
                                         } else {
