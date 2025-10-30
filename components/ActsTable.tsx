@@ -269,6 +269,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
     
     const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        e.stopPropagation();
         if (e.key === 'Escape') {
             e.preventDefault();
             setEditingCell(null);
@@ -928,7 +929,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                         onBlur={handleEditorSaveAndClose}
                                                         onKeyDown={handleEditorKeyDown}
                                                         type={col.type === 'date' ? 'date' : 'text'}
-                                                        className={`absolute inset-0 w-full h-full p-2 border-2 border-blue-500 rounded-md z-30 resize-none text-sm outline-none`}
+                                                        className={`w-full block bg-white box-border px-2 py-1.5 border-2 border-blue-500 rounded-md z-30 resize-none text-sm outline-none`}
+                                                        rows={col.type === 'textarea' ? 1 : undefined}
                                                         onClick={e => e.stopPropagation()}
                                                     />
                                                 );
@@ -964,7 +966,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 onDoubleClick={() => handleCellDoubleClick(rowIndex, colIndex)}
                                                 onContextMenu={(e) => e.preventDefault()}
                                             >
-                                                <div className="disable-cell-text-selection px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug relative">
+                                                <div className={isEditing
+                                                    ? "relative w-full"
+                                                    : "disable-cell-text-selection px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug relative"
+                                                }>
                                                      {cellContent}
                                                 </div>
                                                 {borderDivs}
