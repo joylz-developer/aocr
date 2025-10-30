@@ -226,7 +226,7 @@ const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ organizations, se
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-200">
                         {organizations.length > 0 ? organizations.map(org => (
-                            <tr key={org.id} className="hover:bg-slate-50">
+                            <tr key={org.id} className="hover:bg-slate-50 allow-text-selection">
                                 <td className="px-6 py-4 align-top">
                                     <div className="text-sm font-medium text-slate-900">{org.name}</div>
                                     <div className="text-sm text-slate-500">

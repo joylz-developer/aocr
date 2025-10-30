@@ -28,6 +28,25 @@
     overflow: hidden; /* Prevent browser scrollbars */
   }
 
+  /* Prevent text selection popups by disabling selection globally */
+  body {
+    -webkit-user-select: none; /* Safari */
+    -moz-user-select: none; /* Firefox */
+    -ms-user-select: none; /* IE 10+ */
+    user-select: none; /* Standard syntax */
+  }
+
+  /* Re-enable text selection for form inputs and other designated content */
+  input,
+  textarea,
+  [contenteditable="true"],
+  .allow-text-selection {
+    -webkit-user-select: text; /* Safari */
+    -moz-user-select: text; /* Firefox */
+    -ms-user-select: text; /* IE 10+ */
+    user-select: text; /* Standard syntax */
+  }
+
   .form-checkbox-custom {
       -webkit-appearance: none;
       -moz-appearance: none;

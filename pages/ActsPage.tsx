@@ -190,7 +190,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
             </div>
             
             <Modal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} title="Справка по заполнению шаблона">
-                <div className="prose max-w-none text-slate-700">
+                <div className="prose max-w-none text-slate-700 allow-text-selection">
                     <p>Для генерации документов ваш .docx шаблон должен содержать теги-заполнители. Приложение заменит эти теги на данные из формы. Нажмите на любой тег ниже, чтобы скопировать его.</p>
                     
                     <h4 className="font-semibold mt-4">Основные теги</h4>

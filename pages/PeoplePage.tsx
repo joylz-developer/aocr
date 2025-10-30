@@ -242,7 +242,7 @@ const PeoplePage: React.FC<PeoplePageProps> = ({ people, organizations, settings
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-200">
                         {people.length > 0 ? people.map(person => (
-                            <tr key={person.id} className="hover:bg-slate-50">
+                            <tr key={person.id} className="hover:bg-slate-50 allow-text-selection">
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{person.name}</td>
                                 <td className="px-6 py-4 text-sm text-slate-600 max-w-sm whitespace-normal">{person.position}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">{person.organization}</td>

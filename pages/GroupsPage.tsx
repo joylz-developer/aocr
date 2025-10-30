@@ -183,7 +183,7 @@ const GroupsPage: React.FC<GroupsPageProps> = ({ groups, people, organizations, 
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-200">
                         {groups.length > 0 ? groups.map(group => (
-                            <tr key={group.id} className="hover:bg-slate-50">
+                            <tr key={group.id} className="hover:bg-slate-50 allow-text-selection">
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 align-top">{group.name}</td>
                                 <td className="px-6 py-4 text-sm text-slate-600 align-top">
                                     <ul className="list-disc pl-5 space-y-1">
