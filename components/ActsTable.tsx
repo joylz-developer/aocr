@@ -237,10 +237,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 const el = editorRef.current;
                 setTimeout(() => {
                     el.style.height = 'auto';
-                    const style = window.getComputedStyle(el);
-                    const borderTopWidth = parseFloat(style.borderTopWidth);
-                    const borderBottomWidth = parseFloat(style.borderBottomWidth);
-                    el.style.height = `${el.scrollHeight + borderTopWidth + borderBottomWidth}px`;
+                    el.style.height = `${el.scrollHeight}px`;
                     el.selectionStart = el.selectionEnd = el.value.length;
                 }, 0);
             } else {
@@ -252,12 +249,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const handleEditorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setEditorValue(e.target.value);
         if (e.target instanceof HTMLTextAreaElement) {
-            const el = e.target;
-            el.style.height = 'auto';
-            const style = window.getComputedStyle(el);
-            const borderTopWidth = parseFloat(style.borderTopWidth);
-            const borderBottomWidth = parseFloat(style.borderBottomWidth);
-            el.style.height = `${el.scrollHeight + borderTopWidth + borderBottomWidth}px`;
+            e.target.style.height = 'auto';
+            e.target.style.height = `${e.target.scrollHeight}px`;
         }
     };
     
@@ -753,10 +746,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             const lastCol = columns.length - 1;
             setActiveCell({ rowIndex: lastRow, colIndex: lastCol });
         } else {
-             if (!isDraggingSelection) setActiveCell(null);
+            if (!isDraggingSelection) setActiveCell(null);
         }
         setSelectedCells(newSelectedCells);
-    }, [selectedRows, columns, isDraggingSelection]);
+    }, [selectedRows, columns]);
 
     const handleRowSelectorMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number) => {
         e.preventDefault();
