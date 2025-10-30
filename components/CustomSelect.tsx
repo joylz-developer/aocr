@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ChevronDownIcon } from './Icons';
+import { ChevronDownIcon, PlusIcon } from './Icons';
 
 export interface CustomSelectOption {
     value: string;
@@ -14,6 +14,7 @@ interface CustomSelectProps {
     className?: string;
     buttonClassName?: string;
     dropdownClassName?: string;
+    onCreateNew?: () => void;
 }
 
 const CustomSelect: React.FC<CustomSelectProps> = ({ 
@@ -24,6 +25,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
     className,
     buttonClassName,
     dropdownClassName,
+    onCreateNew,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -117,7 +119,23 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
                                 </li>
                             ))
                         ) : (
-                            <li className="px-3 py-2 text-sm text-slate-500">Ничего не найдено</li>
+                            <>
+                                <li className="px-3 py-2 text-sm text-center text-slate-500">Ничего не найдено</li>
+                                {onCreateNew && (
+                                    <li className="p-2 border-t border-slate-200">
+                                        <button
+                                            type="button"
+                                            className="w-full flex items-center justify-center gap-2 text-center px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                                            onClick={() => {
+                                                onCreateNew();
+                                                setIsOpen(false);
+                                            }}
+                                        >
+                                            <PlusIcon /> Создать
+                                        </button>
+                                    </li>
+                                )}
+                            </>
                         )}
                     </ul>
                 </div>

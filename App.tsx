@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup } from './types';
+import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page } from './types';
 import TemplateUploader from './components/TemplateUploader';
 import ImportModal from './components/ImportModal';
 import ActsPage from './pages/ActsPage';
@@ -10,8 +10,6 @@ import SettingsPage from './pages/SettingsPage';
 import GroupsPage from './pages/GroupsPage';
 import Sidebar from './components/Sidebar';
 import { saveAs } from 'file-saver';
-
-export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups';
 
 const fileToBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -277,7 +275,8 @@ const App: React.FC = () => {
                             template={template}
                             settings={settings}
                             onSave={handleSaveAct} 
-                            onDelete={handleDeleteAct} 
+                            onDelete={handleDeleteAct}
+                            setCurrentPage={setCurrentPage}
                         />;
             case 'people':
                 return <PeoplePage people={people} organizations={organizations} settings={settings} onSave={handleSavePerson} onDelete={handleDeletePerson} />;

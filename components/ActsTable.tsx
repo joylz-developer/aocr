@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup } from '../types';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page } from '../types';
 import { DeleteIcon, DownloadIcon } from './Icons';
 import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
@@ -16,6 +16,7 @@ interface ActsTableProps {
     visibleColumns: Set<string>;
     onSave: (act: Act) => void;
     onDelete: (id: string) => void;
+    setCurrentPage: (page: Page) => void;
 }
 
 const DateCellEditor: React.FC<{
@@ -123,7 +124,7 @@ const DateCellEditor: React.FC<{
 type Coords = { rowIndex: number; colIndex: number };
 
 // Main Table Component
-const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, onSave, onDelete }) => {
+const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, onSave, onDelete, setCurrentPage }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
@@ -149,6 +150,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const groupOptions = useMemo(() => {
         return groups.map(g => ({ value: g.id, label: g.name }));
     }, [groups]);
+    
+    const handleCreateNewGroup = () => {
+        setCurrentPage('groups');
+    };
 
     const handleSaveWithTemplateResolution = useCallback((actToSave: Act) => {
         const resolvedAct = { ...actToSave };
@@ -733,37 +738,28 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     }, [selectedCells]);
 
     const fillHandleCoords = useMemo(() => {
-        if (!activeCell || !isSelectionContiguous || selectedCells.size === 0) return null;
+        if (!isSelectionContiguous || selectedCells.size === 0) return null;
+
+        const coordsList = Array.from(selectedCells).map(id => {
+            const [r, c] = id.split(':').map(Number);
+            return { r, c };
+        });
         
-        const cellId = getCellId(activeCell.rowIndex, activeCell.colIndex);
-        if (!selectedCells.has(cellId)) {
-            // Active cell is outside of selection, don't show handle
-            const coordsList = Array.from(selectedCells).map(id => {
-                const [r, c] = id.split(':').map(Number);
-                return { r, c };
-            });
-             const maxRow = Math.max(...coordsList.map(c => c.r));
-             const maxCol = Math.max(...coordsList.map(c => c.c));
-             const cellElement = tableContainerRef.current?.querySelector(`[data-row-index="${maxRow}"][data-col-index="${maxCol}"]`);
-             if (cellElement) {
-                return {
-                    top: (cellElement as HTMLElement).offsetTop + (cellElement as HTMLElement).offsetHeight - 4,
-                    left: (cellElement as HTMLElement).offsetLeft + (cellElement as HTMLElement).offsetWidth - 4,
-                };
-             }
-        }
-        
-        const cellElement = tableContainerRef.current?.querySelector(`[data-row-index="${activeCell.rowIndex}"][data-col-index="${activeCell.colIndex}"]`);
+        const maxRow = Math.max(...coordsList.map(c => c.r));
+        const maxCol = Math.max(...coordsList.map(c => c.c));
+
+        const cellElement = tableContainerRef.current?.querySelector(`[data-row-index="${maxRow}"][data-col-index="${maxCol}"]`);
+
         if (cellElement) {
-             return {
+            return {
                 top: (cellElement as HTMLElement).offsetTop + (cellElement as HTMLElement).offsetHeight - 4,
                 left: (cellElement as HTMLElement).offsetLeft + (cellElement as HTMLElement).offsetWidth - 4,
             };
         }
         
         return null;
+    }, [isSelectionContiguous, selectedCells]);
 
-    }, [activeCell, isSelectionContiguous, selectedCells]);
 
     return (
         <div className="h-full overflow-auto border border-slate-200 rounded-md relative" ref={tableContainerRef} tabIndex={-1}>
@@ -845,6 +841,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 value={act.commissionGroupId || ''}
                                                 onChange={(value) => handleGroupChange(act, value)}
                                                 placeholder="-- Выберите группу --"
+                                                onCreateNew={handleCreateNewGroup}
                                                 buttonClassName="w-full h-full text-left bg-transparent border-none shadow-none py-2 px-3 focus:outline-none focus:ring-0 text-slate-900 flex justify-between items-center"
                                                 dropdownClassName="absolute z-50 mt-1 w-auto min-w-full bg-white shadow-lg rounded-md border border-slate-200 max-h-60"
                                             />
@@ -863,6 +860,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         data-col-index={colIndex}
                                         onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
                                         onDoubleClick={() => handleCellDoubleClick(rowIndex, colIndex)}
+                                        onContextMenu={(e) => e.preventDefault()}
                                     >
                                         <div className="px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug">
                                              {cellContent}

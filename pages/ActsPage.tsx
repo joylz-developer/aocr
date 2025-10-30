@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup } from '../types';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import Modal from '../components/Modal';
 import { PlusIcon, HelpIcon, ColumnsIcon } from '../components/Icons';
@@ -15,6 +15,7 @@ interface ActsPageProps {
     settings: ProjectSettings;
     onSave: (act: Act) => void;
     onDelete: (id: string) => void;
+    setCurrentPage: (page: Page) => void;
 }
 
 // Helper component for interactive tags in the help modal
@@ -108,7 +109,7 @@ const ColumnPicker: React.FC<{
 };
 
 
-const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onDelete }) => {
+const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onDelete, setCurrentPage }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
         'acts_table_visible_columns_v3', 
@@ -184,6 +185,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     visibleColumns={visibleColumns}
                     onSave={onSave}
                     onDelete={onDelete}
+                    setCurrentPage={setCurrentPage}
                 />
             </div>
             

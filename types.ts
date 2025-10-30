@@ -130,3 +130,6 @@ export type ActTableColumnKey = Exclude<keyof Act,
     'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 
     'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId'
 > | 'workDates' | 'commissionGroup';
+
+// Defines the available pages in the application
+export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups';
