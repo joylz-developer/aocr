@@ -283,6 +283,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     
     const handleRowSelectionMouseDown = (e: React.MouseEvent, rowIndex: number, actId: string) => {
         e.preventDefault();
+        setActiveCell(null); // Focus is on the row, not a cell
         
         const isShift = e.shiftKey;
         const isCtrl = e.ctrlKey || e.metaKey;
@@ -304,7 +305,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             setSelectedActIds(newSelection);
             setLastSelectedRowIndex(rowIndex);
         } else {
-            if (!selectedActIds.has(actId)) {
+             const isCurrentlySelected = selectedActIds.has(actId);
+            if (isCurrentlySelected && selectedActIds.size === 1) {
+                // It's the only selected row, so deselect it.
+                setSelectedActIds(new Set());
+            } else {
+                // Otherwise, select just this one row.
                 setSelectedActIds(new Set([actId]));
             }
             setLastSelectedRowIndex(rowIndex);
@@ -459,8 +465,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                     <td 
                                         key={col.key}
                                         className={cellClass}
-                                        data-row-index={rowIndex}
-                                        data-col-index={colIndex}
+                                        onClick={() => setActiveCell({ rowIndex, colIndex })}
                                         onDoubleClick={() => handleCellDoubleClick(rowIndex, colIndex)}
                                     >
                                         <div className="px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug">
