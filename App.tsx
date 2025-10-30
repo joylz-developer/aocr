@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page } from './types';
+import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup } from './types';
 import TemplateUploader from './components/TemplateUploader';
 import ImportModal from './components/ImportModal';
 import ActsPage from './pages/ActsPage';
@@ -10,6 +10,8 @@ import SettingsPage from './pages/SettingsPage';
 import GroupsPage from './pages/GroupsPage';
 import Sidebar from './components/Sidebar';
 import { saveAs } from 'file-saver';
+
+export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups';
 
 const fileToBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -75,7 +77,9 @@ const App: React.FC = () => {
     }, [setActs]);
 
     const handleDeleteAct = useCallback((id: string) => {
-        setActs(prevActs => prevActs.filter(a => a.id !== id));
+        if (window.confirm('Вы уверены, что хотите удалить этот акт?')) {
+            setActs(prevActs => prevActs.filter(a => a.id !== id));
+        }
     }, [setActs]);
     
     const handleSavePerson = useCallback((personToSave: Person) => {
@@ -273,8 +277,7 @@ const App: React.FC = () => {
                             template={template}
                             settings={settings}
                             onSave={handleSaveAct} 
-                            onDelete={handleDeleteAct}
-                            setCurrentPage={setCurrentPage}
+                            onDelete={handleDeleteAct} 
                         />;
             case 'people':
                 return <PeoplePage people={people} organizations={organizations} settings={settings} onSave={handleSavePerson} onDelete={handleDeletePerson} />;

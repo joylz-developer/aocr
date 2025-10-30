@@ -1,12 +1,21 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-// FIX: Import ROLES to make it available in the component. This also helps TypeScript correctly infer types for Object.entries(ROLES), resolving a downstream error.
-import { ActsPageProps, Act, ROLES } from '../types';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import Modal from '../components/Modal';
-import { PlusIcon, HelpIcon, ColumnsIcon, DownloadIcon, DeleteIcon } from '../components/Icons';
+import { PlusIcon, HelpIcon, ColumnsIcon } from '../components/Icons';
 import ActsTable from '../components/ActsTable';
 import { ALL_COLUMNS } from '../components/ActsTableConfig';
-import { generateDocument } from '../services/docGenerator';
+
+interface ActsPageProps {
+    acts: Act[];
+    people: Person[];
+    organizations: Organization[];
+    groups: CommissionGroup[];
+    template: string | null;
+    settings: ProjectSettings;
+    onSave: (act: Act) => void;
+    onDelete: (id: string) => void;
+}
 
 // Helper component for interactive tags in the help modal
 const CopyableTag: React.FC<{ tag: string }> = ({ tag }) => {
@@ -99,9 +108,8 @@ const ColumnPicker: React.FC<{
 };
 
 
-const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onDelete, setCurrentPage }) => {
+const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onDelete }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
-    const [selectedActIds, setSelectedActIds] = useState<Set<string>>(new Set());
     const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
         'acts_table_visible_columns_v3', 
         new Set(ALL_COLUMNS.map(c => c.key))
@@ -117,11 +125,12 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         });
     }, [settings]);
 
+    // This is a new handler to add an empty act row to the table
     const handleCreateNewAct = () => {
         const newAct: Act = {
             id: crypto.randomUUID(),
             number: '', 
-            date: new Date().toISOString().split('T')[0],
+            date: new Date().toISOString().split('T')[0], // Default to today
             objectName: settings.objectName, 
             builderDetails: '', 
             contractorDetails: '',
@@ -141,25 +150,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
             representatives: {},
         };
         onSave(newAct);
-    };
-    
-    const handleDownloadSelected = () => {
-        if (!template) return;
-        selectedActIds.forEach(id => {
-            const act = acts.find(a => a.id === id);
-            if (act) {
-                generateDocument(template, act, people);
-            }
-        });
-    };
-
-    const handleDeleteSelected = () => {
-        if (window.confirm(`Вы уверены, что хотите удалить ${selectedActIds.size} акт(ов)?`)) {
-            selectedActIds.forEach(id => {
-                onDelete(id);
-            });
-            setSelectedActIds(new Set());
-        }
     };
 
     return (
@@ -183,7 +173,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                 </div>
             </div>
             
-            <div className="flex-grow min-h-0 relative">
+            <div className="flex-grow min-h-0">
                 <ActsTable 
                     acts={acts}
                     people={people}
@@ -193,21 +183,8 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     settings={settings}
                     visibleColumns={visibleColumns}
                     onSave={onSave}
-                    setCurrentPage={setCurrentPage}
-                    selectedActIds={selectedActIds}
-                    setSelectedActIds={setSelectedActIds}
+                    onDelete={onDelete}
                 />
-                 {selectedActIds.size > 0 && (
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-full border border-slate-200 flex items-center p-1.5 gap-2 z-30">
-                        <span className="text-sm font-medium text-slate-700 px-3">Выбрано: {selectedActIds.size}</span>
-                        <button onClick={handleDownloadSelected} className="flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-full hover:bg-green-200 text-sm font-semibold">
-                            <DownloadIcon /> Скачать
-                        </button>
-                        <button onClick={handleDeleteSelected} className="flex items-center gap-2 bg-red-100 text-red-700 px-4 py-2 rounded-full hover:bg-red-200 text-sm font-semibold">
-                            <DeleteIcon /> Удалить
-                        </button>
-                    </div>
-                )}
             </div>
             
             <Modal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} title="Справка по заполнению шаблона">
