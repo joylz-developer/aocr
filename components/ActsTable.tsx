@@ -307,6 +307,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
 
     const handleCellMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
+        // Prevent text selection on double click
+        if (e.detail > 1) {
+            e.preventDefault();
+        }
+
         setCopiedCells(null);
     
         const cellId = getCellId(rowIndex, colIndex);
@@ -347,20 +352,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
              setEditingCell({ rowIndex, colIndex });
         }
     };
-
-    // Disable text selection on body when dragging cells
-    useEffect(() => {
-        const isDragging = isDraggingSelection || isFilling;
-        if (isDragging) {
-            document.body.classList.add('user-select-none');
-        } else {
-            document.body.classList.remove('user-select-none');
-        }
-
-        return () => {
-            document.body.classList.remove('user-select-none');
-        }
-    }, [isDraggingSelection, isFilling]);
 
      // Keyboard controls: Copy, Paste, Delete
     useEffect(() => {
@@ -879,7 +870,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         onDoubleClick={() => handleCellDoubleClick(rowIndex, colIndex)}
                                         onContextMenu={(e) => e.preventDefault()}
                                     >
-                                        <div className="px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug">
+                                        <div className="disable-cell-text-selection px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug">
                                              {cellContent}
                                         </div>
                                     </td>
