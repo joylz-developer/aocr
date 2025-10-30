@@ -29,6 +29,14 @@ const DateCellEditor: React.FC<{
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
+        // Define save logic inside the effect to capture current state.
+        const handleSave = () => {
+            if (act.workStartDate !== startDate || act.workEndDate !== endDate) {
+                onSave({ ...act, workStartDate: startDate, workEndDate: endDate });
+            }
+            onClose();
+        };
+
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
                 onClose();
@@ -44,20 +52,20 @@ const DateCellEditor: React.FC<{
             }
         };
 
-        document.addEventListener('keydown', handleKeyDown);
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-            document.removeEventListener('keydown', handleKeyDown);
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, [startDate, endDate]); // Re-add listener if dates change to save latest state
+        // Defer mousedown listener to prevent race condition on double-click
+        const timerId = setTimeout(() => {
+            document.addEventListener('mousedown', handleClickOutside);
+        }, 0);
 
-    const handleSave = () => {
-        if (act.workStartDate !== startDate || act.workEndDate !== endDate) {
-            onSave({ ...act, workStartDate: startDate, workEndDate: endDate });
-        }
-        onClose();
-    };
+        document.addEventListener('keydown', handleKeyDown);
+        
+        return () => {
+            clearTimeout(timerId);
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [act, startDate, endDate, onSave, onClose]);
+
 
     const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newStartDate = e.target.value;
@@ -237,18 +245,30 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     }, [acts, columns, editingCell, editorValue, handleSaveWithTemplateResolution]);
 
     useEffect(() => {
+        // Effect should only run when a cell is being edited.
+        if (!editingCell) return;
+    
         const handleClickOutside = (event: MouseEvent) => {
-            const col = editingCell ? columns[editingCell.colIndex] : null;
-            if (col && col.type === 'custom_date') {
+            const col = columns[editingCell.colIndex];
+            // The custom date editor handles its own closing logic.
+            if (col?.type === 'custom_date') {
                 return;
             }
-
-            if (editingCell && editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
+    
+            // If the click is outside the editor container, save and close.
+            if (editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
                 handleEditorSaveAndClose();
             }
         };
-        document.addEventListener('mousedown', handleClickOutside);
+    
+        // Defer attachment of the listener to prevent the double-click that
+        // opens the editor from being caught and immediately closing it.
+        const timerId = setTimeout(() => {
+            document.addEventListener('mousedown', handleClickOutside);
+        }, 0);
+    
         return () => {
+            clearTimeout(timerId);
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, [editingCell, columns, handleEditorSaveAndClose]);
