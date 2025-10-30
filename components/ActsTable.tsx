@@ -494,6 +494,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 return;
             }
 
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                setSelectedCells(new Set());
+                setActiveCell(null);
+                setCopiedCells(null);
+                tableContainerRef.current?.blur();
+                return;
+            }
+
             const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
             const isCtrlKey = isMac ? e.metaKey : e.ctrlKey;
 
@@ -778,7 +787,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
 
     return (
-        <div className="h-full overflow-auto border border-slate-200 rounded-md relative" ref={tableContainerRef} tabIndex={-1}>
+        <div className="h-full overflow-auto border border-slate-200 rounded-md relative focus:outline-none" ref={tableContainerRef} tabIndex={-1}>
             <table className="min-w-full text-sm border-separate border-spacing-0">
                 <thead className="sticky top-0 bg-slate-50 z-20 shadow-sm">
                     <tr>
