@@ -106,7 +106,7 @@ const DateCellEditor: React.FC<{
                     value={startDate}
                     onChange={handleStartDateChange}
                     autoFocus
-                    className="w-full p-1 border border-slate-300 rounded text-sm"
+                    className="w-full p-1 border border-slate-300 rounded text-sm bg-white"
                 />
             </div>
              <div>
@@ -116,7 +116,7 @@ const DateCellEditor: React.FC<{
                     value={endDate}
                     min={startDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full p-1 border border-slate-300 rounded text-sm"
+                    className="w-full p-1 border border-slate-300 rounded text-sm bg-white"
                 />
             </div>
             <div className="flex justify-start items-center gap-1">
@@ -1007,7 +1007,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 onContextMenu={(e) => e.preventDefault()}
                                             >
                                                 <div className={isEditing
-                                                    ? "relative w-full"
+                                                    ? "relative w-full h-full"
                                                     : "disable-cell-text-selection px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug relative"
                                                 }>
                                                      {cellContent}
