@@ -625,9 +625,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             const selectionBounds = getSelectionBounds(selectedCells);
             if (!selectionBounds) return;
 
-            const { minRow: selMinRow, maxRow: selMaxRow, minCol: selMinCol, maxCol: selMaxCol } = selectionBounds;
+            const { minRow: selMinRow, maxRow: selMaxRow } = selectionBounds;
             const patternHeight = selMaxRow - selMinRow + 1;
             
+             // Get all unique column indices from the selection, sorted
+            const selectedCols = Array.from(new Set(Array.from(selectedCells, id => parseInt(id.split(':')[1], 10)))).sort((a, b) => a - b);
+
             const { minRow: fillMinRow, maxRow: fillMaxRow } = normalizeSelection(fillTargetArea.start, fillTargetArea.end);
             
             const isFillingUpwards = fillMaxRow < selMinRow;
@@ -646,8 +649,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 const sourceAct = acts[patternRowIndex];
                 if (!sourceAct) continue;
 
-                for (let c = selMinCol; c <= selMaxCol; c++) {
+                for (const c of selectedCols) {
                     const sourceCellId = getCellId(patternRowIndex, c);
+                     // This check is important for patterns with holes
                     if (!selectedCells.has(sourceCellId)) continue;
 
                     const colKey = columns[c]?.key;
@@ -731,33 +735,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         generateDocument(template, act, people);
     };
 
-    const isSelectionContiguous = useMemo(() => {
-        if (selectedCells.size <= 1) return true;
-        const coordsList = Array.from(selectedCells).map(id => {
-            const [r, c] = id.split(':').map(Number);
-            return { r, c };
-        });
-        const minRow = Math.min(...coordsList.map(c => c.r));
-        const maxRow = Math.max(...coordsList.map(c => c.r));
-        const minCol = Math.min(...coordsList.map(c => c.c));
-        const maxCol = Math.max(...coordsList.map(c => c.c));
-
-        return (maxRow - minRow + 1) * (maxCol - minCol + 1) === selectedCells.size;
-    }, [selectedCells]);
-
     const fillHandleCoords = useMemo(() => {
-        if (!isSelectionContiguous || selectedCells.size === 0) return null;
-
-        const coordsList = Array.from(selectedCells).map(id => {
-            const [r, c] = id.split(':').map(Number);
-            return { r, c };
-        });
-        
-        const maxRow = Math.max(...coordsList.map(c => c.r));
-        const maxCol = Math.max(...coordsList.map(c => c.c));
-
-        const cellElement = tableContainerRef.current?.querySelector(`[data-row-index="${maxRow}"][data-col-index="${maxCol}"]`);
-
+        if (!activeCell) return null;
+    
+        const { rowIndex, colIndex } = activeCell;
+        const cellElement = tableContainerRef.current?.querySelector(`[data-row-index="${rowIndex}"][data-col-index="${colIndex}"]`);
+    
         if (cellElement) {
             return {
                 top: (cellElement as HTMLElement).offsetTop + (cellElement as HTMLElement).offsetHeight - 4,
@@ -766,7 +749,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
         
         return null;
-    }, [isSelectionContiguous, selectedCells]);
+    }, [activeCell]);
 
 
     return (
@@ -811,14 +794,29 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                 const { minRow, maxRow, minCol, maxCol } = fillTargetArea ? normalizeSelection(fillTargetArea.start, fillTargetArea.end) : { minRow: -1, maxRow: -1, minCol: -1, maxCol: -1 };
                                 const isFillTarget = rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol;
 
-                                const cellClass = [
-                                    "p-0 border-b border-slate-200 relative",
-                                    colIndex < columns.length -1 ? 'border-r' : '',
-                                    isSelected ? 'bg-blue-50' : 'bg-white',
-                                    isCopied ? 'outline outline-2 outline-dashed outline-green-500 outline-offset-[-2px]' : '',
-                                    isActive ? 'outline outline-2 outline-blue-500 outline-offset-[-2px]' : '',
-                                    isFillTarget ? 'bg-blue-200' : ''
-                                ].filter(Boolean).join(' ');
+                                const cellClassParts = [
+                                    "p-0 border-b border-slate-200 relative transition-colors duration-100",
+                                    colIndex < columns.length - 1 ? 'border-r' : '',
+                                ];
+                                if (isFillTarget) {
+                                    cellClassParts.push('bg-blue-200');
+                                } else if (isSelected) {
+                                    cellClassParts.push('bg-blue-100');
+                                } else {
+                                    cellClassParts.push('bg-white');
+                                }
+                                const cellClass = cellClassParts.join(' ');
+                                
+                                const borderDivs = [];
+                                if (isSelected) {
+                                    borderDivs.push(<div key="selection-border" className="absolute inset-0 border border-blue-400 pointer-events-none z-10"></div>);
+                                }
+                                if (isCopied) {
+                                    borderDivs.push(<div key="copy-border" className="absolute inset-0 border-2 border-dashed border-green-500 pointer-events-none z-20"></div>);
+                                }
+                                if (isActive) {
+                                    borderDivs.push(<div key="active-border" className="absolute inset-0 border-2 border-blue-600 pointer-events-none z-20"></div>);
+                                }
 
                                 let cellContent;
                                 if (isEditing) {
@@ -870,9 +868,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         onDoubleClick={() => handleCellDoubleClick(rowIndex, colIndex)}
                                         onContextMenu={(e) => e.preventDefault()}
                                     >
-                                        <div className="disable-cell-text-selection px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug">
+                                        <div className="disable-cell-text-selection px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug relative">
                                              {cellContent}
                                         </div>
+                                        {borderDivs}
                                     </td>
                                 );
                             })}
@@ -880,7 +879,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     ))}
                 </tbody>
             </table>
-             {fillHandleCoords && (
+             {fillHandleCoords && selectedCells.size > 0 && (
                  <div
                     className="absolute w-2 h-2 bg-blue-600 border border-white cursor-crosshair z-30"
                     style={{ top: fillHandleCoords.top, left: fillHandleCoords.left }}
