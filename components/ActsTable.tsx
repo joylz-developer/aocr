@@ -337,6 +337,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
     
     const handleCellDoubleClick = (rowIndex: number, colIndex: number) => {
+        if (window.getSelection) {
+            window.getSelection()?.removeAllRanges();
+        }
         const col = columns[colIndex];
         if (col.type !== 'custom_date' && col.key !== 'commissionGroup') {
             setEditingCell({ rowIndex, colIndex });
@@ -344,6 +347,20 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
              setEditingCell({ rowIndex, colIndex });
         }
     };
+
+    // Disable text selection on body when dragging cells
+    useEffect(() => {
+        const isDragging = isDraggingSelection || isFilling;
+        if (isDragging) {
+            document.body.classList.add('user-select-none');
+        } else {
+            document.body.classList.remove('user-select-none');
+        }
+
+        return () => {
+            document.body.classList.remove('user-select-none');
+        }
+    }, [isDraggingSelection, isFilling]);
 
      // Keyboard controls: Copy, Paste, Delete
     useEffect(() => {
