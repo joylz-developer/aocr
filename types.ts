@@ -1,3 +1,5 @@
+export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups';
+
 export interface Person {
     id: string;
     name: string;
@@ -95,6 +97,19 @@ export interface ProjectSettings {
     defaultAdditionalInfo?: string;
     defaultActDate?: string;
 }
+
+export interface ActsPageProps {
+    acts: Act[];
+    people: Person[];
+    organizations: Organization[];
+    groups: CommissionGroup[];
+    template: string | null;
+    settings: ProjectSettings;
+    onSave: (act: Act) => void;
+    onDelete: (id: string) => void;
+    setCurrentPage: (page: Page) => void;
+}
+
 
 // Types for Import/Export feature
 export type ImportMode = 'replace' | 'merge';

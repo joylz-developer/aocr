@@ -14,6 +14,8 @@ interface CustomSelectProps {
     className?: string;
     buttonClassName?: string;
     dropdownClassName?: string;
+    onCreateNew?: (searchTerm: string) => void;
+    onCreateNewText?: string;
 }
 
 const CustomSelect: React.FC<CustomSelectProps> = ({ 
@@ -24,6 +26,8 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
     className,
     buttonClassName,
     dropdownClassName,
+    onCreateNew,
+    onCreateNewText = 'Создать',
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -53,25 +57,29 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
     
     useEffect(() => {
         if (isOpen) {
-            // Use timeout to allow the element to be rendered before focusing
             setTimeout(() => {
                 searchInputRef.current?.focus();
             }, 100);
+        } else {
+            setSearchTerm('');
         }
     }, [isOpen]);
 
     const handleSelect = (optionValue: string) => {
         onChange(optionValue);
         setIsOpen(false);
-        setSearchTerm('');
     };
     
     const toggleDropdown = () => {
         setIsOpen(prev => !prev);
-        if(!isOpen) {
-            setSearchTerm('');
-        }
     };
+    
+    const handleCreate = () => {
+        if(onCreateNew) {
+            onCreateNew(searchTerm);
+            setIsOpen(false);
+        }
+    }
 
     const defaultButtonClass = "w-full text-left bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-slate-900 flex justify-between items-center";
     const defaultDropdownClass = "absolute z-40 mt-1 w-full bg-white shadow-lg rounded-md border border-slate-200 max-h-60";
@@ -117,7 +125,19 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
                                 </li>
                             ))
                         ) : (
-                            <li className="px-3 py-2 text-sm text-slate-500">Ничего не найдено</li>
+                             searchTerm && onCreateNew ? (
+                                <li>
+                                    <button
+                                        type="button"
+                                        onClick={handleCreate}
+                                        className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50"
+                                    >
+                                        {onCreateNewText}
+                                    </button>
+                                </li>
+                            ) : (
+                               <li className="px-3 py-2 text-sm text-slate-500">Ничего не найдено</li>
+                            )
                         )}
                     </ul>
                 </div>

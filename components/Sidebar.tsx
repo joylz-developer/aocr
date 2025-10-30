@@ -1,5 +1,6 @@
 import React from 'react';
-import { Page } from '../App';
+// FIX: The Page type is exported from `types.ts`, not `App.tsx`. Updated the import path.
+import { Page } from '../types';
 import { ChevronLeftIcon, ActsIcon, PeopleIcon, OrganizationsIcon, SettingsIcon, ImportIcon, ExportIcon, TemplateIcon, GroupsIcon } from './Icons';
 
 interface SidebarProps {
