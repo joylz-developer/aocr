@@ -98,7 +98,7 @@ const DateCellEditor: React.FC<{
     );
 
     return (
-        <div ref={containerRef} className="absolute inset-0 bg-white p-2 border-2 border-blue-500 rounded-md z-40 flex flex-col gap-2 shadow-lg" onClick={e => e.stopPropagation()}>
+        <div ref={containerRef} className="bg-white p-2 border-2 border-blue-500 rounded-md z-40 flex flex-col gap-2 shadow-lg" onClick={e => e.stopPropagation()}>
             <div>
                 <label className="text-xs font-medium text-slate-600">Начало</label>
                 <input
