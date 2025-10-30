@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import Modal from '../components/Modal';
@@ -43,6 +43,25 @@ const ColumnPicker: React.FC<{
     setVisibleColumns: (updater: (prev: Set<string>) => Set<string>) => void;
 }> = ({ visibleColumns, setVisibleColumns }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const pickerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+
+        if (isOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        } else {
+            document.removeEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isOpen]);
 
     const handleToggleColumn = (key: string) => {
         setVisibleColumns(prev => {
@@ -56,16 +75,8 @@ const ColumnPicker: React.FC<{
         });
     };
 
-    const columnsToShow = useMemo(() => {
-       return ALL_COLUMNS.filter(c => !['additionalInfo', 'attachments', 'copiesCount', 'date'].includes(c.key))
-    }, []);
-    
-    const settingsColumns = useMemo(() => {
-        return ALL_COLUMNS.filter(c => ['additionalInfo', 'attachments', 'copiesCount', 'date'].includes(c.key))
-    }, []);
-
     return (
-        <div className="relative">
+        <div className="relative" ref={pickerRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className="flex items-center gap-2 bg-white text-slate-700 px-4 py-2 rounded-md hover:bg-slate-100 border border-slate-300"
@@ -75,13 +86,13 @@ const ColumnPicker: React.FC<{
             </button>
             {isOpen && (
                 <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-md shadow-lg z-50 p-4">
-                    <h4 className="font-semibold text-slate-800 mb-2">Основные колонки</h4>
-                    <div className="grid grid-cols-2 gap-2">
-                    {columnsToShow.map(col => (
-                        <label key={col.key} className="flex items-center space-x-2 text-sm text-slate-700">
+                    <h4 className="font-semibold text-slate-800 mb-3">Отображение колонок</h4>
+                    <div className="flex flex-col space-y-2">
+                    {ALL_COLUMNS.map(col => (
+                        <label key={col.key} className="flex items-center space-x-3 text-sm text-slate-700 cursor-pointer">
                             <input
                                 type="checkbox"
-                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                className="h-4 w-4 form-checkbox-custom"
                                 checked={visibleColumns.has(col.key)}
                                 onChange={() => handleToggleColumn(col.key)}
                             />
@@ -89,22 +100,6 @@ const ColumnPicker: React.FC<{
                         </label>
                     ))}
                     </div>
-                    <h4 className="font-semibold text-slate-800 mt-4 pt-2 border-t mb-2">Дополнительные колонки</h4>
-                     <div className="space-y-2">
-                     {settingsColumns.map(col => (
-                        <label key={col.key} className="flex items-center space-x-2 text-sm text-slate-700">
-                            <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                checked={visibleColumns.has(col.key)}
-                                onChange={() => handleToggleColumn(col.key)}
-                            />
-                            <span>{col.label}</span>
-                        </label>
-                    ))}
-                    </div>
-
-                    <button onClick={() => setIsOpen(false)} className="mt-4 w-full text-center bg-slate-100 py-1 rounded-md text-sm hover:bg-slate-200">Закрыть</button>
                 </div>
             )}
         </div>
@@ -115,7 +110,7 @@ const ColumnPicker: React.FC<{
 const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onDelete }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
-        'acts_table_visible_columns', 
+        'acts_table_visible_columns_v2', 
         new Set(ALL_COLUMNS.map(c => c.key))
     );
     

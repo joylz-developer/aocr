@@ -65,11 +65,11 @@ const SettingToggle: React.FC<SettingToggleProps> = ({ id, label, description, c
                 type="checkbox"
                 checked={!!formData[id]}
                 onChange={handleChange}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="h-4 w-4 form-checkbox-custom"
             />
         </div>
         <div className="ml-3 text-sm leading-6 flex-1">
-            <label htmlFor={id} className="font-medium text-gray-900">
+            <label htmlFor={id} className="font-medium text-gray-900 cursor-pointer">
                 {label}
             </label>
             {description && <p className="text-xs text-slate-500">{description}</p>}

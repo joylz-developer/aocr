@@ -124,9 +124,9 @@ const GroupForm: React.FC<{
                                 id="showOtherReps"
                                 checked={showOtherReps}
                                 onChange={(e) => setShowOtherReps(e.target.checked)}
-                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                className="h-4 w-4 form-checkbox-custom"
                             />
-                            <label htmlFor="showOtherReps" className="ml-2 text-sm font-medium text-slate-700">
+                            <label htmlFor="showOtherReps" className="ml-2 text-sm font-medium text-slate-700 cursor-pointer">
                                 Добавить представителей иных организаций
                             </label>
                         </div>

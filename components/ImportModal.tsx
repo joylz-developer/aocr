@@ -89,9 +89,9 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
                             id={`import-${category}`}
                             checked={categorySettings.import}
                             onChange={(e) => handleCheckboxChange(category, e.target.checked)}
-                            className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            className="h-5 w-5 form-checkbox-custom"
                         />
-                        <label htmlFor={`import-${category}`} className="ml-3 text-lg font-semibold text-slate-800">
+                        <label htmlFor={`import-${category}`} className="ml-3 text-lg font-semibold text-slate-800 cursor-pointer">
                             {label}
                         </label>
                     </div>
@@ -111,7 +111,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
                                     onChange={() => handleModeChange(category, 'merge')}
                                     className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
                                 />
-                                <label htmlFor={`${category}-merge`} className="ml-3 block text-sm text-slate-700">
+                                <label htmlFor={`${category}-merge`} className="ml-3 block text-sm text-slate-700 cursor-pointer">
                                     <span className="font-medium">Добавить и обновить</span>
                                     <span className="block text-xs text-slate-500">Новые записи будут добавлены, существующие — обновлены.</span>
                                 </label>
@@ -126,7 +126,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
                                     onChange={() => handleModeChange(category, 'replace')}
                                     className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
                                 />
-                                <label htmlFor={`${category}-replace`} className="ml-3 block text-sm text-slate-700">
+                                <label htmlFor={`${category}-replace`} className="ml-3 block text-sm text-slate-700 cursor-pointer">
                                     <span className="font-medium">Заменить все</span>
                                      <span className="block text-xs text-slate-500">Все текущие записи будут удалены перед импортом.</span>
                                 </label>
@@ -153,9 +153,9 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
                                         id={`item-${category}-${item.id}`}
                                         checked={categorySettings.selectedIds?.includes(item.id)}
                                         onChange={(e) => handleItemSelectionChange(category, item.id, e.target.checked)}
-                                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        className="h-4 w-4 form-checkbox-custom"
                                     />
-                                    <label htmlFor={`item-${category}-${item.id}`} className="ml-3 block text-sm text-slate-700 truncate" title={displayName}>
+                                    <label htmlFor={`item-${category}-${item.id}`} className="ml-3 block text-sm text-slate-700 truncate cursor-pointer" title={displayName}>
                                        {displayName}
                                     </label>
                                 </div>
@@ -183,9 +183,9 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
                                 id="import-template"
                                 checked={settings.template}
                                 onChange={(e) => setSettings(s => ({...s, template: e.target.checked}))}
-                                className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                className="h-5 w-5 form-checkbox-custom"
                             />
-                            <label htmlFor="import-template" className="ml-3 text-lg font-semibold text-slate-800">
+                            <label htmlFor="import-template" className="ml-3 text-lg font-semibold text-slate-800 cursor-pointer">
                                 Шаблон документа
                             </label>
                         </div>
@@ -198,9 +198,9 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
                                 id="import-projectSettings"
                                 checked={settings.projectSettings}
                                 onChange={(e) => setSettings(s => ({...s, projectSettings: e.target.checked}))}
-                                className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                className="h-5 w-5 form-checkbox-custom"
                             />
-                            <label htmlFor="import-projectSettings" className="ml-3 text-lg font-semibold text-slate-800">
+                            <label htmlFor="import-projectSettings" className="ml-3 text-lg font-semibold text-slate-800 cursor-pointer">
                                 Настройки проекта
                             </label>
                         </div>
