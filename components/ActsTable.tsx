@@ -735,10 +735,35 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         generateDocument(template, act, people);
     };
 
+    const fillHandleCell = useMemo(() => {
+        if (selectedCells.size === 0) return null;
+
+        let maxRow = -1;
+        let maxColInMaxRow = -1;
+
+        for (const cellId of selectedCells) {
+            const [r, c] = cellId.split(':').map(Number);
+            if (r > maxRow) {
+                maxRow = r;
+                maxColInMaxRow = c;
+            } else if (r === maxRow) {
+                if (c > maxColInMaxRow) {
+                    maxColInMaxRow = c;
+                }
+            }
+        }
+        
+        if (maxRow === -1) return null;
+
+        return { rowIndex: maxRow, colIndex: maxColInMaxRow };
+
+    }, [selectedCells]);
+
+
     const fillHandleCoords = useMemo(() => {
-        if (!activeCell) return null;
+        if (!fillHandleCell) return null;
     
-        const { rowIndex, colIndex } = activeCell;
+        const { rowIndex, colIndex } = fillHandleCell;
         const cellElement = tableContainerRef.current?.querySelector(`[data-row-index="${rowIndex}"][data-col-index="${colIndex}"]`);
     
         if (cellElement) {
@@ -749,7 +774,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
         
         return null;
-    }, [activeCell]);
+    }, [fillHandleCell]);
 
 
     return (
@@ -809,7 +834,18 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                 
                                 const borderDivs = [];
                                 if (isSelected) {
-                                    borderDivs.push(<div key="selection-border" className="absolute inset-0 border border-blue-400 pointer-events-none z-10"></div>);
+                                    const hasTop = !selectedCells.has(getCellId(rowIndex - 1, colIndex));
+                                    const hasBottom = !selectedCells.has(getCellId(rowIndex + 1, colIndex));
+                                    const hasLeft = !selectedCells.has(getCellId(rowIndex, colIndex - 1));
+                                    const hasRight = !selectedCells.has(getCellId(rowIndex, colIndex + 1));
+                                    
+                                    const classes: string[] = ['absolute', 'inset-0', 'border-blue-400', 'pointer-events-none', 'z-10'];
+                                    if(hasTop) classes.push('border-t');
+                                    if(hasBottom) classes.push('border-b');
+                                    if(hasLeft) classes.push('border-l');
+                                    if(hasRight) classes.push('border-r');
+                                    
+                                    borderDivs.push(<div key="selection-border" className={classes.join(' ')}></div>);
                                 }
                                 if (isCopied) {
                                     borderDivs.push(<div key="copy-border" className="absolute inset-0 border-2 border-dashed border-green-500 pointer-events-none z-20"></div>);
