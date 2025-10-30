@@ -749,7 +749,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             if (!isDraggingSelection) setActiveCell(null);
         }
         setSelectedCells(newSelectedCells);
-    }, [selectedRows, columns, isDraggingSelection]);
+    }, [selectedRows, columns]);
 
     const handleRowSelectorMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number) => {
         e.preventDefault();
