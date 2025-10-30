@@ -39,9 +39,10 @@ const CopyableTag: React.FC<{ tag: string }> = ({ tag }) => {
 };
 
 const ColumnPicker: React.FC<{
+    pickableColumns: typeof ALL_COLUMNS;
     visibleColumns: Set<string>;
     setVisibleColumns: (updater: (prev: Set<string>) => Set<string>) => void;
-}> = ({ visibleColumns, setVisibleColumns }) => {
+}> = ({ pickableColumns, visibleColumns, setVisibleColumns }) => {
     const [isOpen, setIsOpen] = useState(false);
     const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -88,8 +89,8 @@ const ColumnPicker: React.FC<{
                 <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-md shadow-lg z-50 p-4">
                     <h4 className="font-semibold text-slate-800 mb-3">Отображение колонок</h4>
                     <div className="flex flex-col space-y-2">
-                    {ALL_COLUMNS.map(col => (
-                        <label key={col.key} className="flex items-center space-x-3 text-sm text-slate-700 cursor-pointer">
+                    {pickableColumns.map(col => (
+                        <label key={col.key} className="flex items-center space-x-3 text-sm text-slate-700 cursor-pointer select-none">
                             <input
                                 type="checkbox"
                                 className="h-4 w-4 form-checkbox-custom"
@@ -110,10 +111,20 @@ const ColumnPicker: React.FC<{
 const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onDelete }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
-        'acts_table_visible_columns_v2', 
+        'acts_table_visible_columns_v3', 
         new Set(ALL_COLUMNS.map(c => c.key))
     );
     
+    const pickableColumns = useMemo(() => {
+        return ALL_COLUMNS.filter(col => {
+            if (col.key === 'date' && !settings.showActDate) return false;
+            if (col.key === 'additionalInfo' && !settings.showAdditionalInfo) return false;
+            if (col.key === 'attachments' && !settings.showAttachments) return false;
+            if (col.key === 'copiesCount' && !settings.showCopiesCount) return false;
+            return true;
+        });
+    }, [settings]);
+
     // This is a new handler to add an empty act row to the table
     const handleCreateNewAct = () => {
         const newAct: Act = {
@@ -151,7 +162,11 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     </button>
                 </div>
                 <div className="flex items-center gap-3">
-                    <ColumnPicker visibleColumns={visibleColumns} setVisibleColumns={setVisibleColumns} />
+                    <ColumnPicker 
+                        pickableColumns={pickableColumns}
+                        visibleColumns={visibleColumns} 
+                        setVisibleColumns={setVisibleColumns} 
+                    />
                     <button onClick={handleCreateNewAct} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
                         <PlusIcon /> Создать акт
                     </button>
