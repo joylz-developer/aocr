@@ -307,6 +307,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
 
     const handleCellMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
+        tableContainerRef.current?.focus({ preventScroll: true });
+        
         // Prevent text selection on double click
         if (e.detail > 1) {
             e.preventDefault();
@@ -353,209 +355,181 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     };
 
-     // Keyboard controls: Copy, Paste, Delete
-    useEffect(() => {
-        const handleCopy = async () => {
-            if (selectedCells.size === 0) return;
-    
-            try {
-                const coordsList = Array.from(selectedCells).map(id => {
-                    const [rowIndex, colIndex] = id.split(':').map(Number);
-                    return { rowIndex, colIndex };
-                });
-    
-                if (coordsList.length === 0) return;
-    
-                const minRow = Math.min(...coordsList.map(c => c.rowIndex));
-                const maxRow = Math.max(...coordsList.map(c => c.rowIndex));
-                const minCol = Math.min(...coordsList.map(c => c.colIndex));
-                const maxCol = Math.max(...coordsList.map(c => c.colIndex));
-    
-                const copyData = [];
-                for (let r = minRow; r <= maxRow; r++) {
-                    const rowData = [];
-                    for (let c = minCol; c <= maxCol; c++) {
-                        if (selectedCells.has(getCellId(r, c))) {
-                            const act = acts[r];
-                            const col = columns[c];
-                            if (act && col) {
-                                if (col.key === 'workDates') {
-                                    rowData.push(`${act.workStartDate || ''} - ${act.workEndDate || ''}`);
-                                } else if (col.key === 'commissionGroup') {
-                                    const group = groups.find(g => g.id === act.commissionGroupId);
-                                    rowData.push(group ? group.name : '');
-                                } else {
-                                     const key = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
-                                    rowData.push(act[key] || '');
-                                }
+    const handleCopy = useCallback(async () => {
+        if (selectedCells.size === 0) return;
+
+        try {
+            const coordsList = Array.from(selectedCells).map(id => {
+                const [rowIndex, colIndex] = id.split(':').map(Number);
+                return { rowIndex, colIndex };
+            });
+
+            if (coordsList.length === 0) return;
+
+            const minRow = Math.min(...coordsList.map(c => c.rowIndex));
+            const maxRow = Math.max(...coordsList.map(c => c.rowIndex));
+            const minCol = Math.min(...coordsList.map(c => c.colIndex));
+            const maxCol = Math.max(...coordsList.map(c => c.colIndex));
+
+            const copyData = [];
+            for (let r = minRow; r <= maxRow; r++) {
+                const rowData = [];
+                for (let c = minCol; c <= maxCol; c++) {
+                    if (selectedCells.has(getCellId(r, c))) {
+                        const act = acts[r];
+                        const col = columns[c];
+                        if (act && col) {
+                            if (col.key === 'workDates') {
+                                rowData.push(`${act.workStartDate || ''} - ${act.workEndDate || ''}`);
+                            } else if (col.key === 'commissionGroup') {
+                                const group = groups.find(g => g.id === act.commissionGroupId);
+                                rowData.push(group ? group.name : '');
                             } else {
-                                 rowData.push('');
+                                 const key = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
+                                rowData.push(act[key] || '');
                             }
                         } else {
-                            rowData.push('');
+                             rowData.push('');
                         }
+                    } else {
+                        rowData.push('');
                     }
-                    copyData.push(rowData.join('\t'));
                 }
-                await navigator.clipboard.writeText(copyData.join('\n'));
-                setCopiedCells(new Set(selectedCells));
-            } catch (err) {
-                console.error("Failed to copy: ", err);
-                if (err instanceof DOMException && err.name === 'NotAllowedError') {
-                    alert("Копирование не удалось. Пожалуйста, предоставьте разрешение на доступ к буферу обмена в настройках вашего браузера.");
-                } else {
-                    alert("Не удалось скопировать данные в буфер обмена.");
-                }
+                copyData.push(rowData.join('\t'));
             }
-        };
+            await navigator.clipboard.writeText(copyData.join('\n'));
+            setCopiedCells(new Set(selectedCells));
+        } catch (err) {
+            console.error("Failed to copy: ", err);
+        }
+    }, [selectedCells, acts, columns, groups]);
 
-        const handlePaste = async () => {
-            if (!activeCell) return;
-    
-            try {
-                if (!document.hasFocus()) {
-                    tableContainerRef.current?.focus();
-                }
+    const handlePaste = useCallback(async () => {
+        if (!activeCell) return;
 
-                const pastedText = await navigator.clipboard.readText();
-                if (!pastedText) return;
+        try {
+            const pastedText = await navigator.clipboard.readText();
+            if (!pastedText) return;
 
-                const pastedRows = pastedText.replace(/\r\n/g, '\n').split('\n').map(row => row.split('\t'));
+            const pastedRows = pastedText.replace(/\r\n/g, '\n').split('\n').map(row => row.split('\t'));
+            
+            const startRow = activeCell.rowIndex;
+            const startCol = activeCell.colIndex;
+            const updatedActsMap = new Map<string, Act>();
+
+            pastedRows.forEach((rowData, rOffset) => {
+                const targetRowIndex = startRow + rOffset;
+                if (targetRowIndex >= acts.length) return;
                 
-                const startRow = activeCell.rowIndex;
-                const startCol = activeCell.colIndex;
-                const updatedActsMap = new Map<string, Act>();
+                const originalAct = acts[targetRowIndex];
+                if(!originalAct) return;
+                let updatedAct = updatedActsMap.get(originalAct.id) || { ...originalAct };
 
-                pastedRows.forEach((rowData, rOffset) => {
-                    const targetRowIndex = startRow + rOffset;
-                    if (targetRowIndex >= acts.length) return;
+                rowData.forEach((cellData, cOffset) => {
+                    const targetColIndex = startCol + cOffset;
+                    if (targetColIndex >= columns.length) return;
                     
-                    const originalAct = acts[targetRowIndex];
-                    if(!originalAct) return;
-                    let updatedAct = updatedActsMap.get(originalAct.id) || { ...originalAct };
-
-                    rowData.forEach((cellData, cOffset) => {
-                        const targetColIndex = startCol + cOffset;
-                        if (targetColIndex >= columns.length) return;
-                        
-                        const col = columns[targetColIndex];
-                        if (!col) return;
-
-                        if (col.key === 'workDates') {
-                            const parts = cellData.split(' - ').map(s => s.trim());
-                            const start = parts[0] || '';
-                            const end = parts.length > 1 ? (parts[1] || start) : start;
-                            updatedAct.workStartDate = start;
-                            updatedAct.workEndDate = end;
-                        } else if (col.key === 'commissionGroup') {
-                            const group = groups.find(g => g.name.toLowerCase() === cellData.toLowerCase().trim());
-                            if(group) {
-                                // This is complex, we need to apply the group logic.
-                                // For now, let's just set the ID, a full paste logic would need handleGroupChange logic.
-                                updatedAct.commissionGroupId = group.id;
-                            }
-                        }
-                        else {
-                            const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
-                            (updatedAct as any)[columnKey] = cellData;
-                        }
-                    });
-                    updatedActsMap.set(originalAct.id, updatedAct);
-                });
-                
-                const actsToSave = Array.from(updatedActsMap.values());
-                actsToSave.forEach(handleSaveWithTemplateResolution);
-
-                setCopiedCells(null);
-                
-                // Expand selection to pasted area
-                const endRow = startRow + pastedRows.length - 1;
-                const maxCols = pastedRows.length > 0 ? Math.max(...pastedRows.map(r => r.length)) : 0;
-                const endCol = startCol + maxCols - 1;
-                const newSelection = new Set<string>();
-                for (let r = startRow; r <= Math.min(endRow, acts.length - 1); r++) {
-                    for (let c = startCol; c <= Math.min(endCol, columns.length - 1); c++) {
-                        newSelection.add(getCellId(r, c));
-                    }
-                }
-                setSelectedCells(newSelection);
-            } catch (err) {
-                 console.error("Failed to paste: ", err);
-                 if (err instanceof DOMException && err.name === 'NotAllowedError') {
-                    alert("Вставка не удалась. Пожалуйста, предоставьте разрешение на доступ к буферу обмена в настройках вашего браузера.");
-                } else {
-                    alert("Не удалось вставить данные из буфера обмена. Возможно, формат данных не поддерживается.");
-                }
-            }
-        };
-
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (editingCell || (e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA' || (e.target as HTMLElement).tagName === 'SELECT') {
-                return;
-            }
-
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                setSelectedCells(new Set());
-                setActiveCell(null);
-                setCopiedCells(null);
-                tableContainerRef.current?.blur();
-                return;
-            }
-
-            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-            const isCtrlKey = isMac ? e.metaKey : e.ctrlKey;
-
-            // Handle Delete
-            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedCells.size > 0) {
-                e.preventDefault();
-                const updatedActsMap = new Map<string, Act>();
-
-                selectedCells.forEach(cellId => {
-                    const [r, c] = cellId.split(':').map(Number);
-                    const originalAct = acts[r];
-                    if (!originalAct) return;
-
-                    let updatedAct = updatedActsMap.get(originalAct.id) || { ...originalAct };
-                    const col = columns[c];
+                    const col = columns[targetColIndex];
                     if (!col) return;
 
                     if (col.key === 'workDates') {
-                        updatedAct.workStartDate = '';
-                        updatedAct.workEndDate = '';
-                        updatedAct.date = ''; 
+                        const parts = cellData.split(' - ').map(s => s.trim());
+                        const start = parts[0] || '';
+                        const end = parts.length > 1 ? (parts[1] || start) : start;
+                        updatedAct.workStartDate = start;
+                        updatedAct.workEndDate = end;
                     } else if (col.key === 'commissionGroup') {
-                        updatedAct.commissionGroupId = undefined;
+                        const group = groups.find(g => g.name.toLowerCase() === cellData.toLowerCase().trim());
+                        if(group) {
+                            updatedAct.commissionGroupId = group.id;
+                        }
                     }
                     else {
                         const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
-                        (updatedAct as any)[columnKey] = '';
+                        (updatedAct as any)[columnKey] = cellData;
                     }
-                    updatedActsMap.set(originalAct.id, updatedAct);
                 });
-                
-                const actsToSave = Array.from(updatedActsMap.values());
-                actsToSave.forEach(handleSaveWithTemplateResolution);
-            }
+                updatedActsMap.set(originalAct.id, updatedAct);
+            });
             
-            // Handle Copy - use e.code for layout-independent key presses
-            if (e.code === 'KeyC' && isCtrlKey) {
-                 e.preventDefault();
-                 handleCopy();
-            }
-            
-            // Handle Paste - use e.code for layout-independent key presses
-            if (e.code === 'KeyV' && isCtrlKey) {
-                e.preventDefault();
-                handlePaste();
-            }
-        };
+            const actsToSave = Array.from(updatedActsMap.values());
+            actsToSave.forEach(handleSaveWithTemplateResolution);
 
-        window.addEventListener('keydown', handleKeyDown);
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [selectedCells, activeCell, editingCell, acts, columns, groups, handleSaveWithTemplateResolution]);
+            setCopiedCells(null);
+            
+            const endRow = startRow + pastedRows.length - 1;
+            const maxCols = pastedRows.length > 0 ? Math.max(...pastedRows.map(r => r.length)) : 0;
+            const endCol = startCol + maxCols - 1;
+            const newSelection = new Set<string>();
+            for (let r = startRow; r <= Math.min(endRow, acts.length - 1); r++) {
+                for (let c = startCol; c <= Math.min(endCol, columns.length - 1); c++) {
+                    newSelection.add(getCellId(r, c));
+                }
+            }
+            setSelectedCells(newSelection);
+        } catch (err) {
+             console.error("Failed to paste: ", err);
+        }
+    }, [activeCell, acts, columns, groups, handleSaveWithTemplateResolution]);
+    
+    const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (editingCell) {
+            return;
+        }
+
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            setSelectedCells(new Set());
+            setActiveCell(null);
+            setCopiedCells(null);
+            e.currentTarget.blur();
+            return;
+        }
+
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        const isCtrlKey = isMac ? e.metaKey : e.ctrlKey;
+
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedCells.size > 0) {
+            e.preventDefault();
+            const updatedActsMap = new Map<string, Act>();
+
+            selectedCells.forEach(cellId => {
+                const [r, c] = cellId.split(':').map(Number);
+                const originalAct = acts[r];
+                if (!originalAct) return;
+
+                let updatedAct = updatedActsMap.get(originalAct.id) || { ...originalAct };
+                const col = columns[c];
+                if (!col) return;
+
+                if (col.key === 'workDates') {
+                    updatedAct.workStartDate = '';
+                    updatedAct.workEndDate = '';
+                    updatedAct.date = ''; 
+                } else if (col.key === 'commissionGroup') {
+                    updatedAct.commissionGroupId = undefined;
+                }
+                else {
+                    const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
+                    (updatedAct as any)[columnKey] = '';
+                }
+                updatedActsMap.set(originalAct.id, updatedAct);
+            });
+            
+            const actsToSave = Array.from(updatedActsMap.values());
+            actsToSave.forEach(handleSaveWithTemplateResolution);
+        }
+        
+        if (e.code === 'KeyC' && isCtrlKey) {
+             e.preventDefault();
+             handleCopy();
+        }
+        
+        if (e.code === 'KeyV' && isCtrlKey) {
+            e.preventDefault();
+            handlePaste();
+        }
+    }, [editingCell, selectedCells, acts, columns, handleSaveWithTemplateResolution, handleCopy, handlePaste]);
 
 
     useEffect(() => {
@@ -787,7 +761,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
 
     return (
-        <div className="h-full overflow-auto border border-slate-200 rounded-md relative focus:outline-none" ref={tableContainerRef} tabIndex={-1}>
+        <div className="h-full overflow-auto border border-slate-200 rounded-md relative focus:outline-none" ref={tableContainerRef} tabIndex={-1} onKeyDown={handleKeyDown}>
             <table className="min-w-full text-sm border-separate border-spacing-0">
                 <thead className="sticky top-0 bg-slate-50 z-20 shadow-sm">
                     <tr>
