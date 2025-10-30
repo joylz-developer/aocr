@@ -134,6 +134,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [isFilling, setIsFilling] = useState(false);
     const [fillTargetArea, setFillTargetArea] = useState<{ start: Coords, end: Coords } | null>(null);
 
+    const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+    const [selectionAnchorRow, setSelectionAnchorRow] = useState<number | null>(null);
+    const [isDraggingRowSelection, setIsDraggingRowSelection] = useState(false);
+
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const tableContainerRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
@@ -175,8 +179,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             resolvedAct.additionalInfo = resolve(settings.defaultAdditionalInfo, context);
         }
         
-        // Apply date template. If `defaultActDate` is not set (e.g. for old projects),
-        // fallback to old behavior of `date = workEndDate`.
         const dateTemplate = settings.defaultActDate !== undefined ? settings.defaultActDate : '{workEndDate}';
         resolvedAct.date = resolve(dateTemplate, context);
 
@@ -202,7 +204,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             updatedAct.designerOrgId = selectedGroup.designerOrgId;
             updatedAct.workPerformerOrgId = selectedGroup.workPerformerOrgId;
 
-            // Update details strings based on new org IDs
             updatedAct.builderDetails = selectedGroup.builderOrgId && orgMap.has(selectedGroup.builderOrgId) 
                 ? getOrgDetailsString(orgMap.get(selectedGroup.builderOrgId)!) 
                 : '';
@@ -220,7 +221,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         handleSaveWithTemplateResolution(updatedAct);
     };
 
-
     useEffect(() => {
         if (editingCell && editorRef.current) {
             const { rowIndex, colIndex } = editingCell;
@@ -235,15 +235,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     
             if (editorRef.current instanceof HTMLTextAreaElement) {
                 const el = editorRef.current;
-                // Defer to allow DOM to update with the value before calculating scrollHeight
                 setTimeout(() => {
-                    el.style.height = 'auto'; // Reset height
-                    el.style.height = `${el.scrollHeight}px`; // Set to content height
-                    // Move cursor to end of text
+                    el.style.height = 'auto';
+                    el.style.height = `${el.scrollHeight}px`;
                     el.selectionStart = el.selectionEnd = el.value.length;
                 }, 0);
             } else {
-                // For regular inputs, select the whole text
                 editorRef.current.select();
             }
         }
@@ -251,7 +248,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const handleEditorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setEditorValue(e.target.value);
-        // Auto-resize textarea
         if (e.target instanceof HTMLTextAreaElement) {
             e.target.style.height = 'auto';
             e.target.style.height = `${e.target.scrollHeight}px`;
@@ -275,9 +271,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         if (e.key === 'Escape') {
             e.preventDefault();
-            setEditingCell(null); // Discard changes
+            setEditingCell(null);
         }
-        // For input, Enter saves. For textarea, only Ctrl/Meta+Enter saves.
         if (e.key === 'Enter' && !e.shiftKey) {
             if (e.currentTarget instanceof HTMLInputElement || (e.currentTarget instanceof HTMLTextAreaElement && (e.ctrlKey || e.metaKey))) {
                 e.preventDefault();
@@ -307,13 +302,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
 
     const handleCellMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
+        if (selectedRows.size > 0) {
+            setSelectedRows(new Set());
+        }
         tableContainerRef.current?.focus({ preventScroll: true });
         
-        // Prevent text selection on double click
-        if (e.detail > 1) {
-            e.preventDefault();
-        }
-
+        if (e.detail > 1) e.preventDefault();
         setCopiedCells(null);
     
         const cellId = getCellId(rowIndex, colIndex);
@@ -480,16 +474,21 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (e.key === 'Escape') {
             e.preventDefault();
             setSelectedCells(new Set());
+            setSelectedRows(new Set());
             setActiveCell(null);
             setCopiedCells(null);
             e.currentTarget.blur();
             return;
         }
 
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) && selectedRows.size > 0) {
+            setSelectedRows(new Set());
+        }
+
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
         const isCtrlKey = isMac ? e.metaKey : e.ctrlKey;
 
-        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedCells.size > 0) {
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedCells.size > 0 && selectedRows.size === 0) {
             e.preventDefault();
             const updatedActsMap = new Map<string, Act>();
 
@@ -529,7 +528,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             e.preventDefault();
             handlePaste();
         }
-    }, [editingCell, selectedCells, acts, columns, handleSaveWithTemplateResolution, handleCopy, handlePaste]);
+    }, [editingCell, selectedCells, acts, columns, handleSaveWithTemplateResolution, handleCopy, handlePaste, selectedRows]);
 
 
     useEffect(() => {
@@ -563,7 +562,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         };
     }, [isDraggingSelection, activeCell]);
     
-    // Fill handle drag logic
     useEffect(() => {
         const getSelectionBounds = (cells: Set<string>): { minRow: number; maxRow: number; minCol: number; maxCol: number } | null => {
             const coordsList = Array.from(cells).map(id => {
@@ -589,9 +587,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 
                 let fillArea: { start: Coords, end: Coords } | null = null;
 
-                if (coords.rowIndex > maxRow) { // Dragging down
+                if (coords.rowIndex > maxRow) {
                      fillArea = { start: {rowIndex: maxRow + 1, colIndex: minCol}, end: {rowIndex: coords.rowIndex, colIndex: maxCol} };
-                } else if (coords.rowIndex < minRow) { // Dragging up
+                } else if (coords.rowIndex < minRow) {
                      fillArea = { start: {rowIndex: coords.rowIndex, colIndex: minCol}, end: {rowIndex: minRow - 1, colIndex: maxCol} };
                 }
                 setFillTargetArea(fillArea);
@@ -611,7 +609,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             const { minRow: selMinRow, maxRow: selMaxRow } = selectionBounds;
             const patternHeight = selMaxRow - selMinRow + 1;
             
-             // Get all unique column indices from the selection, sorted
             const selectedCols = Array.from(new Set(Array.from(selectedCells, id => parseInt(id.split(':')[1], 10)))).sort((a, b) => a - b);
 
             const { minRow: fillMinRow, maxRow: fillMaxRow } = normalizeSelection(fillTargetArea.start, fillTargetArea.end);
@@ -634,7 +631,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
                 for (const c of selectedCols) {
                     const sourceCellId = getCellId(patternRowIndex, c);
-                     // This check is important for patterns with holes
                     if (!selectedCells.has(sourceCellId)) continue;
 
                     const colKey = columns[c]?.key;
@@ -646,12 +642,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         updatedAct.date = sourceAct.workEndDate; 
                     } else if (colKey === 'commissionGroup') {
                          handleGroupChange(updatedAct, sourceAct.commissionGroupId || '');
-                         // handleGroupChange already saves, so we need to be careful
-                         // Let's modify the object directly and save at the end
                          const group = groups.find(g => g.id === sourceAct.commissionGroupId);
                          if (group) {
                             updatedAct.commissionGroupId = group.id;
-                            // Re-implement simplified logic here to avoid multiple saves
                             updatedAct.representatives = { ...group.representatives };
                             updatedAct.builderOrgId = group.builderOrgId;
                             updatedAct.contractorOrgId = group.contractorOrgId;
@@ -710,203 +703,303 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         window.addEventListener('mouseup', handleMouseUp);
     }, []);
 
-    const handleGenerate = (act: Act) => {
-        if (!template) {
-            alert('Шаблон не загружен.');
-            return;
-        }
-        generateDocument(template, act, people);
-    };
-
     const fillHandleCell = useMemo(() => {
         if (selectedCells.size === 0) return null;
-
-        let maxRow = -1;
-        let maxColInMaxRow = -1;
-
+        let maxRow = -1, maxColInMaxRow = -1;
         for (const cellId of selectedCells) {
             const [r, c] = cellId.split(':').map(Number);
             if (r > maxRow) {
                 maxRow = r;
                 maxColInMaxRow = c;
-            } else if (r === maxRow) {
-                if (c > maxColInMaxRow) {
-                    maxColInMaxRow = c;
-                }
+            } else if (r === maxRow && c > maxColInMaxRow) {
+                maxColInMaxRow = c;
             }
         }
-        
-        if (maxRow === -1) return null;
-
-        return { rowIndex: maxRow, colIndex: maxColInMaxRow };
-
+        return maxRow === -1 ? null : { rowIndex: maxRow, colIndex: maxColInMaxRow };
     }, [selectedCells]);
 
 
     const fillHandleCoords = useMemo(() => {
         if (!fillHandleCell) return null;
-    
         const { rowIndex, colIndex } = fillHandleCell;
         const cellElement = tableContainerRef.current?.querySelector(`[data-row-index="${rowIndex}"][data-col-index="${colIndex}"]`);
-    
         if (cellElement) {
             return {
                 top: (cellElement as HTMLElement).offsetTop + (cellElement as HTMLElement).offsetHeight - 4,
                 left: (cellElement as HTMLElement).offsetLeft + (cellElement as HTMLElement).offsetWidth - 4,
             };
         }
-        
         return null;
     }, [fillHandleCell]);
 
+    useEffect(() => {
+        const newSelectedCells = new Set<string>();
+        if (selectedRows.size > 0) {
+            const rowArray = Array.from(selectedRows);
+            const lastRow = Math.max(...rowArray);
+            
+            rowArray.forEach(rowIndex => {
+                for (let colIndex = 0; colIndex < columns.length; colIndex++) {
+                    newSelectedCells.add(getCellId(rowIndex, colIndex));
+                }
+            });
+            const lastCol = columns.length - 1;
+            setActiveCell({ rowIndex: lastRow, colIndex: lastCol });
+        } else {
+            if (!isDraggingSelection) setActiveCell(null);
+        }
+        setSelectedCells(newSelectedCells);
+    }, [selectedRows, columns, isDraggingSelection]);
+
+    const handleRowSelectorMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number) => {
+        e.preventDefault();
+        tableContainerRef.current?.focus({ preventScroll: true });
+        setCopiedCells(null);
+
+        let newSelectedRows: Set<number>;
+
+        if (e.shiftKey && selectionAnchorRow !== null) {
+            newSelectedRows = new Set();
+            const start = Math.min(selectionAnchorRow, rowIndex);
+            const end = Math.max(selectionAnchorRow, rowIndex);
+            for (let i = start; i <= end; i++) {
+                newSelectedRows.add(i);
+            }
+        } else if (e.ctrlKey || e.metaKey) {
+            newSelectedRows = new Set(selectedRows);
+            if (newSelectedRows.has(rowIndex)) {
+                newSelectedRows.delete(rowIndex);
+            } else {
+                newSelectedRows.add(rowIndex);
+            }
+            setSelectionAnchorRow(rowIndex);
+        } else {
+            newSelectedRows = new Set([rowIndex]);
+            setSelectionAnchorRow(rowIndex);
+        }
+        setSelectedRows(newSelectedRows);
+        setIsDraggingRowSelection(true);
+    };
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!isDraggingRowSelection || selectionAnchorRow === null) return;
+            const target = e.target as HTMLElement;
+            // FIX: Use generic parameter for `closest` to get a more specific element type (HTMLTableCellElement) which has the `dataset` property.
+            const cell = target.closest<HTMLTableCellElement>('td[data-row-index]');
+            if (!cell || !cell.dataset.rowIndex) return;
+
+            const currentRowIndex = parseInt(cell.dataset.rowIndex, 10);
+            
+            const start = Math.min(selectionAnchorRow, currentRowIndex);
+            const end = Math.max(selectionAnchorRow, currentRowIndex);
+            const newSelectedRows = new Set<number>();
+            for (let i = start; i <= end; i++) {
+                newSelectedRows.add(i);
+            }
+            setSelectedRows(newSelectedRows);
+        };
+
+        const handleMouseUp = () => setIsDraggingRowSelection(false);
+
+        if (isDraggingRowSelection) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp, { once: true });
+        }
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isDraggingRowSelection, selectionAnchorRow]);
+
+    const handleBulkDelete = () => {
+        if (window.confirm(`Вы уверены, что хотите удалить ${selectedRows.size} акт(ов)?`)) {
+            selectedRows.forEach(rowIndex => {
+                const actId = acts[rowIndex]?.id;
+                if (actId) {
+                    onDelete(actId);
+                }
+            });
+            setSelectedRows(new Set());
+        }
+    };
+    
+    const handleBulkDownload = () => {
+        if (!template) {
+            alert('Шаблон не загружен.');
+            return;
+        }
+        selectedRows.forEach(rowIndex => {
+            const act = acts[rowIndex];
+            if (act) {
+                generateDocument(template, act, people);
+            }
+        });
+    };
 
     return (
-        <div className="h-full overflow-auto border border-slate-200 rounded-md relative focus:outline-none" ref={tableContainerRef} tabIndex={-1} onKeyDown={handleKeyDown}>
-            <table className="min-w-full text-sm border-separate border-spacing-0">
-                <thead className="sticky top-0 bg-slate-50 z-20 shadow-sm">
-                    <tr>
-                        <th className="sticky left-0 bg-slate-50 p-0 w-16 min-w-[4rem] z-30 border-r border-b border-slate-200">
-                             <div className="w-full h-full flex items-center justify-center text-xs font-medium text-slate-500 uppercase tracking-wider">Действия</div>
-                        </th>
-                        {columns.map((col, colIndex) => (
-                            <th 
-                                key={col.key} 
-                                className={`px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 relative ${colIndex < columns.length -1 ? 'border-r' : ''}`}
-                                style={{ width: columnWidths[col.key] ? `${columnWidths[col.key]}px` : undefined }}
-                            >
-                                {col.label}
-                                 <div 
-                                    onMouseDown={(e) => handleResizeStart(e, col.key)}
-                                    className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize"
-                                 />
-                            </th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody className="bg-white">
-                    {acts.map((act, rowIndex) => (
-                        <tr key={act.id}>
-                            <td className="sticky left-0 bg-white p-2 w-16 min-w-[4rem] z-10 border-r border-b border-slate-200">
-                                <div className="flex items-center justify-center space-x-1">
-                                    <button onClick={() => handleGenerate(act)} className="p-1.5 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-full" title="Скачать .docx"><DownloadIcon /></button>
-                                    <button onClick={() => onDelete(act.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full" title="Удалить акт"><DeleteIcon /></button>
-                                </div>
-                            </td>
-                            {columns.map((col, colIndex) => {
-                                const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colIndex === colIndex;
-                                const cellId = getCellId(rowIndex, colIndex);
-                                const isActive = activeCell?.rowIndex === rowIndex && activeCell?.colIndex === colIndex;
-                                const isSelected = selectedCells.has(cellId);
-                                const isCopied = copiedCells?.has(cellId);
-
-                                const { minRow, maxRow, minCol, maxCol } = fillTargetArea ? normalizeSelection(fillTargetArea.start, fillTargetArea.end) : { minRow: -1, maxRow: -1, minCol: -1, maxCol: -1 };
-                                const isFillTarget = rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol;
-
-                                const cellClassParts = [
-                                    "p-0 border-b border-slate-200 relative transition-colors duration-100",
-                                    colIndex < columns.length - 1 ? 'border-r' : '',
-                                ];
-                                if (isFillTarget) {
-                                    cellClassParts.push('bg-blue-200');
-                                } else if (isSelected) {
-                                    cellClassParts.push('bg-blue-100');
-                                } else {
-                                    cellClassParts.push('bg-white');
-                                }
-                                const cellClass = cellClassParts.join(' ');
-                                
-                                const borderDivs = [];
-                                if (isSelected) {
-                                    const hasTop = !selectedCells.has(getCellId(rowIndex - 1, colIndex));
-                                    const hasBottom = !selectedCells.has(getCellId(rowIndex + 1, colIndex));
-                                    const hasLeft = !selectedCells.has(getCellId(rowIndex, colIndex - 1));
-                                    const hasRight = !selectedCells.has(getCellId(rowIndex, colIndex + 1));
-                                    
-                                    const classes: string[] = ['absolute', 'inset-0', 'border-blue-400', 'pointer-events-none', 'z-10'];
-                                    if(hasTop) classes.push('border-t');
-                                    if(hasBottom) classes.push('border-b');
-                                    if(hasLeft) classes.push('border-l');
-                                    if(hasRight) classes.push('border-r');
-                                    
-                                    borderDivs.push(<div key="selection-border" className={classes.join(' ')}></div>);
-                                }
-                                if (isCopied) {
-                                    borderDivs.push(<div key="copy-border" className="absolute inset-0 border-2 border-dashed border-green-500 pointer-events-none z-20"></div>);
-                                }
-                                if (isActive) {
-                                    borderDivs.push(<div key="active-border" className="absolute inset-0 border-2 border-blue-600 pointer-events-none z-20"></div>);
-                                }
-
-                                let cellContent;
-                                if (isEditing) {
-                                    if(col.type === 'custom_date') {
-                                        cellContent = <DateCellEditor act={act} onSave={handleSaveWithTemplateResolution} onClose={() => setEditingCell(null)} />
-                                    } else {
-                                        const EditorComponent = col.type === 'textarea' ? 'textarea' : 'input';
-                                        cellContent = (
-                                            <EditorComponent
-                                                ref={editorRef as any}
-                                                value={editorValue}
-                                                onChange={handleEditorChange}
-                                                onBlur={handleEditorSaveAndClose}
-                                                onKeyDown={handleEditorKeyDown}
-                                                type={col.type === 'date' ? 'date' : 'text'}
-                                                className={`absolute inset-0 w-full h-full p-2 border-2 border-blue-500 rounded-md z-30 resize-none text-sm outline-none`}
-                                                onClick={e => e.stopPropagation()}
-                                            />
-                                        );
-                                    }
-                                } else {
-                                    if(col.key === 'workDates') {
-                                         cellContent = `${act.workStartDate || '...'} - ${act.workEndDate || '...'}`;
-                                    } else if (col.key === 'commissionGroup') {
-                                        cellContent = (
-                                            <CustomSelect 
-                                                options={groupOptions} 
-                                                value={act.commissionGroupId || ''}
-                                                onChange={(value) => handleGroupChange(act, value)}
-                                                placeholder="-- Выберите группу --"
-                                                onCreateNew={handleCreateNewGroup}
-                                                buttonClassName="w-full h-full text-left bg-transparent border-none shadow-none py-2 px-3 focus:outline-none focus:ring-0 text-slate-900 flex justify-between items-center"
-                                                dropdownClassName="absolute z-50 mt-1 w-auto min-w-full bg-white shadow-lg rounded-md border border-slate-200 max-h-60"
-                                            />
-                                        );
-                                    } else {
-                                        const key = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
-                                        cellContent = act[key] || '';
-                                    }
-                                }
-                                
-                                return (
-                                    <td 
-                                        key={col.key}
-                                        className={cellClass}
-                                        data-row-index={rowIndex}
-                                        data-col-index={colIndex}
-                                        onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
-                                        onDoubleClick={() => handleCellDoubleClick(rowIndex, colIndex)}
-                                        onContextMenu={(e) => e.preventDefault()}
-                                    >
-                                        <div className="disable-cell-text-selection px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug relative">
-                                             {cellContent}
-                                        </div>
-                                        {borderDivs}
-                                    </td>
-                                );
-                            })}
+        <div className="h-full flex flex-col relative">
+            <div className="flex-grow overflow-auto border border-slate-200 rounded-md relative focus:outline-none" ref={tableContainerRef} tabIndex={-1} onKeyDown={handleKeyDown}>
+                <table className="min-w-full text-sm border-separate border-spacing-0">
+                    <thead className="sticky top-0 bg-slate-50 z-20 shadow-sm">
+                        <tr>
+                            <th className="sticky left-0 bg-slate-50 p-0 w-12 min-w-[3rem] z-30 border-r border-b border-slate-200"></th>
+                            {columns.map((col, colIndex) => (
+                                <th 
+                                    key={col.key} 
+                                    className={`px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 relative ${colIndex < columns.length -1 ? 'border-r' : ''}`}
+                                    style={{ width: columnWidths[col.key] ? `${columnWidths[col.key]}px` : undefined }}
+                                >
+                                    {col.label}
+                                     <div 
+                                        onMouseDown={(e) => handleResizeStart(e, col.key)}
+                                        className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize"
+                                     />
+                                </th>
+                            ))}
                         </tr>
-                    ))}
-                </tbody>
-            </table>
-             {fillHandleCoords && selectedCells.size > 0 && (
-                 <div
-                    className="absolute w-2 h-2 bg-blue-600 border border-white cursor-crosshair z-30"
-                    style={{ top: fillHandleCoords.top, left: fillHandleCoords.left }}
-                    onMouseDown={(e) => {
-                        e.stopPropagation();
-                        setIsFilling(true);
-                    }}
-                 />
+                    </thead>
+                    <tbody className="bg-white">
+                        {acts.map((act, rowIndex) => {
+                            const isRowSelected = selectedRows.has(rowIndex);
+                            return (
+                                <tr key={act.id}>
+                                    <td
+                                        className={`sticky left-0 p-0 w-12 min-w-[3rem] z-10 border-r border-b border-slate-200 text-center text-xs text-slate-400 cursor-pointer select-none transition-colors ${isRowSelected ? 'bg-blue-200' : 'bg-slate-50 hover:bg-slate-100'}`}
+                                        onMouseDown={(e) => handleRowSelectorMouseDown(e, rowIndex)}
+                                        data-row-index={rowIndex}
+                                    >
+                                        {rowIndex + 1}
+                                    </td>
+                                    {columns.map((col, colIndex) => {
+                                        const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colIndex === colIndex;
+                                        const cellId = getCellId(rowIndex, colIndex);
+                                        const isActive = activeCell?.rowIndex === rowIndex && activeCell?.colIndex === colIndex;
+                                        const isSelected = selectedCells.has(cellId);
+                                        const isCopied = copiedCells?.has(cellId);
+
+                                        const { minRow, maxRow, minCol, maxCol } = fillTargetArea ? normalizeSelection(fillTargetArea.start, fillTargetArea.end) : { minRow: -1, maxRow: -1, minCol: -1, maxCol: -1 };
+                                        const isFillTarget = rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol;
+
+                                        const cellClassParts = [
+                                            "p-0 border-b border-slate-200 relative transition-colors duration-100",
+                                            colIndex < columns.length - 1 ? 'border-r' : '',
+                                        ];
+                                        if (isFillTarget) cellClassParts.push('bg-blue-200');
+                                        else if (isSelected) cellClassParts.push('bg-blue-100');
+                                        else cellClassParts.push('bg-white');
+
+                                        const cellClass = cellClassParts.join(' ');
+                                        
+                                        const borderDivs = [];
+                                        if (isSelected) {
+                                            const hasTop = !selectedCells.has(getCellId(rowIndex - 1, colIndex));
+                                            const hasBottom = !selectedCells.has(getCellId(rowIndex + 1, colIndex));
+                                            const hasLeft = !selectedCells.has(getCellId(rowIndex, colIndex - 1));
+                                            const hasRight = !selectedCells.has(getCellId(rowIndex, colIndex + 1));
+                                            
+                                            const classes: string[] = ['absolute', 'inset-0', 'border-blue-400', 'pointer-events-none', 'z-10'];
+                                            if(hasTop) classes.push('border-t');
+                                            if(hasBottom) classes.push('border-b');
+                                            if(hasLeft) classes.push('border-l');
+                                            if(hasRight) classes.push('border-r');
+                                            
+                                            borderDivs.push(<div key="selection-border" className={classes.join(' ')}></div>);
+                                        }
+                                        if (isCopied) {
+                                            borderDivs.push(<div key="copy-border" className="absolute inset-0 border-2 border-dashed border-green-500 pointer-events-none z-20"></div>);
+                                        }
+                                        if (isActive) {
+                                            borderDivs.push(<div key="active-border" className="absolute inset-0 border-2 border-blue-600 pointer-events-none z-20"></div>);
+                                        }
+
+                                        let cellContent;
+                                        if (isEditing) {
+                                            if(col.type === 'custom_date') {
+                                                cellContent = <DateCellEditor act={act} onSave={handleSaveWithTemplateResolution} onClose={() => setEditingCell(null)} />
+                                            } else {
+                                                const EditorComponent = col.type === 'textarea' ? 'textarea' : 'input';
+                                                cellContent = (
+                                                    <EditorComponent
+                                                        ref={editorRef as any}
+                                                        value={editorValue}
+                                                        onChange={handleEditorChange}
+                                                        onBlur={handleEditorSaveAndClose}
+                                                        onKeyDown={handleEditorKeyDown}
+                                                        type={col.type === 'date' ? 'date' : 'text'}
+                                                        className={`absolute inset-0 w-full h-full p-2 border-2 border-blue-500 rounded-md z-30 resize-none text-sm outline-none`}
+                                                        onClick={e => e.stopPropagation()}
+                                                    />
+                                                );
+                                            }
+                                        } else {
+                                            if(col.key === 'workDates') {
+                                                 cellContent = `${act.workStartDate || '...'} - ${act.workEndDate || '...'}`;
+                                            } else if (col.key === 'commissionGroup') {
+                                                cellContent = (
+                                                    <CustomSelect 
+                                                        options={groupOptions} 
+                                                        value={act.commissionGroupId || ''}
+                                                        onChange={(value) => handleGroupChange(act, value)}
+                                                        placeholder="-- Выберите группу --"
+                                                        onCreateNew={handleCreateNewGroup}
+                                                        buttonClassName="w-full h-full text-left bg-transparent border-none shadow-none py-2 px-3 focus:outline-none focus:ring-0 text-slate-900 flex justify-between items-center"
+                                                        dropdownClassName="absolute z-50 mt-1 w-auto min-w-full bg-white shadow-lg rounded-md border border-slate-200 max-h-60"
+                                                    />
+                                                );
+                                            } else {
+                                                const key = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
+                                                cellContent = act[key] || '';
+                                            }
+                                        }
+                                        
+                                        return (
+                                            <td 
+                                                key={col.key}
+                                                className={cellClass}
+                                                data-row-index={rowIndex}
+                                                data-col-index={colIndex}
+                                                onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
+                                                onDoubleClick={() => handleCellDoubleClick(rowIndex, colIndex)}
+                                                onContextMenu={(e) => e.preventDefault()}
+                                            >
+                                                <div className="disable-cell-text-selection px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug relative">
+                                                     {cellContent}
+                                                </div>
+                                                {borderDivs}
+                                            </td>
+                                        );
+                                    })}
+                                </tr>
+                        )})}
+                    </tbody>
+                </table>
+                 {fillHandleCoords && selectedCells.size > 0 && (
+                     <div
+                        className="absolute w-2 h-2 bg-blue-600 border border-white cursor-crosshair z-30"
+                        style={{ top: fillHandleCoords.top, left: fillHandleCoords.left }}
+                        onMouseDown={(e) => {
+                            e.stopPropagation();
+                            setIsFilling(true);
+                        }}
+                     />
+                )}
+            </div>
+            {selectedRows.size > 0 && (
+                <div className="flex-shrink-0 flex justify-center p-2">
+                    <div className="bg-white shadow-lg rounded-md p-2 flex items-center gap-3 z-40 border border-slate-200 animate-fade-in-up">
+                        <span className="text-sm font-medium text-slate-600 px-2">
+                            Выбрано: {selectedRows.size}
+                        </span>
+                        <button onClick={handleBulkDownload} className="flex items-center gap-2 bg-green-50 text-green-700 px-4 py-1.5 rounded-md hover:bg-green-100 border border-green-200 transition-colors">
+                           <DownloadIcon /> Скачать
+                        </button>
+                        <button onClick={handleBulkDelete} className="flex items-center gap-2 bg-red-50 text-red-700 px-4 py-1.5 rounded-md hover:bg-red-100 border border-red-200 transition-colors">
+                            <DeleteIcon /> Удалить
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );
