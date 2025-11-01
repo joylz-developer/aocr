@@ -157,6 +157,7 @@ type Coords = { rowIndex: number; colIndex: number };
 const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, onSave, onDelete, setCurrentPage }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
+    const [editorError, setEditorError] = useState<string | null>(null);
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
     const [copiedCells, setCopiedCells] = useState<Set<string> | null>(null);
@@ -270,12 +271,34 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         let needsSave = false;
         
         if (col.key === 'workDates') {
-            const parts = editorValue.split('-').map(s => s.trim());
-            const start = parseDisplayDate(parts[0]);
-            const end = parts.length > 1 ? (parseDisplayDate(parts[1]) || start) : start;
-            if (start !== null) {
+             const parts = editorValue.split('-').map(s => s.trim());
+            const startDateStr = parts[0];
+            const endDateStr = parts.length > 1 ? parts[1] : startDateStr;
+
+            if (!startDateStr && editorValue.trim() === '') { // Allow clearing the field
+                updatedAct.workStartDate = '';
+                updatedAct.workEndDate = '';
+                needsSave = true;
+            } else {
+                const start = parseDisplayDate(startDateStr);
+                if (!start) {
+                    setEditorError(`Неверный формат даты начала: "${startDateStr}". Используйте ДД.ММ.ГГГГ.`);
+                    return; // Don't save or close, show error
+                }
+                
+                const end = parseDisplayDate(endDateStr);
+                if (!end) {
+                    setEditorError(`Неверный формат даты окончания: "${endDateStr}". Используйте ДД.ММ.ГГГГ.`);
+                    return; // Don't save or close, show error
+                }
+                
+                if (new Date(end) < new Date(start)) {
+                    setEditorError('Дата окончания не может быть раньше даты начала.');
+                    return; // Don't save or close, show error
+                }
+
                 updatedAct.workStartDate = start;
-                updatedAct.workEndDate = end || start;
+                updatedAct.workEndDate = end;
                 needsSave = true;
             }
         } else {
@@ -290,6 +313,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (needsSave) {
             handleSaveWithTemplateResolution(updatedAct);
         }
+        setEditorError(null);
         setEditingCell(null);
         setDatePopoverState(null); // Close popover when main editor closes
     }, [acts, columns, editingCell, editorValue, handleSaveWithTemplateResolution]);
@@ -354,6 +378,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const handleEditorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setEditorValue(e.target.value);
+        setEditorError(null); // Clear error as user types
         if (e.target instanceof HTMLTextAreaElement) {
             e.target.style.height = 'auto';
             e.target.style.height = `${e.target.scrollHeight}px`;
@@ -364,6 +389,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         e.stopPropagation();
         if (e.key === 'Escape') {
             e.preventDefault();
+            setEditorError(null);
             setEditingCell(null);
             setDatePopoverState(null);
         }
@@ -440,6 +466,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (col.key !== 'commissionGroup') {
             handleEditorSaveAndClose(); // Save any other editor
             setDatePopoverState(null); // Close any open popover
+            setEditorError(null); // Clear previous error
             setEditingCell({ rowIndex, colIndex });
         }
     };
@@ -849,7 +876,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             if (!isDraggingSelection) setActiveCell(null);
         }
         setSelectedCells(newSelectedCells);
-    }, [selectedRows, columns]);
+    }, [selectedRows, columns, isDraggingSelection]);
 
     const handleRowSelectorMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number) => {
         e.preventDefault();
@@ -1026,12 +1053,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                             value={editorValue}
                                                             onChange={handleEditorChange}
                                                             onKeyDown={handleEditorKeyDown}
-                                                            className="w-full h-full block bg-white box-border px-2 py-1.5 border-2 border-blue-500 rounded-md z-30 text-sm outline-none"
+                                                            className={`w-full h-full block bg-white box-border pr-8 px-2 py-1.5 border-2 rounded-md z-30 text-sm outline-none ${editorError ? 'border-red-500' : 'border-blue-500'}`}
                                                             onClick={e => e.stopPropagation()}
                                                         />
                                                         <button 
                                                             type="button" 
-                                                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-blue-600 rounded-full hover:bg-slate-100"
+                                                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-blue-600 rounded-full hover:bg-slate-100 z-40"
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 const cellRect = e.currentTarget.closest('td')!.getBoundingClientRect();
@@ -1048,6 +1075,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                         >
                                                             <CalendarIcon className="w-5 h-5"/>
                                                         </button>
+                                                        {editorError && (
+                                                            <div className="absolute top-full left-0 mt-1 px-2 py-1 bg-red-100 border border-red-300 text-red-700 text-xs rounded-md shadow-lg z-50 whitespace-normal">
+                                                                {editorError}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )
                                              } else {
