@@ -16,6 +16,7 @@ interface CustomSelectProps {
     dropdownClassName?: string;
     onCreateNew?: () => void;
     allowClear?: boolean;
+    showClearIcon?: boolean;
 }
 
 const CustomSelect: React.FC<CustomSelectProps> = ({ 
@@ -28,6 +29,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
     dropdownClassName,
     onCreateNew,
     allowClear = false,
+    showClearIcon = true,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -98,7 +100,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
                     {selectedOption ? selectedOption.label : placeholder}
                 </span>
                  <div className="flex items-center gap-1">
-                    {allowClear && value && (
+                    {allowClear && value && showClearIcon && (
                         <button
                             type="button"
                             onClick={handleClear}

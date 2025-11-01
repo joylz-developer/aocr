@@ -1039,8 +1039,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                             borderDivs.push(<div key="selection-border" className={classes.join(' ')}></div>);
                                         }
                                         if (isCopied) {
-                                            borderDivs.push(<div key="copy-flash" className="absolute inset-0 animate-copy-blink pointer-events-none z-10" />);
-                                            borderDivs.push(<div key="copy-border" className="absolute inset-0 border-2 border-dashed border-green-500 pointer-events-none z-20" />);
+                                            borderDivs.push(<div key="copy-border" className="copied-cell-overlay z-20" />);
                                         }
                                         if (isActive) {
                                             borderDivs.push(<div key="active-border" className="absolute inset-0 border-2 border-blue-600 pointer-events-none z-20"></div>);
@@ -1116,6 +1115,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                         placeholder="-- Выберите группу --"
                                                         onCreateNew={handleCreateNewGroup}
                                                         allowClear={true}
+                                                        showClearIcon={false}
                                                         buttonClassName="w-full h-full text-left bg-transparent border-none shadow-none py-2 px-3 focus:outline-none focus:ring-0 text-slate-900 flex justify-between items-center"
                                                         dropdownClassName="absolute z-50 mt-1 w-auto min-w-full bg-white shadow-lg rounded-md border border-slate-200 max-h-60"
                                                     />
