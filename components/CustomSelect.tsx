@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ChevronDownIcon, PlusIcon } from './Icons';
+import { ChevronDownIcon, PlusIcon, CloseIcon } from './Icons';
 
 export interface CustomSelectOption {
     value: string;
@@ -69,6 +69,11 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
         setIsOpen(false);
         setSearchTerm('');
     };
+
+    const handleClear = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onChange('');
+    };
     
     const toggleDropdown = () => {
         setIsOpen(prev => !prev);
@@ -81,7 +86,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
     const defaultDropdownClass = "absolute z-40 mt-1 w-full bg-white shadow-lg rounded-md border border-slate-200 max-h-60";
 
     return (
-        <div className={`relative ${className || ''}`} ref={selectRef}>
+        <div className={`relative group ${className || ''}`} ref={selectRef}>
             <button
                 type="button"
                 className={buttonClassName || defaultButtonClass}
@@ -92,7 +97,19 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
                 <span className={`truncate ${selectedOption ? 'text-slate-900' : 'text-slate-500'}`}>
                     {selectedOption ? selectedOption.label : placeholder}
                 </span>
-                <ChevronDownIcon className={`w-5 h-5 ml-2 text-slate-400 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'transform rotate-180' : ''}`} />
+                 <div className="flex items-center gap-1">
+                    {allowClear && value && (
+                        <button
+                            type="button"
+                            onClick={handleClear}
+                            className="p-0.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-200 scale-0 group-hover:scale-100 transition-transform focus:scale-100 focus:outline-none"
+                            aria-label="Очистить выбор"
+                        >
+                            <CloseIcon className="w-4 h-4" />
+                        </button>
+                    )}
+                     <ChevronDownIcon className={`w-5 h-5 text-slate-400 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'transform rotate-180' : ''}`} />
+                </div>
             </button>
 
             {isOpen && (
@@ -108,7 +125,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
                         />
                     </div>
                     <ul tabIndex={-1} role="listbox" className="py-1 overflow-y-auto max-h-[12.5rem]">
-                        {allowClear && (
+                        {allowClear && value && (
                             <li
                                 className={`px-3 py-2 cursor-pointer text-sm text-slate-500 italic hover:bg-slate-100`}
                                 onClick={() => handleSelect('')}

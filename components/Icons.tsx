@@ -65,3 +65,9 @@ export const GroupsIcon: React.FC<{ className?: string }> = ({ className }) => (
 export const ColumnsIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg className={className || "w-5 h-5"} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
 );
+
+export const CloseIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className || "w-5 h-5"} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+    </svg>
+);
