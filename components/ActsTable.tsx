@@ -157,7 +157,7 @@ type Coords = { rowIndex: number; colIndex: number };
 const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, onSave, onDelete, setCurrentPage }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
-    const [editorError, setEditorError] = useState<string | null>(null);
+    const [dateError, setDateError] = useState<string | null>(null);
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
     const [copiedCells, setCopiedCells] = useState<Set<string> | null>(null);
@@ -261,6 +261,33 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         handleSaveWithTemplateResolution(updatedAct);
     };
     
+    const validateAndParseDates = (value: string): { start: string | null, end: string | null, error: string | null } => {
+        const trimmedValue = value.trim();
+        if (trimmedValue === '' || trimmedValue === '-') {
+            return { start: '', end: '', error: null }; // Allow clearing
+        }
+    
+        const parts = trimmedValue.split('-').map(s => s.trim());
+        const startDateStr = parts[0];
+        const endDateStr = (parts.length > 1 && parts[1]) ? parts[1] : startDateStr;
+    
+        const start = parseDisplayDate(startDateStr);
+        if (!start) {
+            return { start: null, end: null, error: 'Неверный формат даты начала.' };
+        }
+    
+        const end = parseDisplayDate(endDateStr);
+        if (!end) {
+            return { start: null, end: null, error: 'Неверный формат даты окончания.' };
+        }
+    
+        if (new Date(end) < new Date(start)) {
+            return { start: null, end: null, error: 'Дата окончания не может быть раньше даты начала.' };
+        }
+    
+        return { start, end, error: null };
+    };
+    
     const handleEditorSaveAndClose = useCallback(() => {
         if (!editingCell) return;
         const { rowIndex, colIndex } = editingCell;
@@ -271,34 +298,19 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         let needsSave = false;
         
         if (col.key === 'workDates') {
-             const parts = editorValue.split('-').map(s => s.trim());
-            const startDateStr = parts[0];
-            const endDateStr = parts.length > 1 ? parts[1] : startDateStr;
-
-            if (!startDateStr && editorValue.trim() === '') { // Allow clearing the field
-                updatedAct.workStartDate = '';
-                updatedAct.workEndDate = '';
-                needsSave = true;
-            } else {
-                const start = parseDisplayDate(startDateStr);
-                if (!start) {
-                    setEditorError(`Неверный формат даты начала: "${startDateStr}". Используйте ДД.ММ.ГГГГ.`);
-                    return; // Don't save or close, show error
-                }
-                
-                const end = parseDisplayDate(endDateStr);
-                if (!end) {
-                    setEditorError(`Неверный формат даты окончания: "${endDateStr}". Используйте ДД.ММ.ГГГГ.`);
-                    return; // Don't save or close, show error
-                }
-                
-                if (new Date(end) < new Date(start)) {
-                    setEditorError('Дата окончания не может быть раньше даты начала.');
-                    return; // Don't save or close, show error
-                }
-
-                updatedAct.workStartDate = start;
-                updatedAct.workEndDate = end;
+            const { start, end, error } = validateAndParseDates(editorValue);
+            if (error) {
+                setDateError(error);
+                return; // Don't save, don't close
+            }
+            
+            setDateError(null);
+            const newStartDate = start || '';
+            const newEndDate = end || '';
+            
+            if (act.workStartDate !== newStartDate || act.workEndDate !== newEndDate) {
+                updatedAct.workStartDate = newStartDate;
+                updatedAct.workEndDate = newEndDate;
                 needsSave = true;
             }
         } else {
@@ -313,7 +325,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (needsSave) {
             handleSaveWithTemplateResolution(updatedAct);
         }
-        setEditorError(null);
         setEditingCell(null);
         setDatePopoverState(null); // Close popover when main editor closes
     }, [acts, columns, editingCell, editorValue, handleSaveWithTemplateResolution]);
@@ -378,7 +389,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const handleEditorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setEditorValue(e.target.value);
-        setEditorError(null); // Clear error as user types
+        setDateError(null);
         if (e.target instanceof HTMLTextAreaElement) {
             e.target.style.height = 'auto';
             e.target.style.height = `${e.target.scrollHeight}px`;
@@ -389,9 +400,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         e.stopPropagation();
         if (e.key === 'Escape') {
             e.preventDefault();
-            setEditorError(null);
             setEditingCell(null);
             setDatePopoverState(null);
+            setDateError(null);
         }
         if (e.key === 'Enter' && !e.shiftKey) {
             if (e.currentTarget instanceof HTMLInputElement || (e.currentTarget instanceof HTMLTextAreaElement && (e.ctrlKey || e.metaKey))) {
@@ -466,7 +477,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (col.key !== 'commissionGroup') {
             handleEditorSaveAndClose(); // Save any other editor
             setDatePopoverState(null); // Close any open popover
-            setEditorError(null); // Clear previous error
+            setDateError(null);
             setEditingCell({ rowIndex, colIndex });
         }
     };
@@ -1046,39 +1057,40 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
                                         if (isEditing) {
                                              if (col.key === 'workDates') {
+                                                const inputErrorClass = dateError ? "border-red-500 focus:border-red-500" : "border-blue-500";
                                                 cellContent = (
-                                                    <div ref={editorContainerRef} className="relative flex items-center w-full h-full group">
-                                                        <input
-                                                            ref={editorRef as any}
-                                                            value={editorValue}
-                                                            onChange={handleEditorChange}
-                                                            onKeyDown={handleEditorKeyDown}
-                                                            className={`w-full h-full block bg-white box-border pr-8 px-2 py-1.5 border-2 rounded-md z-30 text-sm outline-none ${editorError ? 'border-red-500' : 'border-blue-500'}`}
-                                                            onClick={e => e.stopPropagation()}
-                                                        />
-                                                        <button 
-                                                            type="button" 
-                                                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-blue-600 rounded-full hover:bg-slate-100 z-40"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                const cellRect = e.currentTarget.closest('td')!.getBoundingClientRect();
-                                                                const containerRect = tableContainerRef.current!.getBoundingClientRect();
-                                                                setDatePopoverState({
-                                                                    act: act,
-                                                                    position: {
-                                                                        top: cellRect.bottom - containerRect.top + 5,
-                                                                        left: cellRect.left - containerRect.left,
-                                                                        width: cellRect.width,
-                                                                    }
-                                                                });
-                                                            }}
-                                                        >
-                                                            <CalendarIcon className="w-5 h-5"/>
-                                                        </button>
-                                                        {editorError && (
-                                                            <div className="absolute top-full left-0 mt-1 px-2 py-1 bg-red-100 border border-red-300 text-red-700 text-xs rounded-md shadow-lg z-50 whitespace-normal">
-                                                                {editorError}
-                                                            </div>
+                                                    <div ref={editorContainerRef} className="w-full h-full">
+                                                        <div className="relative w-full">
+                                                            <input
+                                                                ref={editorRef as any}
+                                                                value={editorValue}
+                                                                onChange={handleEditorChange}
+                                                                onKeyDown={handleEditorKeyDown}
+                                                                className={`w-full h-full block bg-white box-border px-2 py-1.5 border-2 rounded-md z-30 text-sm outline-none ${inputErrorClass}`}
+                                                                onClick={e => e.stopPropagation()}
+                                                            />
+                                                            <button 
+                                                                type="button" 
+                                                                className="absolute right-1 top-1/2 -translate-y-1/2 z-40 p-1 text-slate-400 hover:text-blue-600 rounded-full hover:bg-slate-100"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const cellRect = e.currentTarget.closest('td')!.getBoundingClientRect();
+                                                                    const containerRect = tableContainerRef.current!.getBoundingClientRect();
+                                                                    setDatePopoverState({
+                                                                        act: act,
+                                                                        position: {
+                                                                            top: cellRect.bottom - containerRect.top + 5,
+                                                                            left: cellRect.left - containerRect.left,
+                                                                            width: cellRect.width,
+                                                                        }
+                                                                    });
+                                                                }}
+                                                            >
+                                                                <CalendarIcon className="w-5 h-5"/>
+                                                            </button>
+                                                        </div>
+                                                         {dateError && (
+                                                            <p className="text-red-600 text-xs pt-1 px-1">{dateError}</p>
                                                         )}
                                                     </div>
                                                 )
