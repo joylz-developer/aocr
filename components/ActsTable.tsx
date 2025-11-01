@@ -831,8 +831,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         const handleMouseMove = (e: MouseEvent) => {
             if (!isDraggingRowSelection || selectionAnchorRow === null) return;
             const target = e.target as HTMLElement;
-            // FIX: Use generic parameter for `closest` to get a more specific element type (HTMLTableCellElement) which has the `dataset` property.
-            const cell = target.closest<HTMLTableCellElement>('td[data-row-index]');
+            // Fix: The return type of `closest` is `Element | null`, which doesn't have a `dataset` property.
+            // Cast the result to `HTMLTableCellElement` to allow accessing `dataset`.
+            const cell = target.closest('td[data-row-index]') as HTMLTableCellElement | null;
             if (!cell || !cell.dataset.rowIndex) return;
 
             const currentRowIndex = parseInt(cell.dataset.rowIndex, 10);
@@ -902,14 +903,32 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         e.dataTransfer.setData('application/json', JSON.stringify(indicesToDrag));
     };
 
-    const handleDragOver = (e: React.DragEvent<HTMLTableRowElement>, targetRowIndex: number) => {
+    const handleDragOver = (e: React.DragEvent<HTMLTableSectionElement>) => {
         e.preventDefault();
         if (!isDragging) return;
+    
+        const target = e.target as HTMLElement;
+        const row = target.closest('tr[data-row-index]');
+    
+        if (!row) {
+            const lastRow = e.currentTarget.lastElementChild;
+            if (lastRow) {
+                const lastRowRect = lastRow.getBoundingClientRect();
+                if (e.clientY > lastRowRect.top + lastRowRect.height / 2) {
+                     if (dropTargetIndex !== acts.length) {
+                        setDropTargetIndex(acts.length);
+                     }
+                }
+            }
+            return;
+        }
         
-        const rect = e.currentTarget.getBoundingClientRect();
+        const targetRowIndex = parseInt(row.dataset.rowIndex as string, 10);
+        
+        const rect = row.getBoundingClientRect();
         const isAfter = e.clientY > rect.top + rect.height / 2;
         const newDropTargetIndex = isAfter ? targetRowIndex + 1 : targetRowIndex;
-
+    
         if (newDropTargetIndex !== dropTargetIndex) {
             setDropTargetIndex(newDropTargetIndex);
         }
@@ -917,9 +936,19 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const handleDrop = (e: React.DragEvent<HTMLElement>) => {
         e.preventDefault();
-        if (dropTargetIndex === null) return;
+        if (dropTargetIndex === null) {
+            setIsDragging(false);
+            return;
+        };
 
-        const draggedIndices = JSON.parse(e.dataTransfer.getData('application/json'));
+        const data = e.dataTransfer.getData('application/json');
+        if (!data) {
+            setIsDragging(false);
+            setDropTargetIndex(null);
+            return;
+        };
+
+        const draggedIndices = JSON.parse(data);
         onReorder(draggedIndices, dropTargetIndex);
         
         // Cleanup
@@ -964,7 +993,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                             ))}
                         </tr>
                     </thead>
-                    <tbody onDrop={handleDrop} onDragLeave={handleDragLeaveTable} onDragEnd={handleDragEnd} onDragOver={e => e.preventDefault()}>
+                    <tbody onDrop={handleDrop} onDragLeave={handleDragLeaveTable} onDragEnd={handleDragEnd} onDragOver={handleDragOver}>
                         {acts.map((act, rowIndex) => {
                             const isRowSelected = selectedRows.has(rowIndex);
                             const isDragged = isDragging && selectedRows.has(rowIndex);
@@ -977,7 +1006,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                             if (isLastRowWithDropAfter) trClassParts.push('drag-over-after');
 
                             return (
-                                <tr key={act.id} className={trClassParts.join(' ')} onDragOver={(e) => handleDragOver(e, rowIndex)}>
+                                <tr key={act.id} className={trClassParts.join(' ')} data-row-index={rowIndex}>
                                     <td
                                         draggable
                                         onDragStart={(e) => handleDragStart(e, rowIndex)}
