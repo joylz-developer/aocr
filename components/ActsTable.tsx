@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page } from '../types';
-import { DeleteIcon, DownloadIcon } from './Icons';
+import { DeleteIcon, DownloadIcon, CalendarIcon } from './Icons';
 import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
 import { ALL_COLUMNS } from './ActsTableConfig';
@@ -53,19 +53,11 @@ const DateEditorPopover: React.FC<{
     onClose: () => void;
     position: { top: number, left: number, width: number };
 }> = ({ act, onActChange, onClose, position }) => {
-    const [startDateStr, setStartDateStr] = useState(formatDateForDisplay(act.workStartDate));
-    const [endDateStr, setEndDateStr] = useState(formatDateForDisplay(act.workEndDate));
-    const [isStartValid, setIsStartValid] = useState(true);
-    const [isEndValid, setIsEndValid] = useState(true);
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') onClose();
-            if (e.key === 'Enter' && !e.shiftKey) {
-                 e.preventDefault();
-                 onClose();
-            }
         };
 
         const handleClickOutside = (event: MouseEvent) => {
@@ -84,46 +76,23 @@ const DateEditorPopover: React.FC<{
         };
     }, [onClose]);
 
-    useEffect(() => {
-        const parsedStart = parseDisplayDate(startDateStr);
-        const startIsValid = startDateStr === '' || !!parsedStart;
-        setIsStartValid(startIsValid);
-
-        if (startIsValid) {
-            const newStartDate = parsedStart || '';
-            let newEndDate = act.workEndDate;
-            
-            const parsedEnd = parseDisplayDate(endDateStr);
-            if(parsedEnd && parsedStart && new Date(parsedEnd) < new Date(parsedStart)) {
-                setEndDateStr(startDateStr); // Auto-correct end date
-                newEndDate = newStartDate;
-            } else {
-                newEndDate = parsedEnd || act.workEndDate;
-            }
-
-            if (act.workStartDate !== newStartDate || act.workEndDate !== newEndDate) {
-                onActChange({ ...act, workStartDate: newStartDate, workEndDate: newEndDate });
-            }
+    const handleDateChange = (field: 'workStartDate' | 'workEndDate', value: string) => {
+        const updatedAct = { ...act, [field]: value };
+        
+        // Ensure end date is not before start date
+        if (field === 'workStartDate' && value && updatedAct.workEndDate && new Date(updatedAct.workEndDate) < new Date(value)) {
+            updatedAct.workEndDate = value;
         }
-    }, [startDateStr, act.workEndDate, endDateStr]);
-
-    useEffect(() => {
-        const parsedEnd = parseDisplayDate(endDateStr);
-        const endIsValid = endDateStr === '' || !!parsedEnd;
-        setIsEndValid(endIsValid);
-
-        if (endIsValid) {
-            const newEndDate = parsedEnd || '';
-             if (act.workEndDate !== newEndDate) {
-                onActChange({ ...act, workEndDate: newEndDate });
-            }
+        if (field === 'workEndDate' && value && updatedAct.workStartDate && new Date(value) < new Date(updatedAct.workStartDate)) {
+            updatedAct.workStartDate = value;
         }
-    }, [endDateStr]);
+
+        onActChange(updatedAct);
+    };
     
     const addTime = (amount: number, unit: 'day' | 'week' | 'month') => {
-        const parsed = parseDisplayDate(startDateStr);
-        if (!parsed) return;
-        const [year, month, day] = parsed.split('-').map(Number);
+        if (!act.workStartDate) return;
+        const [year, month, day] = act.workStartDate.split('-').map(Number);
         const utcDate = new Date(Date.UTC(year, month - 1, day));
 
         if (unit === 'day') {
@@ -135,7 +104,7 @@ const DateEditorPopover: React.FC<{
         }
         
         const newEndDateYYYYMMDD = utcDate.toISOString().split('T')[0];
-        setEndDateStr(formatDateForDisplay(newEndDateYYYYMMDD));
+        handleDateChange('workEndDate', newEndDateYYYYMMDD);
     };
 
     const QuickAddButton: React.FC<{ children: React.ReactNode; onClick: () => void }> = ({ children, onClick }) => (
@@ -144,7 +113,7 @@ const DateEditorPopover: React.FC<{
         </button>
     );
 
-    const inputClass = "w-full p-1.5 border rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500";
+    const inputClass = "w-full p-1.5 border rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 border-slate-300";
 
     return (
         <div 
@@ -156,22 +125,20 @@ const DateEditorPopover: React.FC<{
             <div>
                 <label className="text-xs font-medium text-slate-600">Начало</label>
                 <input
-                    type="text"
-                    value={startDateStr}
-                    onChange={e => setStartDateStr(e.target.value)}
-                    placeholder="ДД.ММ.ГГГГ"
-                    autoFocus
-                    className={`${inputClass} ${isStartValid ? 'border-slate-300 focus:border-blue-500' : 'border-red-500'}`}
+                    type="date"
+                    value={act.workStartDate || ''}
+                    onChange={e => handleDateChange('workStartDate', e.target.value)}
+                    className={inputClass}
                 />
             </div>
              <div>
                 <label className="text-xs font-medium text-slate-600">Окончание</label>
                 <input
-                    type="text"
-                    value={endDateStr}
-                    onChange={e => setEndDateStr(e.target.value)}
-                    placeholder="ДД.ММ.ГГГГ"
-                    className={`${inputClass} ${isEndValid ? 'border-slate-300 focus:border-blue-500' : 'border-red-500'}`}
+                    type="date"
+                    value={act.workEndDate || ''}
+                    onChange={e => handleDateChange('workEndDate', e.target.value)}
+                     min={act.workStartDate}
+                    className={inputClass}
                 />
             </div>
             <div className="flex justify-start items-center gap-1">
@@ -197,9 +164,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [isFilling, setIsFilling] = useState(false);
     const [fillTargetArea, setFillTargetArea] = useState<{ start: Coords, end: Coords } | null>(null);
     
-    // State for the live date editor popover
-    const [liveEditingAct, setLiveEditingAct] = useState<Act | null>(null);
-    const [editorPosition, setEditorPosition] = useState<{ top: number, left: number, width: number } | null>(null);
+    const [datePopoverState, setDatePopoverState] = useState<{ act: Act; position: { top: number, left: number, width: number } } | null>(null);
 
     const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
     const [selectionAnchorRow, setSelectionAnchorRow] = useState<number | null>(null);
@@ -300,43 +265,47 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         const { rowIndex, colIndex } = editingCell;
         const act = acts[rowIndex];
         const col = columns[colIndex];
-        const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
         
-        const currentValue = act[columnKey] || '';
-        if (String(currentValue) !== editorValue) {
-            handleSaveWithTemplateResolution({ ...act, [columnKey]: editorValue });
+        let updatedAct = { ...act };
+        let needsSave = false;
+        
+        if (col.key === 'workDates') {
+            const parts = editorValue.split('-').map(s => s.trim());
+            const start = parseDisplayDate(parts[0]);
+            const end = parts.length > 1 ? (parseDisplayDate(parts[1]) || start) : start;
+            if (start !== null) {
+                updatedAct.workStartDate = start;
+                updatedAct.workEndDate = end || start;
+                needsSave = true;
+            }
+        } else {
+             const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
+            const currentValue = act[columnKey] || '';
+            if (String(currentValue) !== editorValue) {
+                (updatedAct as any)[columnKey] = editorValue;
+                needsSave = true;
+            }
+        }
+
+        if (needsSave) {
+            handleSaveWithTemplateResolution(updatedAct);
         }
         setEditingCell(null);
+        setDatePopoverState(null); // Close popover when main editor closes
     }, [acts, columns, editingCell, editorValue, handleSaveWithTemplateResolution]);
     
-    const handleDateEditorClose = useCallback(() => {
-        if (liveEditingAct) {
-            handleSaveWithTemplateResolution(liveEditingAct);
-        }
-        setLiveEditingAct(null);
-        setEditingCell(null);
-        setEditorPosition(null);
-    }, [liveEditingAct, handleSaveWithTemplateResolution]);
 
     useEffect(() => {
-        // Effect should only run when a cell is being edited.
         if (!editingCell) return;
     
         const handleClickOutside = (event: MouseEvent) => {
-            const col = columns[editingCell.colIndex];
-            // The custom date editor handles its own closing logic.
-            if (col?.type === 'custom_date') {
-                return;
-            }
+            if (datePopoverState) return; // Popover will handle its own closing
     
-            // If the click is outside the editor container, save and close.
             if (editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
                 handleEditorSaveAndClose();
             }
         };
     
-        // Defer attachment of the listener to prevent the double-click that
-        // opens the editor from being caught and immediately closing it.
         const timerId = setTimeout(() => {
             document.addEventListener('mousedown', handleClickOutside);
         }, 0);
@@ -345,7 +314,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             clearTimeout(timerId);
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [editingCell, columns, handleEditorSaveAndClose]);
+    }, [editingCell, datePopoverState, handleEditorSaveAndClose]);
 
 
     useEffect(() => {
@@ -354,10 +323,20 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             const act = acts[rowIndex];
             const col = columns[colIndex];
             
-            const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
-            const initialValue = col.type === 'date' ? formatDateForDisplay(act[columnKey] as string || '') : (act[columnKey] || '');
-            setEditorValue(String(initialValue));
+            let initialValue;
+            if (col.key === 'workDates') {
+                const start = formatDateForDisplay(act.workStartDate);
+                const end = formatDateForDisplay(act.workEndDate);
+                initialValue = (start && end) ? `${start} - ${end}` : (start || '');
+            } else if (col.type === 'date') {
+                const columnKey = col.key as keyof Act;
+                initialValue = formatDateForDisplay(act[columnKey] as string || '');
+            } else {
+                const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
+                initialValue = act[columnKey] || '';
+            }
             
+            setEditorValue(String(initialValue));
             editorRef.current.focus();
     
             if (editorRef.current instanceof HTMLTextAreaElement) {
@@ -386,6 +365,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (e.key === 'Escape') {
             e.preventDefault();
             setEditingCell(null);
+            setDatePopoverState(null);
         }
         if (e.key === 'Enter' && !e.shiftKey) {
             if (e.currentTarget instanceof HTMLInputElement || (e.currentTarget instanceof HTMLTextAreaElement && (e.ctrlKey || e.metaKey))) {
@@ -457,28 +437,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
         const col = columns[colIndex];
         
-        if (col.type === 'custom_date') {
-            // Close any other active editor first
-            handleEditorSaveAndClose();
-            
-            const cellRect = e.currentTarget.getBoundingClientRect();
-            const containerRect = tableContainerRef.current?.getBoundingClientRect();
-
-            if (containerRect) {
-                setEditorPosition({
-                    top: cellRect.bottom - containerRect.top + 5,
-                    left: cellRect.left - containerRect.left,
-                    width: cellRect.width,
-                });
-            }
-            setLiveEditingAct(acts[rowIndex]);
-            setEditingCell({ rowIndex, colIndex });
-
-        } else if (col.key !== 'commissionGroup') {
-            // Close date editor if it's open
-            if(liveEditingAct) {
-                handleDateEditorClose();
-            }
+        if (col.key !== 'commissionGroup') {
+            handleEditorSaveAndClose(); // Save any other editor
+            setDatePopoverState(null); // Close any open popover
             setEditingCell({ rowIndex, colIndex });
         }
     };
@@ -1002,8 +963,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     <tbody className="bg-white">
                         {acts.map((act, rowIndex) => {
                             const isRowSelected = selectedRows.has(rowIndex);
-                            const isEditingThisRow = editingCell?.rowIndex === rowIndex;
-                            const actToDisplay = isEditingThisRow && liveEditingAct ? liveEditingAct : act;
 
                             return (
                                 <tr key={act.id}>
@@ -1057,35 +1016,68 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         }
 
                                         let cellContent;
-                                        const isStandardEditorActive = isEditing && col.type !== 'custom_date';
 
-                                        if (isStandardEditorActive) {
-                                            const EditorComponent = col.type === 'textarea' ? 'textarea' : 'input';
-                                            cellContent = (
-                                                <div ref={editorContainerRef}>
-                                                    <EditorComponent
-                                                        ref={editorRef as any}
-                                                        value={editorValue}
-                                                        onChange={handleEditorChange}
-                                                        onKeyDown={handleEditorKeyDown}
-                                                        type={col.type === 'date' ? 'text' : 'text'}
-                                                        className={`w-full block bg-white box-border px-2 py-1.5 border-2 border-blue-500 rounded-md z-30 resize-none text-sm outline-none`}
-                                                        rows={col.type === 'textarea' ? 1 : undefined}
-                                                        onClick={e => e.stopPropagation()}
-                                                    />
-                                                </div>
-                                            );
+                                        if (isEditing) {
+                                             if (col.key === 'workDates') {
+                                                cellContent = (
+                                                    <div ref={editorContainerRef} className="relative flex items-center w-full h-full group">
+                                                        <input
+                                                            ref={editorRef as any}
+                                                            value={editorValue}
+                                                            onChange={handleEditorChange}
+                                                            onKeyDown={handleEditorKeyDown}
+                                                            className="w-full h-full block bg-white box-border px-2 py-1.5 border-2 border-blue-500 rounded-md z-30 text-sm outline-none"
+                                                            onClick={e => e.stopPropagation()}
+                                                        />
+                                                        <button 
+                                                            type="button" 
+                                                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-blue-600 rounded-full hover:bg-slate-100"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const cellRect = e.currentTarget.closest('td')!.getBoundingClientRect();
+                                                                const containerRect = tableContainerRef.current!.getBoundingClientRect();
+                                                                setDatePopoverState({
+                                                                    act: act,
+                                                                    position: {
+                                                                        top: cellRect.bottom - containerRect.top + 5,
+                                                                        left: cellRect.left - containerRect.left,
+                                                                        width: cellRect.width,
+                                                                    }
+                                                                });
+                                                            }}
+                                                        >
+                                                            <CalendarIcon className="w-5 h-5"/>
+                                                        </button>
+                                                    </div>
+                                                )
+                                             } else {
+                                                const EditorComponent = col.type === 'textarea' ? 'textarea' : 'input';
+                                                cellContent = (
+                                                    <div ref={editorContainerRef} className="w-full h-full">
+                                                        <EditorComponent
+                                                            ref={editorRef as any}
+                                                            value={editorValue}
+                                                            onChange={handleEditorChange}
+                                                            onKeyDown={handleEditorKeyDown}
+                                                            type={'text'}
+                                                            className={`w-full h-full block bg-white box-border px-2 py-1.5 border-2 border-blue-500 rounded-md z-30 resize-none text-sm outline-none`}
+                                                            rows={col.type === 'textarea' ? 1 : undefined}
+                                                            onClick={e => e.stopPropagation()}
+                                                        />
+                                                    </div>
+                                                );
+                                            }
                                         } else {
                                             if(col.key === 'workDates') {
-                                                const start = formatDateForDisplay(actToDisplay.workStartDate);
-                                                const end = formatDateForDisplay(actToDisplay.workEndDate);
+                                                const start = formatDateForDisplay(act.workStartDate);
+                                                const end = formatDateForDisplay(act.workEndDate);
                                                 cellContent = (start && end) ? `${start} - ${end}` : '...';
                                             } else if (col.key === 'commissionGroup') {
                                                 cellContent = (
                                                     <CustomSelect 
                                                         options={groupOptions} 
-                                                        value={actToDisplay.commissionGroupId || ''}
-                                                        onChange={(value) => handleGroupChange(actToDisplay, value)}
+                                                        value={act.commissionGroupId || ''}
+                                                        onChange={(value) => handleGroupChange(act, value)}
                                                         placeholder="-- Выберите группу --"
                                                         onCreateNew={handleCreateNewGroup}
                                                         allowClear={true}
@@ -1094,11 +1086,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                     />
                                                 );
                                             } else if (col.type === 'date') {
-                                                cellContent = formatDateForDisplay(actToDisplay[col.key as keyof Act] as string);
+                                                cellContent = formatDateForDisplay(act[col.key as keyof Act] as string);
                                             }
                                             else {
                                                 const key = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
-                                                cellContent = actToDisplay[key] || '';
+                                                cellContent = act[key] || '';
                                             }
                                         }
                                         
@@ -1112,7 +1104,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 onDoubleClick={(e) => handleCellDoubleClick(e, rowIndex, colIndex)}
                                                 onContextMenu={(e) => e.preventDefault()}
                                             >
-                                                <div className={isStandardEditorActive
+                                                <div className={isEditing
                                                     ? "relative w-full h-full"
                                                     : "disable-cell-text-selection px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug relative"
                                                 }>
@@ -1127,12 +1119,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     </tbody>
                 </table>
                 
-                {liveEditingAct && editorPosition && (
+                {datePopoverState && (
                     <DateEditorPopover
-                        act={liveEditingAct}
-                        onActChange={setLiveEditingAct}
-                        onClose={handleDateEditorClose}
-                        position={editorPosition}
+                        act={datePopoverState.act}
+                        onActChange={(updatedAct) => {
+                           setDatePopoverState(prev => prev ? { ...prev, act: updatedAct } : null);
+                           handleSaveWithTemplateResolution(updatedAct);
+                        }}
+                        onClose={() => setDatePopoverState(null)}
+                        position={datePopoverState.position}
                     />
                 )}
 
