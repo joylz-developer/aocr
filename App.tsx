@@ -70,7 +70,7 @@ const App: React.FC = () => {
             if (exists) {
                 return prevActs.map(a => (a.id === actToSave.id ? actToSave : a));
             }
-            return [...prevActs, actToSave]; // Sorting is now handled by reordering
+            return [...prevActs, actToSave].sort((a, b) => a.date.localeCompare(b.date));
         });
     }, [setActs]);
 
@@ -78,28 +78,6 @@ const App: React.FC = () => {
         if (window.confirm('Вы уверены, что хотите удалить этот акт?')) {
             setActs(prevActs => prevActs.filter(a => a.id !== id));
         }
-    }, [setActs]);
-
-    const handleReorderActs = useCallback((draggedIndices: number[], dropIndex: number) => {
-        setActs(prevActs => {
-            const validDraggedIndices = draggedIndices.filter(i => i >= 0 && i < prevActs.length).sort((a,b) => a - b);
-            if (validDraggedIndices.length === 0) return prevActs;
-            
-            const draggedItems = validDraggedIndices.map(i => prevActs[i]);
-            const remainingItems = prevActs.filter((_, i) => !validDraggedIndices.includes(i));
-            
-            // Adjust drop index because we removed items.
-            const adjustment = validDraggedIndices.filter(i => i < dropIndex).length;
-            const adjustedDropIndex = dropIndex - adjustment;
-            
-            const newActs = [
-                ...remainingItems.slice(0, adjustedDropIndex),
-                ...draggedItems,
-                ...remainingItems.slice(adjustedDropIndex)
-            ];
-
-            return newActs;
-        });
     }, [setActs]);
     
     const handleSavePerson = useCallback((personToSave: Person) => {
@@ -253,7 +231,7 @@ const App: React.FC = () => {
         const mergeOrReplace = <T extends {id: string}>(
             key: 'acts' | 'people' | 'organizations' | 'groups',
             setData: React.Dispatch<React.SetStateAction<T[]>>,
-            sortFn: ((a: T, b: T) => number) | null // Allow null for acts
+            sortFn: (a: T, b: T) => number
         ) => {
             if (importSettings[key]?.import && importData[key]) {
                  if (importSettings[key].mode === 'replace') {
@@ -265,14 +243,13 @@ const App: React.FC = () => {
                     setData(prev => {
                         const itemMap = new Map(prev.map(item => [item.id, item]));
                         selectedItems.forEach(item => itemMap.set(item.id, item));
-                        const newArray = Array.from(itemMap.values());
-                        return sortFn ? newArray.sort(sortFn) : newArray;
+                        return Array.from(itemMap.values()).sort(sortFn);
                     });
                 }
             }
         };
 
-        mergeOrReplace('acts', setActs, null); // No sorting for acts, preserve order
+        mergeOrReplace('acts', setActs, (a, b) => a.date.localeCompare(b.date));
         mergeOrReplace('people', setPeople, (a,b) => a.name.localeCompare(b.name));
         mergeOrReplace('organizations', setOrganizations, (a,b) => a.name.localeCompare(b.name));
         mergeOrReplace('groups', setGroups, (a,b) => a.name.localeCompare(b.name));
@@ -299,7 +276,6 @@ const App: React.FC = () => {
                             settings={settings}
                             onSave={handleSaveAct} 
                             onDelete={handleDeleteAct}
-                            onReorder={handleReorderActs}
                             setCurrentPage={setCurrentPage}
                         />;
             case 'people':

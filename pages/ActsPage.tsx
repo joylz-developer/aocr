@@ -15,7 +15,6 @@ interface ActsPageProps {
     settings: ProjectSettings;
     onSave: (act: Act) => void;
     onDelete: (id: string) => void;
-    onReorder: (draggedIndices: number[], dropIndex: number) => void;
     setCurrentPage: (page: Page) => void;
 }
 
@@ -110,7 +109,7 @@ const ColumnPicker: React.FC<{
 };
 
 
-const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onDelete, onReorder, setCurrentPage }) => {
+const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onDelete, setCurrentPage }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
         'acts_table_visible_columns_v3', 
@@ -186,7 +185,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     visibleColumns={visibleColumns}
                     onSave={onSave}
                     onDelete={onDelete}
-                    onReorder={onReorder}
                     setCurrentPage={setCurrentPage}
                 />
             </div>
