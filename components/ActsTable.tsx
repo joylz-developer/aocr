@@ -1039,7 +1039,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                             borderDivs.push(<div key="selection-border" className={classes.join(' ')}></div>);
                                         }
                                         if (isCopied) {
-                                            borderDivs.push(<div key="copy-border" className="absolute inset-0 border-2 border-dashed border-green-500 pointer-events-none z-20"></div>);
+                                            borderDivs.push(<div key="copy-flash" className="absolute inset-0 animate-copy-flash pointer-events-none z-10" />);
+                                            borderDivs.push(<div key="copy-border" className="absolute inset-0 border-2 border-dashed border-green-500 pointer-events-none z-20" />);
                                         }
                                         if (isActive) {
                                             borderDivs.push(<div key="active-border" className="absolute inset-0 border-2 border-blue-600 pointer-events-none z-20"></div>);

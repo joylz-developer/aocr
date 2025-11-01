@@ -117,6 +117,19 @@
   .animate-fade-in-up {
     animation: fadeIn-up 0.3s ease-out forwards;
   }
+
+  @keyframes copy-flash-animation {
+    from {
+      background-color: rgba(74, 222, 128, 0.4); /* semi-transparent green-400 */
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+
+  .animate-copy-flash {
+    animation: copy-flash-animation 0.7s ease-out forwards;
+  }
 </style>
 </head>
 <body class="bg-slate-100 text-slate-800">
