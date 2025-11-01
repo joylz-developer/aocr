@@ -19,20 +19,53 @@ interface ActsTableProps {
     setCurrentPage: (page: Page) => void;
 }
 
+const formatDateForDisplay = (dateString: string): string => {
+    if (!dateString) return '';
+    const dateParts = dateString.split('-');
+    if (dateParts.length !== 3) return dateString; // Return original if not in YYYY-MM-DD format
+    const [year, month, day] = dateParts;
+    return `${day}.${month}.${year}`;
+};
+
+const parseDisplayDate = (dateString: string): string | null => {
+    if (!dateString) return null;
+    const parts = dateString.match(/^(\d{1,2})\.?(\d{1,2})\.?(\d{4})$/);
+    if (!parts) return null;
+
+    const day = parseInt(parts[1], 10);
+    const month = parseInt(parts[2], 10);
+    const year = parseInt(parts[3], 10);
+
+    if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1900 || year > 2100) return null;
+    
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+        return null; // Invalid date like 31.02.2024
+    }
+
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+};
+
+
 const DateEditorPopover: React.FC<{
     act: Act;
     onActChange: (act: Act) => void;
     onClose: () => void;
-    position: { top: number, left: number };
+    position: { top: number, left: number, width: number };
 }> = ({ act, onActChange, onClose, position }) => {
-    const [startDate, setStartDate] = useState(act.workStartDate || '');
-    const [endDate, setEndDate] = useState(act.workEndDate || '');
+    const [startDateStr, setStartDateStr] = useState(formatDateForDisplay(act.workStartDate));
+    const [endDateStr, setEndDateStr] = useState(formatDateForDisplay(act.workEndDate));
+    const [isStartValid, setIsStartValid] = useState(true);
+    const [isEndValid, setIsEndValid] = useState(true);
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') onClose();
-            if (e.key === 'Enter' && !e.shiftKey) onClose();
+            if (e.key === 'Enter' && !e.shiftKey) {
+                 e.preventDefault();
+                 onClose();
+            }
         };
 
         const handleClickOutside = (event: MouseEvent) => {
@@ -52,23 +85,45 @@ const DateEditorPopover: React.FC<{
     }, [onClose]);
 
     useEffect(() => {
-        if (act.workStartDate !== startDate || act.workEndDate !== endDate) {
-            onActChange({ ...act, workStartDate: startDate, workEndDate: endDate });
-        }
-    }, [startDate, endDate]);
+        const parsedStart = parseDisplayDate(startDateStr);
+        const startIsValid = startDateStr === '' || !!parsedStart;
+        setIsStartValid(startIsValid);
 
+        if (startIsValid) {
+            const newStartDate = parsedStart || '';
+            let newEndDate = act.workEndDate;
+            
+            const parsedEnd = parseDisplayDate(endDateStr);
+            if(parsedEnd && parsedStart && new Date(parsedEnd) < new Date(parsedStart)) {
+                setEndDateStr(startDateStr); // Auto-correct end date
+                newEndDate = newStartDate;
+            } else {
+                newEndDate = parsedEnd || act.workEndDate;
+            }
 
-    const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newStartDate = e.target.value;
-        setStartDate(newStartDate);
-        if (!endDate || new Date(endDate) < new Date(newStartDate)) {
-            setEndDate(newStartDate);
+            if (act.workStartDate !== newStartDate || act.workEndDate !== newEndDate) {
+                onActChange({ ...act, workStartDate: newStartDate, workEndDate: newEndDate });
+            }
         }
-    };
+    }, [startDateStr, act.workEndDate, endDateStr]);
+
+    useEffect(() => {
+        const parsedEnd = parseDisplayDate(endDateStr);
+        const endIsValid = endDateStr === '' || !!parsedEnd;
+        setIsEndValid(endIsValid);
+
+        if (endIsValid) {
+            const newEndDate = parsedEnd || '';
+             if (act.workEndDate !== newEndDate) {
+                onActChange({ ...act, workEndDate: newEndDate });
+            }
+        }
+    }, [endDateStr]);
     
     const addTime = (amount: number, unit: 'day' | 'week' | 'month') => {
-        if (!startDate) return;
-        const [year, month, day] = startDate.split('-').map(Number);
+        const parsed = parseDisplayDate(startDateStr);
+        if (!parsed) return;
+        const [year, month, day] = parsed.split('-').map(Number);
         const utcDate = new Date(Date.UTC(year, month - 1, day));
 
         if (unit === 'day') {
@@ -79,7 +134,8 @@ const DateEditorPopover: React.FC<{
             utcDate.setUTCMonth(utcDate.getUTCMonth() + amount);
         }
         
-        setEndDate(utcDate.toISOString().split('T')[0]);
+        const newEndDateYYYYMMDD = utcDate.toISOString().split('T')[0];
+        setEndDateStr(formatDateForDisplay(newEndDateYYYYMMDD));
     };
 
     const QuickAddButton: React.FC<{ children: React.ReactNode; onClick: () => void }> = ({ children, onClick }) => (
@@ -88,31 +144,34 @@ const DateEditorPopover: React.FC<{
         </button>
     );
 
+    const inputClass = "w-full p-1.5 border rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500";
+
     return (
         <div 
             ref={containerRef} 
             className="absolute bg-white p-3 border-2 border-blue-500 rounded-md z-40 flex flex-col gap-3 shadow-lg animate-fade-in-up" 
-            style={{ top: position.top, left: position.left }}
+            style={{ top: position.top, left: position.left, minWidth: position.width }}
             onClick={e => e.stopPropagation()}
         >
             <div>
                 <label className="text-xs font-medium text-slate-600">Начало</label>
                 <input
-                    type="date"
-                    value={startDate}
-                    onChange={handleStartDateChange}
+                    type="text"
+                    value={startDateStr}
+                    onChange={e => setStartDateStr(e.target.value)}
+                    placeholder="ДД.ММ.ГГГГ"
                     autoFocus
-                    className="w-full p-1 border border-slate-300 rounded text-sm bg-white"
+                    className={`${inputClass} ${isStartValid ? 'border-slate-300 focus:border-blue-500' : 'border-red-500'}`}
                 />
             </div>
              <div>
                 <label className="text-xs font-medium text-slate-600">Окончание</label>
                 <input
-                    type="date"
-                    value={endDate}
-                    min={startDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full p-1 border border-slate-300 rounded text-sm bg-white"
+                    type="text"
+                    value={endDateStr}
+                    onChange={e => setEndDateStr(e.target.value)}
+                    placeholder="ДД.ММ.ГГГГ"
+                    className={`${inputClass} ${isEndValid ? 'border-slate-300 focus:border-blue-500' : 'border-red-500'}`}
                 />
             </div>
             <div className="flex justify-start items-center gap-1">
@@ -140,7 +199,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     
     // State for the live date editor popover
     const [liveEditingAct, setLiveEditingAct] = useState<Act | null>(null);
-    const [editorPosition, setEditorPosition] = useState<{ top: number, left: number } | null>(null);
+    const [editorPosition, setEditorPosition] = useState<{ top: number, left: number, width: number } | null>(null);
 
     const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
     const [selectionAnchorRow, setSelectionAnchorRow] = useState<number | null>(null);
@@ -171,10 +230,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const handleSaveWithTemplateResolution = useCallback((actToSave: Act) => {
         const resolvedAct = { ...actToSave };
 
-        const resolve = (template: string, contextAct: Act) => {
-            if (!template || typeof template !== 'string') return template;
-            return template.replace(/\{(\w+)\}/g, (_, key) => {
-                const value = (contextAct as any)[key];
+        const resolve = (templateStr: string, contextAct: Act) => {
+            if (!templateStr || typeof templateStr !== 'string') return templateStr;
+            return templateStr.replace(/\{(\w+)\}/g, (_, key) => {
+                let value;
+                 if (key === 'workStartDate' || key === 'workEndDate') {
+                    value = formatDateForDisplay((contextAct as any)[key]);
+                } else {
+                    value = (contextAct as any)[key];
+                }
                 return value !== undefined && value !== null ? String(value) : '';
             });
         };
@@ -189,7 +253,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
         
         const dateTemplate = settings.defaultActDate !== undefined ? settings.defaultActDate : '{workEndDate}';
-        resolvedAct.date = resolve(dateTemplate, context);
+        const resolvedDateString = resolve(dateTemplate, context);
+        resolvedAct.date = parseDisplayDate(resolvedDateString) || resolvedAct.date;
 
         onSave(resolvedAct);
     }, [onSave, settings]);
@@ -290,7 +355,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             const col = columns[colIndex];
             
             const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
-            const initialValue = act[columnKey] || '';
+            const initialValue = col.type === 'date' ? formatDateForDisplay(act[columnKey] as string || '') : (act[columnKey] || '');
             setEditorValue(String(initialValue));
             
             editorRef.current.focus();
@@ -403,6 +468,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 setEditorPosition({
                     top: cellRect.bottom - containerRect.top + 5,
                     left: cellRect.left - containerRect.left,
+                    width: cellRect.width,
                 });
             }
             setLiveEditingAct(acts[rowIndex]);
@@ -442,10 +508,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         const col = columns[c];
                         if (act && col) {
                             if (col.key === 'workDates') {
-                                rowData.push(`${act.workStartDate || ''} - ${act.workEndDate || ''}`);
+                                rowData.push(`${formatDateForDisplay(act.workStartDate)} - ${formatDateForDisplay(act.workEndDate)}`);
                             } else if (col.key === 'commissionGroup') {
                                 const group = groups.find(g => g.id === act.commissionGroupId);
                                 rowData.push(group ? group.name : '');
+                            } else if (col.type === 'date') {
+                                rowData.push(formatDateForDisplay(act[col.key as keyof Act] as string));
                             } else {
                                  const key = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
                                 rowData.push(act[key] || '');
@@ -496,8 +564,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
                     if (col.key === 'workDates') {
                         const parts = cellData.split(' - ').map(s => s.trim());
-                        const start = parts[0] || '';
-                        const end = parts.length > 1 ? (parts[1] || start) : start;
+                        const start = parseDisplayDate(parts[0]) || '';
+                        const end = parts.length > 1 ? (parseDisplayDate(parts[1]) || start) : start;
                         updatedAct.workStartDate = start;
                         updatedAct.workEndDate = end;
                     } else if (col.key === 'commissionGroup') {
@@ -505,6 +573,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         if(group) {
                             updatedAct.commissionGroupId = group.id;
                         }
+                    } else if (col.type === 'date') {
+                        const columnKey = col.key as keyof Act;
+                        (updatedAct as any)[columnKey] = parseDisplayDate(cellData) || '';
                     }
                     else {
                         const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
@@ -986,7 +1057,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         }
 
                                         let cellContent;
-                                        if (isEditing && col.type !== 'custom_date') {
+                                        const isStandardEditorActive = isEditing && col.type !== 'custom_date';
+
+                                        if (isStandardEditorActive) {
                                             const EditorComponent = col.type === 'textarea' ? 'textarea' : 'input';
                                             cellContent = (
                                                 <div ref={editorContainerRef}>
@@ -995,7 +1068,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                         value={editorValue}
                                                         onChange={handleEditorChange}
                                                         onKeyDown={handleEditorKeyDown}
-                                                        type={col.type === 'date' ? 'date' : 'text'}
+                                                        type={col.type === 'date' ? 'text' : 'text'}
                                                         className={`w-full block bg-white box-border px-2 py-1.5 border-2 border-blue-500 rounded-md z-30 resize-none text-sm outline-none`}
                                                         rows={col.type === 'textarea' ? 1 : undefined}
                                                         onClick={e => e.stopPropagation()}
@@ -1004,7 +1077,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                             );
                                         } else {
                                             if(col.key === 'workDates') {
-                                                 cellContent = `${actToDisplay.workStartDate || '...'} - ${actToDisplay.workEndDate || '...'}`;
+                                                const start = formatDateForDisplay(actToDisplay.workStartDate);
+                                                const end = formatDateForDisplay(actToDisplay.workEndDate);
+                                                cellContent = (start && end) ? `${start} - ${end}` : '...';
                                             } else if (col.key === 'commissionGroup') {
                                                 cellContent = (
                                                     <CustomSelect 
@@ -1018,7 +1093,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                         dropdownClassName="absolute z-50 mt-1 w-auto min-w-full bg-white shadow-lg rounded-md border border-slate-200 max-h-60"
                                                     />
                                                 );
-                                            } else {
+                                            } else if (col.type === 'date') {
+                                                cellContent = formatDateForDisplay(actToDisplay[col.key as keyof Act] as string);
+                                            }
+                                            else {
                                                 const key = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
                                                 cellContent = actToDisplay[key] || '';
                                             }
@@ -1034,7 +1112,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 onDoubleClick={(e) => handleCellDoubleClick(e, rowIndex, colIndex)}
                                                 onContextMenu={(e) => e.preventDefault()}
                                             >
-                                                <div className={isEditing
+                                                <div className={isStandardEditorActive
                                                     ? "relative w-full h-full"
                                                     : "disable-cell-text-selection px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug relative"
                                                 }>
