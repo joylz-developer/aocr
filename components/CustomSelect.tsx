@@ -106,6 +106,15 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
                         />
                     </div>
                     <ul tabIndex={-1} role="listbox" className="py-1 overflow-y-auto max-h-[12.5rem]">
+                        {value && (
+                            <li
+                                className="px-3 py-2 cursor-pointer text-sm text-slate-500 italic hover:bg-slate-100"
+                                onClick={() => handleSelect('')}
+                                role="option"
+                            >
+                                -- Не выбрано --
+                            </li>
+                        )}
                         {filteredOptions.length > 0 ? (
                             filteredOptions.map(option => (
                                 <li
