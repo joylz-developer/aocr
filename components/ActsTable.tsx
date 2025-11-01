@@ -986,6 +986,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                         onChange={(value) => handleGroupChange(act, value)}
                                                         placeholder="-- Выберите группу --"
                                                         onCreateNew={handleCreateNewGroup}
+                                                        allowClear={true}
                                                         buttonClassName="w-full h-full text-left bg-transparent border-none shadow-none py-2 px-3 focus:outline-none focus:ring-0 text-slate-900 flex justify-between items-center"
                                                         dropdownClassName="absolute z-50 mt-1 w-auto min-w-full bg-white shadow-lg rounded-md border border-slate-200 max-h-60"
                                                     />

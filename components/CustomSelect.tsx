@@ -15,6 +15,7 @@ interface CustomSelectProps {
     buttonClassName?: string;
     dropdownClassName?: string;
     onCreateNew?: () => void;
+    allowClear?: boolean;
 }
 
 const CustomSelect: React.FC<CustomSelectProps> = ({ 
@@ -26,6 +27,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
     buttonClassName,
     dropdownClassName,
     onCreateNew,
+    allowClear = false,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -106,6 +108,16 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
                         />
                     </div>
                     <ul tabIndex={-1} role="listbox" className="py-1 overflow-y-auto max-h-[12.5rem]">
+                        {allowClear && (
+                            <li
+                                className={`px-3 py-2 cursor-pointer text-sm text-slate-500 italic hover:bg-slate-100`}
+                                onClick={() => handleSelect('')}
+                                role="option"
+                                aria-selected={!value}
+                            >
+                                -- Очистить выбор --
+                            </li>
+                        )}
                         {filteredOptions.length > 0 ? (
                             filteredOptions.map(option => (
                                 <li

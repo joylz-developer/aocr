@@ -88,19 +88,19 @@ const GroupForm: React.FC<{
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label className={labelClass}>Застройщик (технический заказчик)</label>
-                        <CustomSelect options={orgOptions} value={formData.builderOrgId || ''} onChange={(value) => handleOrgChange('builderOrgId', value)} placeholder="Не выбрано" className="mt-1" />
+                        <CustomSelect options={orgOptions} value={formData.builderOrgId || ''} onChange={(value) => handleOrgChange('builderOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
                     </div>
                     <div>
                         <label className={labelClass}>Лицо, осуществляющее строительство (Подрядчик)</label>
-                        <CustomSelect options={orgOptions} value={formData.contractorOrgId || ''} onChange={(value) => handleOrgChange('contractorOrgId', value)} placeholder="Не выбрано" className="mt-1" />
+                        <CustomSelect options={orgOptions} value={formData.contractorOrgId || ''} onChange={(value) => handleOrgChange('contractorOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
                     </div>
                      <div>
                         <label className={labelClass}>Лицо, осуществившее подготовку проекта</label>
-                        <CustomSelect options={orgOptions} value={formData.designerOrgId || ''} onChange={(value) => handleOrgChange('designerOrgId', value)} placeholder="Не выбрано" className="mt-1" />
+                        <CustomSelect options={orgOptions} value={formData.designerOrgId || ''} onChange={(value) => handleOrgChange('designerOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
                     </div>
                      <div>
                         <label className={labelClass}>Лицо, выполнившее работы</label>
-                        <CustomSelect options={orgOptions} value={formData.workPerformerOrgId || ''} onChange={(value) => handleOrgChange('workPerformerOrgId', value)} placeholder="Не выбрано" className="mt-1" />
+                        <CustomSelect options={orgOptions} value={formData.workPerformerOrgId || ''} onChange={(value) => handleOrgChange('workPerformerOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
                     </div>
                 </div>
             </div>
@@ -111,7 +111,7 @@ const GroupForm: React.FC<{
                     {Object.entries(ROLES).filter(([key]) => !['i1','i2','i3'].includes(key)).map(([key, description]) => (
                         <div key={key}>
                             <label className={labelClass}>{description}</label>
-                            <CustomSelect options={peopleOptions} value={formData.representatives[key] || ''} onChange={(value) => handleRepChange(key, value)} placeholder="Не выбрано" className="mt-1" />
+                            <CustomSelect options={peopleOptions} value={formData.representatives[key] || ''} onChange={(value) => handleRepChange(key, value)} placeholder="Не выбрано" className="mt-1" allowClear />
                         </div>
                     ))}
                     <div className="md:col-span-2 border-t pt-4 mt-2">
@@ -131,7 +131,7 @@ const GroupForm: React.FC<{
                     {showOtherReps && Object.entries(ROLES).filter(([key]) => ['i1','i2','i3'].includes(key)).map(([key, description]) => (
                         <div key={key}>
                             <label className={labelClass}>{description}</label>
-                            <CustomSelect options={peopleOptions} value={formData.representatives[key] || ''} onChange={(value) => handleRepChange(key, value)} placeholder="Не выбрано" className="mt-1" />
+                            <CustomSelect options={peopleOptions} value={formData.representatives[key] || ''} onChange={(value) => handleRepChange(key, value)} placeholder="Не выбрано" className="mt-1" allowClear />
                         </div>
                     ))}
                 </div>
