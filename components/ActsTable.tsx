@@ -260,73 +260,61 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
         handleSaveWithTemplateResolution(updatedAct);
     };
+
+    const closeEditor = useCallback(() => {
+        setEditingCell(null);
+        setDatePopoverState(null);
+        setDateError(null);
+    }, []);
     
-    const validateAndParseDates = (value: string): { start: string | null, end: string | null, error: string | null } => {
-        const trimmedValue = value.trim();
-        if (trimmedValue === '' || trimmedValue === '-') {
-            return { start: '', end: '', error: null }; // Allow clearing
-        }
-    
-        const parts = trimmedValue.split('-').map(s => s.trim());
-        const startDateStr = parts[0];
-        const endDateStr = (parts.length > 1 && parts[1]) ? parts[1] : startDateStr;
-    
-        const start = parseDisplayDate(startDateStr);
-        if (!start) {
-            return { start: null, end: null, error: 'Неверный формат даты начала.' };
-        }
-    
-        const end = parseDisplayDate(endDateStr);
-        if (!end) {
-            return { start: null, end: null, error: 'Неверный формат даты окончания.' };
-        }
-    
-        if (new Date(end) < new Date(start)) {
-            return { start: null, end: null, error: 'Дата окончания не может быть раньше даты начала.' };
-        }
-    
-        return { start, end, error: null };
-    };
-    
-    const handleEditorSaveAndClose = useCallback(() => {
-        if (!editingCell) return;
+    const handleEditorSave = useCallback(() => {
+        if (!editingCell) return true;
+
         const { rowIndex, colIndex } = editingCell;
         const act = acts[rowIndex];
         const col = columns[colIndex];
         
-        let updatedAct = { ...act };
-        let needsSave = false;
+        const updatedAct = { ...act };
         
         if (col.key === 'workDates') {
-            const { start, end, error } = validateAndParseDates(editorValue);
-            if (error) {
-                setDateError(error);
-                return; // Don't save, don't close
-            }
-            
-            setDateError(null);
-            const newStartDate = start || '';
-            const newEndDate = end || '';
-            
-            if (act.workStartDate !== newStartDate || act.workEndDate !== newEndDate) {
-                updatedAct.workStartDate = newStartDate;
-                updatedAct.workEndDate = newEndDate;
-                needsSave = true;
+            const parts = editorValue.split('-').map(s => s.trim());
+            const startStr = parts[0];
+            const endStr = parts.length > 1 ? parts[1] : startStr;
+
+            if (!startStr && !endStr) { // Allow clearing the cell
+                setDateError(null);
+                updatedAct.workStartDate = '';
+                updatedAct.workEndDate = '';
+            } else {
+                const start = parseDisplayDate(startStr);
+                const end = parseDisplayDate(endStr);
+        
+                if (!start) {
+                    setDateError(`Неверный формат даты начала. Используйте ДД.ММ.ГГГГ.`);
+                    return false;
+                }
+                if (!end) {
+                    setDateError(`Неверный формат даты окончания. Используйте ДД.ММ.ГГГГ.`);
+                    return false;
+                }
+                if (new Date(end) < new Date(start)) {
+                    setDateError('Дата окончания не может быть раньше даты начала.');
+                    return false;
+                }
+                setDateError(null);
+                updatedAct.workStartDate = start;
+                updatedAct.workEndDate = end;
             }
         } else {
-             const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
-            const currentValue = act[columnKey] || '';
-            if (String(currentValue) !== editorValue) {
-                (updatedAct as any)[columnKey] = editorValue;
-                needsSave = true;
-            }
+            const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
+            (updatedAct as any)[columnKey] = editorValue;
         }
 
-        if (needsSave) {
+        if (JSON.stringify(updatedAct) !== JSON.stringify(act)) {
             handleSaveWithTemplateResolution(updatedAct);
         }
-        setEditingCell(null);
-        setDatePopoverState(null); // Close popover when main editor closes
+        
+        return true; // Success
     }, [acts, columns, editingCell, editorValue, handleSaveWithTemplateResolution]);
     
 
@@ -337,7 +325,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             if (datePopoverState) return; // Popover will handle its own closing
     
             if (editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
-                handleEditorSaveAndClose();
+                if(handleEditorSave()) {
+                    closeEditor();
+                }
             }
         };
     
@@ -349,7 +339,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             clearTimeout(timerId);
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [editingCell, datePopoverState, handleEditorSaveAndClose]);
+    }, [editingCell, datePopoverState, handleEditorSave, closeEditor]);
 
 
     useEffect(() => {
@@ -362,7 +352,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             if (col.key === 'workDates') {
                 const start = formatDateForDisplay(act.workStartDate);
                 const end = formatDateForDisplay(act.workEndDate);
-                initialValue = (start && end) ? `${start} - ${end}` : (start || '');
+                initialValue = (start && end && start !== end) ? `${start} - ${end}` : (start || '');
             } else if (col.type === 'date') {
                 const columnKey = col.key as keyof Act;
                 initialValue = formatDateForDisplay(act[columnKey] as string || '');
@@ -400,14 +390,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         e.stopPropagation();
         if (e.key === 'Escape') {
             e.preventDefault();
-            setEditingCell(null);
-            setDatePopoverState(null);
-            setDateError(null);
+            closeEditor();
         }
         if (e.key === 'Enter' && !e.shiftKey) {
             if (e.currentTarget instanceof HTMLInputElement || (e.currentTarget instanceof HTMLTextAreaElement && (e.ctrlKey || e.metaKey))) {
                 e.preventDefault();
-                handleEditorSaveAndClose();
+                if(handleEditorSave()) {
+                    closeEditor();
+                }
             }
         }
     };
@@ -475,7 +465,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         const col = columns[colIndex];
         
         if (col.key !== 'commissionGroup') {
-            handleEditorSaveAndClose(); // Save any other editor
+            if (handleEditorSave()) {
+                 closeEditor();
+            }
             setDatePopoverState(null); // Close any open popover
             setDateError(null);
             setEditingCell({ rowIndex, colIndex });
@@ -887,7 +879,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             if (!isDraggingSelection) setActiveCell(null);
         }
         setSelectedCells(newSelectedCells);
-    }, [selectedRows, columns, isDraggingSelection]);
+    }, [selectedRows, columns]);
 
     const handleRowSelectorMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number) => {
         e.preventDefault();
@@ -1057,21 +1049,21 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
                                         if (isEditing) {
                                              if (col.key === 'workDates') {
-                                                const inputErrorClass = dateError ? "border-red-500 focus:border-red-500" : "border-blue-500";
+                                                const isError = !!dateError;
                                                 cellContent = (
-                                                    <div ref={editorContainerRef} className="w-full h-full">
+                                                    <div ref={editorContainerRef} className="flex flex-col">
                                                         <div className="relative w-full">
                                                             <input
                                                                 ref={editorRef as any}
                                                                 value={editorValue}
                                                                 onChange={handleEditorChange}
                                                                 onKeyDown={handleEditorKeyDown}
-                                                                className={`w-full h-full block bg-white box-border px-2 py-1.5 border-2 rounded-md z-30 text-sm outline-none ${inputErrorClass}`}
+                                                                className={`w-full block bg-white box-border px-2 pr-8 py-1.5 border-2 rounded-md z-30 text-sm outline-none ${isError ? 'border-red-500' : 'border-blue-500'}`}
                                                                 onClick={e => e.stopPropagation()}
                                                             />
                                                             <button 
                                                                 type="button" 
-                                                                className="absolute right-1 top-1/2 -translate-y-1/2 z-40 p-1 text-slate-400 hover:text-blue-600 rounded-full hover:bg-slate-100"
+                                                                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-blue-600 rounded-full hover:bg-slate-100 z-30"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     const cellRect = e.currentTarget.closest('td')!.getBoundingClientRect();
@@ -1089,9 +1081,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                                 <CalendarIcon className="w-5 h-5"/>
                                                             </button>
                                                         </div>
-                                                         {dateError && (
-                                                            <p className="text-red-600 text-xs pt-1 px-1">{dateError}</p>
-                                                        )}
+                                                        {isError && <div className="text-red-600 text-xs mt-1 text-left w-full px-1">{dateError}</div>}
                                                     </div>
                                                 )
                                              } else {
@@ -1115,7 +1105,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                             if(col.key === 'workDates') {
                                                 const start = formatDateForDisplay(act.workStartDate);
                                                 const end = formatDateForDisplay(act.workEndDate);
-                                                cellContent = (start && end) ? `${start} - ${end}` : '...';
+                                                cellContent = (start && end && start !== end) ? `${start} - ${end}` : (start || '...');
                                             } else if (col.key === 'commissionGroup') {
                                                 cellContent = (
                                                     <CustomSelect 
@@ -1149,7 +1139,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 onContextMenu={(e) => e.preventDefault()}
                                             >
                                                 <div className={isEditing
-                                                    ? "relative w-full h-full"
+                                                    ? "relative w-full h-auto"
                                                     : "disable-cell-text-selection px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug relative"
                                                 }>
                                                      {cellContent}
