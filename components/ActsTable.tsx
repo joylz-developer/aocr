@@ -978,7 +978,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                             {columns.map((col, colIndex) => (
                                 <th 
                                     key={col.key} 
-                                    className={`px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap border-b border-slate-200 relative ${colIndex < columns.length -1 ? 'border-r' : ''}`}
+                                    className={`px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200 relative ${colIndex < columns.length -1 ? 'border-r' : ''}`}
                                     style={{ width: columnWidths[col.key] ? `${columnWidths[col.key]}px` : undefined }}
                                 >
                                     {col.label}
