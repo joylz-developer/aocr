@@ -14,13 +14,15 @@ interface ActsTableProps {
     template: string | null;
     settings: ProjectSettings;
     visibleColumns: Set<string>;
-    onSave: (act: Act) => void;
+    onSave: (act: Act, index?: number) => void;
     onDelete: (id: string) => void;
     setCurrentPage: (page: Page) => void;
     activeCell: Coords | null;
-    setActiveCell: (cell: Coords | null) => void;
+    setActiveCell: React.Dispatch<React.SetStateAction<Coords | null>>;
+    selectedCells: Set<string>;
+    setSelectedCells: React.Dispatch<React.SetStateAction<Set<string>>>;
     selectedRows: Set<number>;
-    setSelectedRows: (rows: Set<number>) => void;
+    setSelectedRows: React.Dispatch<React.SetStateAction<Set<number>>>;
 }
 
 const formatDateForDisplay = (dateString: string): string => {
@@ -154,27 +156,12 @@ const DateEditorPopover: React.FC<{
     );
 };
 
+
 // Main Table Component
-const ActsTable: React.FC<ActsTableProps> = ({ 
-    acts, 
-    people, 
-    organizations, 
-    groups, 
-    template, 
-    settings, 
-    visibleColumns, 
-    onSave, 
-    onDelete, 
-    setCurrentPage,
-    activeCell,
-    setActiveCell,
-    selectedRows,
-    setSelectedRows,
-}) => {
+const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, onSave, onDelete, setCurrentPage, activeCell, setActiveCell, selectedCells, setSelectedCells, selectedRows, setSelectedRows }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [dateError, setDateError] = useState<string | null>(null);
-    const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
     const [copiedCells, setCopiedCells] = useState<Set<string> | null>(null);
     const [isDraggingSelection, setIsDraggingSelection] = useState(false);
     const [isFilling, setIsFilling] = useState(false);
@@ -604,7 +591,7 @@ const ActsTable: React.FC<ActsTableProps> = ({
         } catch (err) {
              console.error("Failed to paste: ", err);
         }
-    }, [activeCell, acts, columns, groups, handleSaveWithTemplateResolution]);
+    }, [activeCell, acts, columns, groups, handleSaveWithTemplateResolution, setSelectedCells]);
     
     const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
         if (editingCell) {
@@ -668,7 +655,7 @@ const ActsTable: React.FC<ActsTableProps> = ({
             e.preventDefault();
             handlePaste();
         }
-    }, [editingCell, selectedCells, acts, columns, handleSaveWithTemplateResolution, handleCopy, handlePaste, selectedRows, setActiveCell, setSelectedRows]);
+    }, [editingCell, selectedCells, acts, columns, handleSaveWithTemplateResolution, handleCopy, handlePaste, selectedRows, setActiveCell, setSelectedCells, setSelectedRows]);
 
 
     useEffect(() => {
@@ -700,7 +687,7 @@ const ActsTable: React.FC<ActsTableProps> = ({
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isDraggingSelection, activeCell]);
+    }, [isDraggingSelection, activeCell, setSelectedCells]);
     
     useEffect(() => {
         const getSelectionBounds = (cells: Set<string>): { minRow: number; maxRow: number; minCol: number; maxCol: number } | null => {
@@ -889,7 +876,7 @@ const ActsTable: React.FC<ActsTableProps> = ({
             if (!isDraggingSelection) setActiveCell(null);
         }
         setSelectedCells(newSelectedCells);
-    }, [selectedRows, columns, setActiveCell, isDraggingSelection]);
+    }, [selectedRows, columns, setActiveCell, setSelectedCells, isDraggingSelection]);
 
     const handleRowSelectorMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number) => {
         e.preventDefault();

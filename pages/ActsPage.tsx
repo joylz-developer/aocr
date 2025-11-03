@@ -115,7 +115,9 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         'acts_table_visible_columns_v3', 
         new Set(ALL_COLUMNS.map(c => c.key))
     );
+    
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
+    const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
     const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
 
     const pickableColumns = useMemo(() => {
@@ -129,6 +131,17 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
     }, [settings]);
 
     const handleCreateNewAct = () => {
+        let insertionIndex = acts.length;
+
+        if (selectedRows.size > 0) {
+            const maxRow = Math.max(...Array.from(selectedRows));
+            insertionIndex = maxRow + 1;
+        } else if (selectedCells.size > 0) {
+            const rowIndexes = Array.from(selectedCells).map(id => parseInt(id.split(':')[0], 10));
+            const maxRow = Math.max(...rowIndexes);
+            insertionIndex = maxRow + 1;
+        }
+
         const newAct: Act = {
             id: crypto.randomUUID(),
             number: '', 
@@ -151,15 +164,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
             attachments: settings.defaultAttachments || '', 
             representatives: {},
         };
-        
-        let insertIndex = acts.length;
-        if (selectedRows.size > 0) {
-            insertIndex = Math.max(...Array.from(selectedRows)) + 1;
-        } else if (activeCell) {
-            insertIndex = activeCell.rowIndex + 1;
-        }
-
-        onSave(newAct, insertIndex);
+        onSave(newAct, insertionIndex);
     };
 
     return (
@@ -192,11 +197,13 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     template={template}
                     settings={settings}
                     visibleColumns={visibleColumns}
-                    onSave={(act) => onSave(act)}
+                    onSave={onSave}
                     onDelete={onDelete}
                     setCurrentPage={setCurrentPage}
                     activeCell={activeCell}
                     setActiveCell={setActiveCell}
+                    selectedCells={selectedCells}
+                    setSelectedCells={setSelectedCells}
                     selectedRows={selectedRows}
                     setSelectedRows={setSelectedRows}
                 />
