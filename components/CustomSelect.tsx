@@ -16,7 +16,6 @@ interface CustomSelectProps {
     dropdownClassName?: string;
     onCreateNew?: () => void;
     allowClear?: boolean;
-    showClearIcon?: boolean;
     startOpen?: boolean;
 }
 
@@ -30,7 +29,6 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
     dropdownClassName,
     onCreateNew,
     allowClear = false,
-    showClearIcon = true,
     startOpen = false,
 }) => {
     const [isOpen, setIsOpen] = useState(startOpen);
@@ -73,11 +71,6 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
         setIsOpen(false);
         setSearchTerm('');
     };
-
-    const handleClear = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        onChange('');
-    };
     
     const toggleDropdown = () => {
         setIsOpen(prev => !prev);
@@ -102,16 +95,6 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
                     {selectedOption ? selectedOption.label : placeholder}
                 </span>
                  <div className="flex items-center gap-1">
-                    {allowClear && value && showClearIcon && (
-                        <button
-                            type="button"
-                            onClick={handleClear}
-                            className="p-0.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-200 scale-0 group-hover:scale-100 transition-transform focus:scale-100 focus:outline-none"
-                            aria-label="Очистить выбор"
-                        >
-                            <CloseIcon className="w-4 h-4" />
-                        </button>
-                    )}
                      <ChevronDownIcon className={`w-5 h-5 text-slate-400 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'transform rotate-180' : ''}`} />
                 </div>
             </button>
