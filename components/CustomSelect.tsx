@@ -17,6 +17,7 @@ interface CustomSelectProps {
     onCreateNew?: () => void;
     allowClear?: boolean;
     showClearIcon?: boolean;
+    startOpen?: boolean;
 }
 
 const CustomSelect: React.FC<CustomSelectProps> = ({ 
@@ -30,8 +31,9 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
     onCreateNew,
     allowClear = false,
     showClearIcon = true,
+    startOpen = false,
 }) => {
-    const [isOpen, setIsOpen] = useState(false);
+    const [isOpen, setIsOpen] = useState(startOpen);
     const [searchTerm, setSearchTerm] = useState('');
     const selectRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);

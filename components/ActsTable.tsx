@@ -462,16 +462,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (window.getSelection) {
             window.getSelection()?.removeAllRanges();
         }
-        const col = columns[colIndex];
-        
-        if (col.key !== 'commissionGroup') {
-            if (handleEditorSave()) {
-                 closeEditor();
-            }
-            setDatePopoverState(null); // Close any open popover
-            setDateError(null);
-            setEditingCell({ rowIndex, colIndex });
+        if (handleEditorSave()) {
+             closeEditor();
         }
+        setDatePopoverState(null); // Close any open popover
+        setDateError(null);
+        setEditingCell({ rowIndex, colIndex });
     };
 
     const handleCopy = useCallback(async () => {
@@ -1048,7 +1044,27 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         let cellContent;
 
                                         if (isEditing) {
-                                             if (col.key === 'workDates') {
+                                             if (col.key === 'commissionGroup') {
+                                                cellContent = (
+                                                    <div ref={editorContainerRef} className="w-full h-full">
+                                                        <CustomSelect 
+                                                            startOpen={true}
+                                                            options={groupOptions} 
+                                                            value={act.commissionGroupId || ''}
+                                                            onChange={(value) => {
+                                                                handleGroupChange(act, value);
+                                                                closeEditor();
+                                                            }}
+                                                            placeholder="-- Выберите группу --"
+                                                            onCreateNew={() => {
+                                                                handleCreateNewGroup();
+                                                                closeEditor();
+                                                            }}
+                                                            allowClear={true}
+                                                        />
+                                                    </div>
+                                                );
+                                             } else if (col.key === 'workDates') {
                                                 const isError = !!dateError;
                                                 cellContent = (
                                                     <div ref={editorContainerRef} className="flex flex-col">
@@ -1107,19 +1123,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 const end = formatDateForDisplay(act.workEndDate);
                                                 cellContent = (start && end && start !== end) ? `${start} - ${end}` : (start || '...');
                                             } else if (col.key === 'commissionGroup') {
-                                                cellContent = (
-                                                    <CustomSelect 
-                                                        options={groupOptions} 
-                                                        value={act.commissionGroupId || ''}
-                                                        onChange={(value) => handleGroupChange(act, value)}
-                                                        placeholder="-- Выберите группу --"
-                                                        onCreateNew={handleCreateNewGroup}
-                                                        allowClear={true}
-                                                        showClearIcon={false}
-                                                        buttonClassName="w-full h-full text-left bg-transparent border-none shadow-none py-2 px-3 focus:outline-none focus:ring-0 text-slate-900 flex justify-between items-center"
-                                                        dropdownClassName="absolute z-50 mt-1 w-auto min-w-full bg-white shadow-lg rounded-md border border-slate-200 max-h-60"
-                                                    />
-                                                );
+                                                const group = groups.find(g => g.id === act.commissionGroupId);
+                                                cellContent = group ? group.name : '';
                                             } else if (col.type === 'date') {
                                                 cellContent = formatDateForDisplay(act[col.key as keyof Act] as string);
                                             }
