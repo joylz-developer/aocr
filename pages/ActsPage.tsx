@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords } from '../types';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import Modal from '../components/Modal';
 import { PlusIcon, HelpIcon, ColumnsIcon } from '../components/Icons';
@@ -13,7 +13,7 @@ interface ActsPageProps {
     groups: CommissionGroup[];
     template: string | null;
     settings: ProjectSettings;
-    onSave: (act: Act, index?: number) => void;
+    onSave: (act: Act) => void;
     onDelete: (id: string) => void;
     setCurrentPage: (page: Page) => void;
 }
@@ -115,7 +115,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         'acts_table_visible_columns_v3', 
         new Set(ALL_COLUMNS.map(c => c.key))
     );
-    const [activeCell, setActiveCell] = useState<Coords | null>(null);
     
     const pickableColumns = useMemo(() => {
         return ALL_COLUMNS.filter(col => {
@@ -151,8 +150,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
             attachments: settings.defaultAttachments || '', 
             representatives: {},
         };
-        const insertionIndex = activeCell ? activeCell.rowIndex + 1 : undefined;
-        onSave(newAct, insertionIndex);
+        onSave(newAct);
     };
 
     return (
@@ -185,8 +183,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     template={template}
                     settings={settings}
                     visibleColumns={visibleColumns}
-                    activeCell={activeCell}
-                    setActiveCell={setActiveCell}
                     onSave={onSave}
                     onDelete={onDelete}
                     setCurrentPage={setCurrentPage}

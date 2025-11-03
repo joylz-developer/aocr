@@ -64,23 +64,13 @@ const App: React.FC = () => {
         }
     };
 
-    const handleSaveAct = useCallback((actToSave: Act, indexToInsert?: number) => {
+    const handleSaveAct = useCallback((actToSave: Act) => {
         setActs(prevActs => {
             const exists = prevActs.some(a => a.id === actToSave.id);
             if (exists) {
-                // This is an update, just map and replace.
                 return prevActs.map(a => (a.id === actToSave.id ? actToSave : a));
             }
-            
-            // This is a new act.
-            if (indexToInsert !== undefined && indexToInsert >= 0 && indexToInsert <= prevActs.length) {
-                const newActs = [...prevActs];
-                newActs.splice(indexToInsert, 0, actToSave); // Insert at index
-                return newActs;
-            }
-            
-            // Default: append to the end.
-            return [...prevActs, actToSave];
+            return [...prevActs, actToSave].sort((a, b) => a.date.localeCompare(b.date));
         });
     }, [setActs]);
 
