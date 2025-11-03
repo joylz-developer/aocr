@@ -6,8 +6,6 @@ import { PlusIcon, HelpIcon, ColumnsIcon } from '../components/Icons';
 import ActsTable from '../components/ActsTable';
 import { ALL_COLUMNS } from '../components/ActsTableConfig';
 
-type Coords = { rowIndex: number; colIndex: number };
-
 interface ActsPageProps {
     acts: Act[];
     people: Person[];
@@ -15,7 +13,7 @@ interface ActsPageProps {
     groups: CommissionGroup[];
     template: string | null;
     settings: ProjectSettings;
-    onSave: (act: Act, insertionIndex?: number) => void;
+    onSave: (act: Act) => void;
     onDelete: (id: string) => void;
     setCurrentPage: (page: Page) => void;
 }
@@ -113,7 +111,6 @@ const ColumnPicker: React.FC<{
 
 const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onDelete, setCurrentPage }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
-    const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
         'acts_table_visible_columns_v3', 
         new Set(ALL_COLUMNS.map(c => c.key))
@@ -129,6 +126,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         });
     }, [settings]);
 
+    // This is a new handler to add an empty act row to the table
     const handleCreateNewAct = () => {
         const newAct: Act = {
             id: crypto.randomUUID(),
@@ -152,8 +150,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
             attachments: settings.defaultAttachments || '', 
             representatives: {},
         };
-        const insertionIndex = activeCell ? activeCell.rowIndex + 1 : undefined;
-        onSave(newAct, insertionIndex);
+        onSave(newAct);
     };
 
     return (
@@ -186,8 +183,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     template={template}
                     settings={settings}
                     visibleColumns={visibleColumns}
-                    activeCell={activeCell}
-                    setActiveCell={setActiveCell}
                     onSave={onSave}
                     onDelete={onDelete}
                     setCurrentPage={setCurrentPage}

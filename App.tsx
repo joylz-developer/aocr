@@ -64,20 +64,13 @@ const App: React.FC = () => {
         }
     };
 
-    const handleSaveAct = useCallback((actToSave: Act, insertionIndex?: number) => {
+    const handleSaveAct = useCallback((actToSave: Act) => {
         setActs(prevActs => {
             const exists = prevActs.some(a => a.id === actToSave.id);
             if (exists) {
                 return prevActs.map(a => (a.id === actToSave.id ? actToSave : a));
             }
-            
-            const newActs = [...prevActs];
-            if (insertionIndex !== undefined && insertionIndex >= 0 && insertionIndex <= newActs.length) {
-                newActs.splice(insertionIndex, 0, actToSave);
-            } else {
-                newActs.push(actToSave);
-            }
-            return newActs;
+            return [...prevActs, actToSave].sort((a, b) => a.date.localeCompare(b.date));
         });
     }, [setActs]);
 
