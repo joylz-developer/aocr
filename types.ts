@@ -133,3 +133,5 @@ export type ActTableColumnKey = Exclude<keyof Act,
 
 // Defines the available pages in the application
 export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups';
+
+export type Coords = { rowIndex: number; colIndex: number };

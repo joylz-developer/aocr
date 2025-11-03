@@ -64,13 +64,25 @@ const App: React.FC = () => {
         }
     };
 
-    const handleSaveAct = useCallback((actToSave: Act) => {
+    const handleSaveAct = useCallback((actToSave: Act, index?: number) => {
         setActs(prevActs => {
-            const exists = prevActs.some(a => a.id === actToSave.id);
-            if (exists) {
-                return prevActs.map(a => (a.id === actToSave.id ? actToSave : a));
+            const existingIndex = prevActs.findIndex(a => a.id === actToSave.id);
+    
+            if (existingIndex !== -1) {
+                // Update existing act
+                const newActs = [...prevActs];
+                newActs[existingIndex] = actToSave;
+                return newActs;
+            } else {
+                // Create new act
+                const newActs = [...prevActs];
+                if (index !== undefined && index >= 0 && index <= newActs.length) {
+                    newActs.splice(index, 0, actToSave);
+                } else {
+                    newActs.push(actToSave); // Fallback to appending at the end
+                }
+                return newActs;
             }
-            return [...prevActs, actToSave].sort((a, b) => a.date.localeCompare(b.date));
         });
     }, [setActs]);
 
@@ -231,7 +243,7 @@ const App: React.FC = () => {
         const mergeOrReplace = <T extends {id: string}>(
             key: 'acts' | 'people' | 'organizations' | 'groups',
             setData: React.Dispatch<React.SetStateAction<T[]>>,
-            sortFn: (a: T, b: T) => number
+            sortFn?: (a: T, b: T) => number
         ) => {
             if (importSettings[key]?.import && importData[key]) {
                  if (importSettings[key].mode === 'replace') {
@@ -243,13 +255,18 @@ const App: React.FC = () => {
                     setData(prev => {
                         const itemMap = new Map(prev.map(item => [item.id, item]));
                         selectedItems.forEach(item => itemMap.set(item.id, item));
-                        return Array.from(itemMap.values()).sort(sortFn);
+                        const newArray = Array.from(itemMap.values());
+                        if (sortFn) {
+                           return newArray.sort(sortFn);
+                        }
+                        return newArray;
                     });
                 }
             }
         };
-
-        mergeOrReplace('acts', setActs, (a, b) => a.date.localeCompare(b.date));
+        
+        // Only sort people, orgs, and groups. Acts order is now manual.
+        mergeOrReplace('acts', setActs);
         mergeOrReplace('people', setPeople, (a,b) => a.name.localeCompare(b.name));
         mergeOrReplace('organizations', setOrganizations, (a,b) => a.name.localeCompare(b.name));
         mergeOrReplace('groups', setGroups, (a,b) => a.name.localeCompare(b.name));
