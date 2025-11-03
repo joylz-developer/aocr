@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page } from '../types';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords } from '../types';
 import { DeleteIcon, DownloadIcon, CalendarIcon } from './Icons';
 import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
@@ -14,7 +14,9 @@ interface ActsTableProps {
     template: string | null;
     settings: ProjectSettings;
     visibleColumns: Set<string>;
-    onSave: (act: Act) => void;
+    activeCell: Coords | null;
+    setActiveCell: (coords: Coords | null) => void;
+    onSave: (act: Act, index?: number) => void;
     onDelete: (id: string) => void;
     setCurrentPage: (page: Page) => void;
 }
@@ -150,15 +152,11 @@ const DateEditorPopover: React.FC<{
     );
 };
 
-
-type Coords = { rowIndex: number; colIndex: number };
-
 // Main Table Component
-const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, onSave, onDelete, setCurrentPage }) => {
+const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, activeCell, setActiveCell, onSave, onDelete, setCurrentPage }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [dateError, setDateError] = useState<string | null>(null);
-    const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
     const [copiedCells, setCopiedCells] = useState<Set<string> | null>(null);
     const [isDraggingSelection, setIsDraggingSelection] = useState(false);
@@ -462,16 +460,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (window.getSelection) {
             window.getSelection()?.removeAllRanges();
         }
-        const col = columns[colIndex];
         
-        if (col.key !== 'commissionGroup') {
-            if (handleEditorSave()) {
-                 closeEditor();
-            }
-            setDatePopoverState(null); // Close any open popover
-            setDateError(null);
-            setEditingCell({ rowIndex, colIndex });
+        if (handleEditorSave()) {
+             closeEditor();
         }
+        setDatePopoverState(null); // Close any open popover
+        setDateError(null);
+        setEditingCell({ rowIndex, colIndex });
     };
 
     const handleCopy = useCallback(async () => {
@@ -658,7 +653,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             e.preventDefault();
             handlePaste();
         }
-    }, [editingCell, selectedCells, acts, columns, handleSaveWithTemplateResolution, handleCopy, handlePaste, selectedRows]);
+    }, [editingCell, selectedCells, acts, columns, handleSaveWithTemplateResolution, handleCopy, handlePaste, selectedRows, setActiveCell]);
 
 
     useEffect(() => {
@@ -879,7 +874,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             if (!isDraggingSelection) setActiveCell(null);
         }
         setSelectedCells(newSelectedCells);
-    }, [selectedRows, columns]);
+    }, [selectedRows, columns, setActiveCell, isDraggingSelection]);
 
     const handleRowSelectorMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number) => {
         e.preventDefault();
@@ -1084,6 +1079,23 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                         {isError && <div className="text-red-600 text-xs mt-1 text-left w-full px-1">{dateError}</div>}
                                                     </div>
                                                 )
+                                             } else if (col.key === 'commissionGroup') {
+                                                cellContent = (
+                                                    <div ref={editorContainerRef} className="w-full h-full">
+                                                        <CustomSelect 
+                                                            options={groupOptions} 
+                                                            value={act.commissionGroupId || ''}
+                                                            onChange={(value) => {
+                                                                handleGroupChange(act, value);
+                                                                closeEditor();
+                                                            }}
+                                                            placeholder="-- Выберите группу --"
+                                                            onCreateNew={handleCreateNewGroup}
+                                                            allowClear={true}
+                                                            startOpen={true}
+                                                        />
+                                                    </div>
+                                                );
                                              } else {
                                                 const EditorComponent = col.type === 'textarea' ? 'textarea' : 'input';
                                                 cellContent = (
@@ -1105,21 +1117,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                             if(col.key === 'workDates') {
                                                 const start = formatDateForDisplay(act.workStartDate);
                                                 const end = formatDateForDisplay(act.workEndDate);
-                                                cellContent = (start && end && start !== end) ? `${start} - ${end}` : (start || '...');
+                                                cellContent = (start && end && start !== end) ? `${start} - ${end}` : (start || '');
                                             } else if (col.key === 'commissionGroup') {
-                                                cellContent = (
-                                                    <CustomSelect 
-                                                        options={groupOptions} 
-                                                        value={act.commissionGroupId || ''}
-                                                        onChange={(value) => handleGroupChange(act, value)}
-                                                        placeholder="-- Выберите группу --"
-                                                        onCreateNew={handleCreateNewGroup}
-                                                        allowClear={true}
-                                                        showClearIcon={false}
-                                                        buttonClassName="w-full h-full text-left bg-transparent border-none shadow-none py-2 px-3 focus:outline-none focus:ring-0 text-slate-900 flex justify-between items-center"
-                                                        dropdownClassName="absolute z-50 mt-1 w-auto min-w-full bg-white shadow-lg rounded-md border border-slate-200 max-h-60"
-                                                    />
-                                                );
+                                                const group = groups.find(g => g.id === act.commissionGroupId);
+                                                cellContent = group ? group.name : '';
                                             } else if (col.type === 'date') {
                                                 cellContent = formatDateForDisplay(act[col.key as keyof Act] as string);
                                             }
@@ -1140,7 +1141,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 onContextMenu={(e) => e.preventDefault()}
                                             >
                                                 <div className={isEditing
-                                                    ? "relative w-full h-auto"
+                                                    ? "relative w-full h-full"
                                                     : "disable-cell-text-selection px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug relative"
                                                 }>
                                                      {cellContent}

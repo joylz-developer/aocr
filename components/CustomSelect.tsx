@@ -17,6 +17,7 @@ interface CustomSelectProps {
     onCreateNew?: () => void;
     allowClear?: boolean;
     showClearIcon?: boolean;
+    startOpen?: boolean;
 }
 
 const CustomSelect: React.FC<CustomSelectProps> = ({ 
@@ -30,8 +31,9 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
     onCreateNew,
     allowClear = false,
     showClearIcon = true,
+    startOpen = false,
 }) => {
-    const [isOpen, setIsOpen] = useState(false);
+    const [isOpen, setIsOpen] = useState(startOpen);
     const [searchTerm, setSearchTerm] = useState('');
     const selectRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
@@ -127,7 +129,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
                         />
                     </div>
                     <ul tabIndex={-1} role="listbox" className="py-1 overflow-y-auto max-h-[12.5rem]">
-                        {allowClear && value && (
+                        {allowClear && (
                             <li
                                 className={`px-3 py-2 cursor-pointer text-sm text-slate-500 italic hover:bg-slate-100`}
                                 onClick={() => handleSelect('')}
