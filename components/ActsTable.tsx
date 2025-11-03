@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords } from '../types';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page } from '../types';
 import { DeleteIcon, DownloadIcon, CalendarIcon } from './Icons';
 import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
@@ -14,15 +14,9 @@ interface ActsTableProps {
     template: string | null;
     settings: ProjectSettings;
     visibleColumns: Set<string>;
-    onSave: (act: Act, index?: number) => void;
+    onSave: (act: Act) => void;
     onDelete: (id: string) => void;
     setCurrentPage: (page: Page) => void;
-    activeCell: Coords | null;
-    setActiveCell: React.Dispatch<React.SetStateAction<Coords | null>>;
-    selectedCells: Set<string>;
-    setSelectedCells: React.Dispatch<React.SetStateAction<Set<string>>>;
-    selectedRows: Set<number>;
-    setSelectedRows: React.Dispatch<React.SetStateAction<Set<number>>>;
 }
 
 const formatDateForDisplay = (dateString: string): string => {
@@ -157,11 +151,15 @@ const DateEditorPopover: React.FC<{
 };
 
 
+type Coords = { rowIndex: number; colIndex: number };
+
 // Main Table Component
-const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, onSave, onDelete, setCurrentPage, activeCell, setActiveCell, selectedCells, setSelectedCells, selectedRows, setSelectedRows }) => {
+const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, onSave, onDelete, setCurrentPage }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [dateError, setDateError] = useState<string | null>(null);
+    const [activeCell, setActiveCell] = useState<Coords | null>(null);
+    const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
     const [copiedCells, setCopiedCells] = useState<Set<string> | null>(null);
     const [isDraggingSelection, setIsDraggingSelection] = useState(false);
     const [isFilling, setIsFilling] = useState(false);
@@ -169,6 +167,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     
     const [datePopoverState, setDatePopoverState] = useState<{ act: Act; position: { top: number, left: number, width: number } } | null>(null);
 
+    const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
     const [selectionAnchorRow, setSelectionAnchorRow] = useState<number | null>(null);
     const [isDraggingRowSelection, setIsDraggingRowSelection] = useState(false);
 
@@ -591,7 +590,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         } catch (err) {
              console.error("Failed to paste: ", err);
         }
-    }, [activeCell, acts, columns, groups, handleSaveWithTemplateResolution, setSelectedCells]);
+    }, [activeCell, acts, columns, groups, handleSaveWithTemplateResolution]);
     
     const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
         if (editingCell) {
@@ -655,7 +654,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             e.preventDefault();
             handlePaste();
         }
-    }, [editingCell, selectedCells, acts, columns, handleSaveWithTemplateResolution, handleCopy, handlePaste, selectedRows, setActiveCell, setSelectedCells, setSelectedRows]);
+    }, [editingCell, selectedCells, acts, columns, handleSaveWithTemplateResolution, handleCopy, handlePaste, selectedRows]);
 
 
     useEffect(() => {
@@ -687,7 +686,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isDraggingSelection, activeCell, setSelectedCells]);
+    }, [isDraggingSelection, activeCell]);
     
     useEffect(() => {
         const getSelectionBounds = (cells: Set<string>): { minRow: number; maxRow: number; minCol: number; maxCol: number } | null => {
@@ -876,7 +875,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             if (!isDraggingSelection) setActiveCell(null);
         }
         setSelectedCells(newSelectedCells);
-    }, [selectedRows, columns, setActiveCell, setSelectedCells, isDraggingSelection]);
+    }, [selectedRows, columns]);
 
     const handleRowSelectorMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number) => {
         e.preventDefault();
@@ -938,7 +937,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isDraggingRowSelection, selectionAnchorRow, setSelectedRows]);
+    }, [isDraggingRowSelection, selectionAnchorRow]);
 
     const handleBulkDelete = () => {
         if (window.confirm(`Вы уверены, что хотите удалить ${selectedRows.size} акт(ов)?`)) {

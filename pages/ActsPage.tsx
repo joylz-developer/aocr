@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords } from '../types';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import Modal from '../components/Modal';
 import { PlusIcon, HelpIcon, ColumnsIcon } from '../components/Icons';
@@ -13,7 +13,7 @@ interface ActsPageProps {
     groups: CommissionGroup[];
     template: string | null;
     settings: ProjectSettings;
-    onSave: (act: Act, index?: number) => void;
+    onSave: (act: Act) => void;
     onDelete: (id: string) => void;
     setCurrentPage: (page: Page) => void;
 }
@@ -116,10 +116,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         new Set(ALL_COLUMNS.map(c => c.key))
     );
     
-    const [activeCell, setActiveCell] = useState<Coords | null>(null);
-    const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
-    const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
-
     const pickableColumns = useMemo(() => {
         return ALL_COLUMNS.filter(col => {
             if (col.key === 'date' && !settings.showActDate) return false;
@@ -130,18 +126,8 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         });
     }, [settings]);
 
+    // This is a new handler to add an empty act row to the table
     const handleCreateNewAct = () => {
-        let insertionIndex = acts.length;
-
-        if (selectedRows.size > 0) {
-            const maxRow = Math.max(...Array.from(selectedRows));
-            insertionIndex = maxRow + 1;
-        } else if (selectedCells.size > 0) {
-            const rowIndexes = Array.from(selectedCells).map(id => parseInt(id.split(':')[0], 10));
-            const maxRow = Math.max(...rowIndexes);
-            insertionIndex = maxRow + 1;
-        }
-
         const newAct: Act = {
             id: crypto.randomUUID(),
             number: '', 
@@ -164,7 +150,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
             attachments: settings.defaultAttachments || '', 
             representatives: {},
         };
-        onSave(newAct, insertionIndex);
+        onSave(newAct);
     };
 
     return (
@@ -200,12 +186,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     onSave={onSave}
                     onDelete={onDelete}
                     setCurrentPage={setCurrentPage}
-                    activeCell={activeCell}
-                    setActiveCell={setActiveCell}
-                    selectedCells={selectedCells}
-                    setSelectedCells={setSelectedCells}
-                    selectedRows={selectedRows}
-                    setSelectedRows={setSelectedRows}
                 />
             </div>
             

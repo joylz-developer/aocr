@@ -64,20 +64,13 @@ const App: React.FC = () => {
         }
     };
 
-    const handleSaveAct = useCallback((actToSave: Act, index?: number) => {
+    const handleSaveAct = useCallback((actToSave: Act) => {
         setActs(prevActs => {
             const exists = prevActs.some(a => a.id === actToSave.id);
             if (exists) {
                 return prevActs.map(a => (a.id === actToSave.id ? actToSave : a));
             }
-            
-            const newActs = [...prevActs];
-            if (index !== undefined && index >= 0 && index <= newActs.length) {
-                newActs.splice(index, 0, actToSave);
-            } else {
-                newActs.push(actToSave);
-            }
-            return newActs;
+            return [...prevActs, actToSave].sort((a, b) => a.date.localeCompare(b.date));
         });
     }, [setActs]);
 
@@ -256,7 +249,7 @@ const App: React.FC = () => {
             }
         };
 
-        mergeOrReplace('acts', setActs, (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        mergeOrReplace('acts', setActs, (a, b) => a.date.localeCompare(b.date));
         mergeOrReplace('people', setPeople, (a,b) => a.name.localeCompare(b.name));
         mergeOrReplace('organizations', setOrganizations, (a,b) => a.name.localeCompare(b.name));
         mergeOrReplace('groups', setGroups, (a,b) => a.name.localeCompare(b.name));
