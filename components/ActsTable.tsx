@@ -352,12 +352,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (!editingCell) return;
     
         const handleClickOutside = (event: MouseEvent) => {
-            if (datePopoverState) return; // Popover will handle its own closing
+            if (datePopoverState) return;
     
             if (editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
-                if(handleEditorSave()) {
-                    closeEditor();
-                }
+                handleEditorSave(); // Attempt to save
+                closeEditor(); // Always close editor, discarding invalid input if save fails
             }
         };
     
