@@ -168,7 +168,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [datePopoverState, setDatePopoverState] = useState<{ act: Act; position: { top: number, left: number, width: number } } | null>(null);
     const [fillHandleCoords, setFillHandleCoords] = useState<{top: number, left: number} | null>(null);
 
-    const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
     const [selectionAnchorRow, setSelectionAnchorRow] = useState<number | null>(null);
     const [isDraggingRowSelection, setIsDraggingRowSelection] = useState(false);
 
@@ -185,6 +184,28 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (col.key === 'copiesCount' && !settings.showCopiesCount) return false;
         return true;
     }), [settings, visibleColumns]);
+
+    const getCellId = (rowIndex: number, colIndex: number) => `${rowIndex}:${colIndex}`;
+
+    const selectedRows = useMemo(() => {
+        const rowsFullySelected = new Set<number>();
+        if (selectedCells.size === 0 || columns.length === 0) {
+            return rowsFullySelected;
+        }
+
+        const cellsByRow = new Map<number, number>();
+        for (const cellId of selectedCells) {
+            const [rowIndex] = cellId.split(':').map(Number);
+            cellsByRow.set(rowIndex, (cellsByRow.get(rowIndex) || 0) + 1);
+        }
+
+        for (const [rowIndex, count] of cellsByRow.entries()) {
+            if (count === columns.length) {
+                rowsFullySelected.add(rowIndex);
+            }
+        }
+        return rowsFullySelected;
+    }, [selectedCells, columns]);
 
     const groupOptions = useMemo(() => {
         return groups.map(g => ({ value: g.id, label: g.name }));
@@ -403,8 +424,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     };
 
-    const getCellId = (rowIndex: number, colIndex: number) => `${rowIndex}:${colIndex}`;
-
     const normalizeSelection = (start: Coords, end: Coords): { minRow: number, maxRow: number, minCol: number, maxCol: number } => {
         const minRow = Math.min(start.rowIndex, end.rowIndex);
         const maxRow = Math.max(start.rowIndex, end.rowIndex);
@@ -424,9 +443,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
 
     const handleCellMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
-        if (selectedRows.size > 0) {
-            setSelectedRows(new Set());
-        }
+        setSelectionAnchorRow(null);
         tableContainerRef.current?.focus({ preventScroll: true });
         
         if (e.detail > 1) e.preventDefault();
@@ -601,7 +618,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (e.key === 'Escape') {
             e.preventDefault();
             setSelectedCells(new Set());
-            setSelectedRows(new Set());
+            setSelectionAnchorRow(null);
             setActiveCell(null);
             setCopiedCells(null);
             e.currentTarget.blur();
@@ -609,7 +626,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
 
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) && selectedRows.size > 0) {
-            setSelectedRows(new Set());
+             const newSelectedCells = new Set<string>();
+             if (activeCell) {
+                newSelectedCells.add(getCellId(activeCell.rowIndex, activeCell.colIndex));
+             }
+             setSelectedCells(newSelectedCells);
         }
 
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -655,7 +676,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             e.preventDefault();
             handlePaste();
         }
-    }, [editingCell, selectedCells, acts, columns, handleSaveWithTemplateResolution, handleCopy, handlePaste, selectedRows]);
+    }, [editingCell, selectedCells, acts, columns, handleSaveWithTemplateResolution, handleCopy, handlePaste, selectedRows, activeCell]);
 
 
     useEffect(() => {
@@ -865,52 +886,51 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     }, [fillHandleCell, columnWidths, acts]);
 
-    useEffect(() => {
-        const newSelectedCells = new Set<string>();
-        if (selectedRows.size > 0) {
-            const rowArray = Array.from(selectedRows);
-            const lastRow = Math.max(...rowArray);
-            
-            rowArray.forEach(rowIndex => {
-                for (let colIndex = 0; colIndex < columns.length; colIndex++) {
-                    newSelectedCells.add(getCellId(rowIndex, colIndex));
-                }
-            });
-            const lastCol = columns.length - 1;
-            setActiveCell({ rowIndex: lastRow, colIndex: lastCol });
-        } else {
-            if (!isDraggingSelection) setActiveCell(null);
-        }
-        setSelectedCells(newSelectedCells);
-    }, [selectedRows, columns]);
-
     const handleRowSelectorMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number) => {
         e.preventDefault();
         tableContainerRef.current?.focus({ preventScroll: true });
         setCopiedCells(null);
-
-        let newSelectedRows: Set<number>;
-
+    
+        let newSelectedCells: Set<string>;
+    
         if (e.shiftKey && selectionAnchorRow !== null) {
-            newSelectedRows = new Set();
+            newSelectedCells = new Set();
             const start = Math.min(selectionAnchorRow, rowIndex);
             const end = Math.max(selectionAnchorRow, rowIndex);
-            for (let i = start; i <= end; i++) {
-                newSelectedRows.add(i);
+            for (let r = start; r <= end; r++) {
+                for (let c = 0; c < columns.length; c++) {
+                    newSelectedCells.add(getCellId(r, c));
+                }
             }
         } else if (e.ctrlKey || e.metaKey) {
-            newSelectedRows = new Set(selectedRows);
-            if (newSelectedRows.has(rowIndex)) {
-                newSelectedRows.delete(rowIndex);
-            } else {
-                newSelectedRows.add(rowIndex);
+            newSelectedCells = new Set(selectedCells);
+            
+            // Check if all cells for this row are currently in the selection
+            let allCellsPresent = true;
+            for (let c = 0; c < columns.length; c++) {
+                if (!newSelectedCells.has(getCellId(rowIndex, c))) {
+                    allCellsPresent = false;
+                    break;
+                }
+            }
+    
+            for (let c = 0; c < columns.length; c++) {
+                if (allCellsPresent) {
+                    newSelectedCells.delete(getCellId(rowIndex, c));
+                } else {
+                    newSelectedCells.add(getCellId(rowIndex, c));
+                }
             }
             setSelectionAnchorRow(rowIndex);
         } else {
-            newSelectedRows = new Set([rowIndex]);
+            newSelectedCells = new Set();
+            for (let c = 0; c < columns.length; c++) {
+                newSelectedCells.add(getCellId(rowIndex, c));
+            }
             setSelectionAnchorRow(rowIndex);
         }
-        setSelectedRows(newSelectedRows);
+        
+        setSelectedCells(newSelectedCells);
         setIsDraggingRowSelection(true);
     };
 
@@ -918,7 +938,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         const handleMouseMove = (e: MouseEvent) => {
             if (!isDraggingRowSelection || selectionAnchorRow === null) return;
             const target = e.target as HTMLElement;
-            // FIX: Use generic parameter for `closest` to get a more specific element type (HTMLTableCellElement) which has the `dataset` property.
             const cell = target.closest<HTMLTableCellElement>('td[data-row-index]');
             if (!cell || !cell.dataset.rowIndex) return;
 
@@ -926,11 +945,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             
             const start = Math.min(selectionAnchorRow, currentRowIndex);
             const end = Math.max(selectionAnchorRow, currentRowIndex);
-            const newSelectedRows = new Set<number>();
-            for (let i = start; i <= end; i++) {
-                newSelectedRows.add(i);
+            
+            const newSelectedCells = new Set<string>();
+            for (let r = start; r <= end; r++) {
+                 for (let c = 0; c < columns.length; c++) {
+                    newSelectedCells.add(getCellId(r, c));
+                }
             }
-            setSelectedRows(newSelectedRows);
+            setSelectedCells(newSelectedCells);
         };
 
         const handleMouseUp = () => setIsDraggingRowSelection(false);
@@ -944,7 +966,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isDraggingRowSelection, selectionAnchorRow]);
+    }, [isDraggingRowSelection, selectionAnchorRow, columns]);
 
     const handleBulkDelete = () => {
         if (window.confirm(`Вы уверены, что хотите удалить ${selectedRows.size} акт(ов)?`)) {
@@ -954,7 +976,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     onDelete(actId);
                 }
             });
-            setSelectedRows(new Set());
+            setSelectedCells(new Set());
         }
     };
     
