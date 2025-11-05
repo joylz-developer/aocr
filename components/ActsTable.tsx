@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords } from '../types';
 import Modal from './Modal';
-import { DeleteIcon, DownloadIcon, CalendarIcon } from './Icons';
+import { DeleteIcon, DownloadIcon, CalendarIcon, LinkIcon } from './Icons';
 import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
 import { ALL_COLUMNS } from './ActsTableConfig';
@@ -187,6 +187,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const editorContainerRef = useRef<HTMLDivElement>(null);
     const nextWorkPopoverRef = useRef<HTMLDivElement>(null);
 
+    const actsById = useMemo(() => {
+        return new Map(acts.map(a => [a.id, a]));
+    }, [acts]);
+
     const columns = useMemo(() => ALL_COLUMNS.filter(col => {
         if (!visibleColumns.has(col.key)) return false;
         if (col.key === 'date' && !settings.showActDate) return false;
@@ -343,7 +347,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
             (updatedAct as any)[columnKey] = editorValue;
             if (col.key === 'nextWork') {
-                // If the user manually edits the "nextWork" field, we should break the link to the other act.
+                updatedAct.nextWork = editorValue;
                 updatedAct.nextWorkActId = undefined;
             }
         }
@@ -1059,7 +1063,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (originalAct) {
             const updatedAct = {
                 ...originalAct,
-                nextWork: selectedAct.workName,
+                nextWork: '', // Clear manual entry
                 nextWorkActId: selectedAct.id,
             };
             handleSaveWithTemplateResolution(updatedAct);
@@ -1143,7 +1147,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         const isFillTarget = rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol;
 
                                         const cellClassParts = [
-                                            "p-0 border-b border-slate-200 relative transition-colors duration-100",
+                                            "p-0 border-b border-slate-200 relative transition-colors duration-100 group",
                                             colIndex < columns.length - 1 ? 'border-r' : '',
                                             isBeingDragged ? 'opacity-50' : '',
                                         ];
@@ -1252,7 +1256,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 );
                                             }
                                         } else {
-                                            if(col.key === 'workDates') {
+                                            if (col.key === 'workDates') {
                                                 const start = formatDateForDisplay(act.workStartDate);
                                                 const end = formatDateForDisplay(act.workEndDate);
                                                 cellContent = (start && end && start !== end) ? `${start} - ${end}` : (start || '...');
@@ -1261,8 +1265,32 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 cellContent = group ? group.name : '';
                                             } else if (col.type === 'date') {
                                                 cellContent = formatDateForDisplay(act[col.key as keyof Act] as string);
-                                            }
-                                            else {
+                                            } else if (col.key === 'nextWork') {
+                                                if (act.nextWorkActId) {
+                                                    const linkedAct = actsById.get(act.nextWorkActId);
+                                                    if (linkedAct) {
+                                                        const displayName = linkedAct.workName?.trim() || `[Акт №${linkedAct.number || 'б/н'}]`;
+                                                        const isPlaceholder = !linkedAct.workName?.trim();
+                                                        cellContent = (
+                                                            <div className="flex items-center gap-1.5 text-blue-600 group-hover:underline cursor-pointer" title={`Связано с Актом №${linkedAct.number || 'б/н'}`}>
+                                                                <LinkIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                                                                <span className={isPlaceholder ? 'italic text-slate-500' : ''}>
+                                                                    {displayName}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    } else {
+                                                        cellContent = (
+                                                             <div className="flex items-center gap-1.5 text-red-500" title="Связанный акт был удален или не найден">
+                                                                <LinkIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                                                                <span className="italic">[Связь нарушена]</span>
+                                                            </div>
+                                                        );
+                                                    }
+                                                } else {
+                                                    cellContent = act.nextWork || '';
+                                                }
+                                            } else {
                                                 const key = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                                                 cellContent = act[key] || '';
                                             }
@@ -1302,8 +1330,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
                     if (mode === 'options') {
                         const act = acts[rowIndex];
-                        const showManualButton = !act.nextWork || !!act.nextWorkActId;
-                        const showActButton = !act.nextWork || !act.nextWorkActId;
+                        const showManualButton = !act.nextWorkActId;
+                        const showActButton = !!act.nextWorkActId || !act.nextWork;
 
                         return (
                             <div
