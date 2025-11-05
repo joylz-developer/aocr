@@ -173,8 +173,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [dropTargetRowIndex, setDropTargetRowIndex] = useState<number | null>(null);
     const [dropPosition, setDropPosition] = useState<'top' | 'bottom' | null>(null);
 
-    const [nextWorkPopover, setNextWorkPopover] = useState<{ rowIndex: number; colIndex: number; target: HTMLElement } | null>(null);
-    const [actPickerForNextWork, setActPickerForNextWork] = useState<{ rowIndex: number } | null>(null);
+    const [nextWorkPopoverState, setNextWorkPopoverState] = useState<{
+        rowIndex: number;
+        colIndex: number;
+        target: HTMLElement;
+        mode: 'options' | 'picker';
+    } | null>(null);
 
 
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
@@ -294,7 +298,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setEditingCell(null);
         setDatePopoverState(null);
         setDateError(null);
-        setNextWorkPopover(null);
+        setNextWorkPopoverState(null);
     }, []);
     
     const handleEditorSave = useCallback(() => {
@@ -460,11 +464,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setCopiedCells(null);
 
         const col = columns[colIndex];
-        const act = acts[rowIndex];
-        if (col.key === 'nextWork' && !act.nextWork) {
-            setNextWorkPopover({ rowIndex, colIndex, target: e.currentTarget });
+        
+        if (col.key === 'nextWork') {
+            if (nextWorkPopoverState?.rowIndex === rowIndex && nextWorkPopoverState?.colIndex === colIndex) {
+                 setNextWorkPopoverState(null);
+            } else {
+                setNextWorkPopoverState({ rowIndex, colIndex, target: e.currentTarget, mode: 'options' });
+            }
         } else {
-            setNextWorkPopover(null);
+            setNextWorkPopoverState(null);
         }
     
         const cellId = getCellId(rowIndex, colIndex);
@@ -1040,29 +1048,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         });
     };
 
-    // Effect to close NextWorkPopover on outside click
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (nextWorkPopoverRef.current && !nextWorkPopoverRef.current.contains(event.target as Node)) {
-                setNextWorkPopover(null);
-            }
-        };
-
-        if (nextWorkPopover) {
-            document.addEventListener('mousedown', handleClickOutside);
-        } else {
-            document.removeEventListener('mousedown', handleClickOutside);
-        }
-
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, [nextWorkPopover]);
-
     const handleActSelectedForNextWork = (selectedAct: Act) => {
-        if (!actPickerForNextWork) return;
+        if (!nextWorkPopoverState) return;
 
-        const { rowIndex } = actPickerForNextWork;
+        const { rowIndex } = nextWorkPopoverState;
         const originalAct = acts[rowIndex];
         if (originalAct) {
             const updatedAct = {
@@ -1072,8 +1061,26 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             };
             handleSaveWithTemplateResolution(updatedAct);
         }
-        setActPickerForNextWork(null);
+        setNextWorkPopoverState(null);
     };
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (nextWorkPopoverRef.current && !nextWorkPopoverRef.current.contains(event.target as Node)) {
+                setNextWorkPopoverState(null);
+            }
+        };
+
+        if (nextWorkPopoverState) {
+            document.addEventListener('mousedown', handleClickOutside);
+        } else {
+            document.removeEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [nextWorkPopoverState]);
 
     return (
         <div className="h-full flex flex-col relative">
@@ -1282,67 +1289,74 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         )})}
                     </tbody>
                 </table>
-
-                {nextWorkPopover && (() => {
-                    const { target, rowIndex, colIndex } = nextWorkPopover;
+                
+                {nextWorkPopoverState && (() => {
+                    const { target, rowIndex, colIndex, mode } = nextWorkPopoverState;
                     const cellRect = target.getBoundingClientRect();
                     const containerRect = tableContainerRef.current!.getBoundingClientRect();
                     const top = cellRect.bottom - containerRect.top;
                     const left = cellRect.left - containerRect.left;
 
-                    return (
-                        <div
-                            ref={nextWorkPopoverRef}
-                            className="absolute z-50 bg-white shadow-lg rounded-md border border-slate-200 p-2 flex flex-col gap-1 animate-fade-in-up"
-                            style={{ top: `${top}px`, left: `${left}px` }}
-                        >
-                            <button
-                                className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
-                                onClick={() => {
-                                    setEditingCell({ rowIndex, colIndex });
-                                    setNextWorkPopover(null);
-                                }}
+                    if (mode === 'options') {
+                        return (
+                            <div
+                                ref={nextWorkPopoverRef}
+                                className="absolute z-50 bg-white shadow-lg rounded-md border border-slate-200 p-2 flex flex-col gap-1 animate-fade-in-up"
+                                style={{ top: `${top}px`, left: `${left}px` }}
                             >
-                                Ввести вручную...
-                            </button>
-                            <button
-                                className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
-                                onClick={() => {
-                                    setActPickerForNextWork({ rowIndex });
-                                    setNextWorkPopover(null);
-                                }}
+                                <button
+                                    className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
+                                    onClick={() => {
+                                        setEditingCell({ rowIndex, colIndex });
+                                        setNextWorkPopoverState(null);
+                                    }}
+                                >
+                                    Ввести вручную...
+                                </button>
+                                <button
+                                    className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
+                                    onClick={() => {
+                                        setNextWorkPopoverState(prev => prev ? { ...prev, mode: 'picker' } : null);
+                                    }}
+                                >
+                                    Выбрать из акта...
+                                </button>
+                            </div>
+                        );
+                    }
+
+                    if (mode === 'picker') {
+                        const popoverWidth = Math.max(cellRect.width, 350);
+                        return (
+                            <div
+                                ref={nextWorkPopoverRef}
+                                className="absolute z-50 bg-white shadow-lg rounded-md border border-slate-200 flex flex-col animate-fade-in-up"
+                                style={{ top: `${top}px`, left: `${left}px`, width: `${popoverWidth}px` }}
                             >
-                                Выбрать из акта...
-                            </button>
-                        </div>
-                    );
+                                <div className="p-2 border-b">
+                                    <h4 className="font-semibold text-slate-800 text-sm">Выберите акт</h4>
+                                </div>
+                                <div className="max-h-[40vh] overflow-y-auto">
+                                    <ul className="divide-y divide-slate-200">
+                                        {acts.map((act, index) => {
+                                            if(index === rowIndex) return null;
+                                            return (
+                                            <li key={act.id} className="p-3 hover:bg-slate-50 cursor-pointer" onClick={() => handleActSelectedForNextWork(act)}>
+                                                <div className="font-semibold text-slate-800 text-sm">
+                                                    Акт №{act.number || '(б/н)'}
+                                                </div>
+                                                <div className="text-xs text-slate-600 mt-1 truncate" title={act.workName}>
+                                                    {act.workName || '(Нет наименования работ)'}
+                                                </div>
+                                            </li>
+                                        )})}
+                                    </ul>
+                                </div>
+                            </div>
+                        )
+                    }
                 })()}
 
-                {actPickerForNextWork && (
-                    <Modal
-                        isOpen={true}
-                        onClose={() => setActPickerForNextWork(null)}
-                        title="Выберите акт для следующих работ"
-                    >
-                        <div className="max-h-[60vh] overflow-y-auto">
-                            <ul className="divide-y divide-slate-200">
-                                {acts.map((act, index) => {
-                                    if(index === actPickerForNextWork.rowIndex) return null;
-                                    return (
-                                    <li key={act.id} className="p-3 hover:bg-slate-50 cursor-pointer" onClick={() => handleActSelectedForNextWork(act)}>
-                                        <div className="font-semibold text-slate-800">
-                                            Акт №{act.number || '(б/н)'}
-                                        </div>
-                                        <div className="text-sm text-slate-600 mt-1 truncate" title={act.workName}>
-                                            {act.workName || '(Нет наименования работ)'}
-                                        </div>
-                                    </li>
-                                )})}
-                            </ul>
-                        </div>
-                    </Modal>
-                )}
-                
                 {datePopoverState && (
                     <DateEditorPopover
                         act={datePopoverState.act}
