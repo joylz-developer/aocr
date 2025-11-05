@@ -463,37 +463,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (e.detail > 1) e.preventDefault();
         setCopiedCells(null);
     
-        const col = columns[colIndex];
-        
-        // Special handling for the "Next Work" column to show a popover
-        if (col.key === 'nextWork') {
-            // Close any other active editor before showing the popover
-            if (editingCell) {
-                if (!handleEditorSave()) {
-                    // If saving fails (e.g., validation error), don't open the popover
-                    return;
-                }
-                closeEditor();
-            }
-    
-            // Toggle the popover for the current cell
-            if (nextWorkPopoverState?.rowIndex === rowIndex && nextWorkPopoverState?.colIndex === colIndex) {
-                 setNextWorkPopoverState(null);
-            } else {
-                setNextWorkPopoverState({ rowIndex, colIndex, target: e.currentTarget, mode: 'options' });
-            }
-            
-            // Set this cell as active for visual feedback, but don't initiate drag-selection
-            setSelectedCells(new Set([getCellId(rowIndex, colIndex)]));
-            setActiveCell({ rowIndex, colIndex });
-            
-            // Stop further processing to prevent regular selection logic from interfering
-            return; 
-        }
-    
-        // If it's not the "Next Work" cell, ensure its popover is closed
-        setNextWorkPopoverState(null);
-        
         // Regular cell selection logic
         const cellId = getCellId(rowIndex, colIndex);
         if (e.shiftKey && activeCell) {
@@ -526,16 +495,27 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             window.getSelection()?.removeAllRanges();
         }
         const col = columns[colIndex];
-        // Prevent double-click editing on special columns like ID and the interactive "Next Work"
-        if (col?.key === 'id' || col?.key === 'nextWork') {
+        
+        // First, attempt to save and close any currently open editor
+        if (editingCell || datePopoverState || nextWorkPopoverState) {
+            if (handleEditorSave()) {
+                 closeEditor();
+            } else {
+                 return; // Abort if save fails
+            }
+        }
+        
+        // Special handling for the "Next Work" column to show a popover
+        if (col?.key === 'nextWork') {
+            setNextWorkPopoverState({ rowIndex, colIndex, target: e.currentTarget, mode: 'options' });
+            return; 
+        }
+    
+        // Standard behavior for other editable columns
+        if (col?.key === 'id') {
             return;
         }
         
-        if (handleEditorSave()) {
-             closeEditor();
-        }
-        setDatePopoverState(null);
-        setDateError(null);
         setEditingCell({ rowIndex, colIndex });
     };
 
@@ -1321,29 +1301,37 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     const left = cellRect.left - containerRect.left;
 
                     if (mode === 'options') {
+                        const act = acts[rowIndex];
+                        const showManualButton = !act.nextWork || !!act.nextWorkActId;
+                        const showActButton = !act.nextWork || !act.nextWorkActId;
+
                         return (
                             <div
                                 ref={nextWorkPopoverRef}
                                 className="absolute z-50 bg-white shadow-lg rounded-md border border-slate-200 p-2 flex flex-col gap-1 animate-fade-in-up"
                                 style={{ top: `${top}px`, left: `${left}px` }}
                             >
-                                <button
-                                    className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
-                                    onClick={() => {
-                                        setEditingCell({ rowIndex, colIndex });
-                                        setNextWorkPopoverState(null);
-                                    }}
-                                >
-                                    Ввести вручную...
-                                </button>
-                                <button
-                                    className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
-                                    onClick={() => {
-                                        setNextWorkPopoverState(prev => prev ? { ...prev, mode: 'picker' } : null);
-                                    }}
-                                >
-                                    Выбрать из акта...
-                                </button>
+                                {showManualButton && (
+                                    <button
+                                        className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
+                                        onClick={() => {
+                                            setEditingCell({ rowIndex, colIndex });
+                                            setNextWorkPopoverState(null);
+                                        }}
+                                    >
+                                        Ввести вручную...
+                                    </button>
+                                )}
+                                {showActButton && (
+                                    <button
+                                        className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
+                                        onClick={() => {
+                                            setNextWorkPopoverState(prev => prev ? { ...prev, mode: 'picker' } : null);
+                                        }}
+                                    >
+                                        Выбрать из акта...
+                                    </button>
+                                )}
                             </div>
                         );
                     }
