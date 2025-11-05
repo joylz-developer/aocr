@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page } from '../types';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import Modal from '../components/Modal';
 import { PlusIcon, HelpIcon, ColumnsIcon } from '../components/Icons';
@@ -13,7 +13,7 @@ interface ActsPageProps {
     groups: CommissionGroup[];
     template: string | null;
     settings: ProjectSettings;
-    onSave: (act: Act) => void;
+    onSave: (act: Act, insertAtIndex?: number) => void;
     onDelete: (id: string) => void;
     onReorderActs: (newActs: Act[]) => void;
     setCurrentPage: (page: Page) => void;
@@ -112,9 +112,10 @@ const ColumnPicker: React.FC<{
 
 const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onDelete, onReorderActs, setCurrentPage }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+    const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
-        'acts_table_visible_columns_v3', 
-        new Set(ALL_COLUMNS.map(c => c.key))
+        'acts_table_visible_columns_v4', 
+        new Set(ALL_COLUMNS.filter(c => c.key !== 'id').map(c => c.key))
     );
     
     const pickableColumns = useMemo(() => {
@@ -127,12 +128,11 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         });
     }, [settings]);
 
-    // This is a new handler to add an empty act row to the table
     const handleCreateNewAct = () => {
         const newAct: Act = {
             id: crypto.randomUUID(),
             number: '', 
-            date: new Date().toISOString().split('T')[0], // Default to today
+            date: new Date().toISOString().split('T')[0],
             objectName: settings.objectName, 
             builderDetails: '', 
             contractorDetails: '',
@@ -151,7 +151,8 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
             attachments: settings.defaultAttachments || '', 
             representatives: {},
         };
-        onSave(newAct);
+        const insertIndex = activeCell ? activeCell.rowIndex + 1 : acts.length;
+        onSave(newAct, insertIndex);
     };
 
     return (
@@ -184,6 +185,8 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     template={template}
                     settings={settings}
                     visibleColumns={visibleColumns}
+                    activeCell={activeCell}
+                    setActiveCell={setActiveCell}
                     onSave={onSave}
                     onDelete={onDelete}
                     onReorderActs={onReorderActs}

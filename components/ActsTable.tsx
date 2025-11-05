@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
-import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page } from '../types';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords } from '../types';
+import Modal from './Modal';
 import { DeleteIcon, DownloadIcon, CalendarIcon } from './Icons';
 import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
@@ -14,7 +15,9 @@ interface ActsTableProps {
     template: string | null;
     settings: ProjectSettings;
     visibleColumns: Set<string>;
-    onSave: (act: Act) => void;
+    activeCell: Coords | null;
+    setActiveCell: (cell: Coords | null) => void;
+    onSave: (act: Act, insertAtIndex?: number) => void;
     onDelete: (id: string) => void;
     onReorderActs: (newActs: Act[]) => void;
     setCurrentPage: (page: Page) => void;
@@ -152,14 +155,11 @@ const DateEditorPopover: React.FC<{
 };
 
 
-type Coords = { rowIndex: number; colIndex: number };
-
 // Main Table Component
-const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, onSave, onDelete, onReorderActs, setCurrentPage }) => {
+const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, activeCell, setActiveCell, onSave, onDelete, onReorderActs, setCurrentPage }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [dateError, setDateError] = useState<string | null>(null);
-    const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
     const [copiedCells, setCopiedCells] = useState<Set<string> | null>(null);
     const [isDraggingSelection, setIsDraggingSelection] = useState(false);
@@ -173,11 +173,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [dropTargetRowIndex, setDropTargetRowIndex] = useState<number | null>(null);
     const [dropPosition, setDropPosition] = useState<'top' | 'bottom' | null>(null);
 
+    const [nextWorkPopover, setNextWorkPopover] = useState<{ rowIndex: number; colIndex: number; target: HTMLElement } | null>(null);
+    const [actPickerForNextWork, setActPickerForNextWork] = useState<{ rowIndex: number } | null>(null);
+
 
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const tableContainerRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
     const editorContainerRef = useRef<HTMLDivElement>(null);
+    const nextWorkPopoverRef = useRef<HTMLDivElement>(null);
 
     const columns = useMemo(() => ALL_COLUMNS.filter(col => {
         if (!visibleColumns.has(col.key)) return false;
@@ -290,6 +294,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setEditingCell(null);
         setDatePopoverState(null);
         setDateError(null);
+        setNextWorkPopover(null);
     }, []);
     
     const handleEditorSave = useCallback(() => {
@@ -331,7 +336,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 updatedAct.workEndDate = end;
             }
         } else {
-            const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
+            const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
             (updatedAct as any)[columnKey] = editorValue;
         }
 
@@ -382,7 +387,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 const columnKey = col.key as keyof Act;
                 initialValue = formatDateForDisplay(act[columnKey] as string || '');
             } else {
-                const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
+                const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                 initialValue = act[columnKey] || '';
             }
             
@@ -450,6 +455,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         
         if (e.detail > 1) e.preventDefault();
         setCopiedCells(null);
+
+        const col = columns[colIndex];
+        const act = acts[rowIndex];
+        if (col.key === 'nextWork' && !act.nextWork) {
+            setNextWorkPopover({ rowIndex, colIndex, target: e.currentTarget });
+        } else {
+            setNextWorkPopover(null);
+        }
     
         const cellId = getCellId(rowIndex, colIndex);
     
@@ -482,10 +495,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (window.getSelection) {
             window.getSelection()?.removeAllRanges();
         }
+        if (columns[colIndex]?.key === 'id') return;
+        
         if (handleEditorSave()) {
              closeEditor();
         }
-        setDatePopoverState(null); // Close any open popover
+        setDatePopoverState(null);
         setDateError(null);
         setEditingCell({ rowIndex, colIndex });
     };
@@ -522,7 +537,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                             } else if (col.type === 'date') {
                                 rowData.push(formatDateForDisplay(act[col.key as keyof Act] as string));
                             } else {
-                                 const key = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
+                                 const key = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                                 rowData.push(act[key] || '');
                             }
                         } else {
@@ -567,7 +582,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     if (targetColIndex >= columns.length) return;
                     
                     const col = columns[targetColIndex];
-                    if (!col) return;
+                    if (!col || col.key === 'id') return;
 
                     if (col.key === 'workDates') {
                         const parts = cellData.split(' - ').map(s => s.trim());
@@ -585,7 +600,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         (updatedAct as any)[columnKey] = parseDisplayDate(cellData) || '';
                     }
                     else {
-                        const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
+                        const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                         (updatedAct as any)[columnKey] = cellData;
                     }
                 });
@@ -648,7 +663,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
                 let updatedAct = updatedActsMap.get(originalAct.id) || { ...originalAct };
                 const col = columns[c];
-                if (!col) return;
+                if (!col || col.key === 'id') return;
 
                 if (col.key === 'workDates') {
                     updatedAct.workStartDate = '';
@@ -658,7 +673,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     updatedAct.commissionGroupId = undefined;
                 }
                 else {
-                    const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
+                    const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                     (updatedAct as any)[columnKey] = '';
                 }
                 updatedActsMap.set(originalAct.id, updatedAct);
@@ -677,7 +692,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             e.preventDefault();
             handlePaste();
         }
-    }, [editingCell, selectedCells, acts, columns, handleSaveWithTemplateResolution, handleCopy, handlePaste, selectedRows, activeCell]);
+    }, [editingCell, selectedCells, acts, columns, handleSaveWithTemplateResolution, handleCopy, handlePaste, selectedRows, activeCell, setActiveCell]);
 
 
     useEffect(() => {
@@ -1020,6 +1035,41 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         });
     };
 
+    // Effect to close NextWorkPopover on outside click
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (nextWorkPopoverRef.current && !nextWorkPopoverRef.current.contains(event.target as Node)) {
+                setNextWorkPopover(null);
+            }
+        };
+
+        if (nextWorkPopover) {
+            document.addEventListener('mousedown', handleClickOutside);
+        } else {
+            document.removeEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [nextWorkPopover]);
+
+    const handleActSelectedForNextWork = (selectedAct: Act) => {
+        if (!actPickerForNextWork) return;
+
+        const { rowIndex } = actPickerForNextWork;
+        const originalAct = acts[rowIndex];
+        if (originalAct) {
+            const updatedAct = {
+                ...originalAct,
+                nextWork: selectedAct.workName,
+                nextWorkActId: selectedAct.id,
+            };
+            handleSaveWithTemplateResolution(updatedAct);
+        }
+        setActPickerForNextWork(null);
+    };
+
     return (
         <div className="h-full flex flex-col relative">
             <div className="flex-grow overflow-auto border border-slate-200 rounded-md relative focus:outline-none" ref={tableContainerRef} tabIndex={-1} onKeyDown={handleKeyDown}>
@@ -1198,7 +1248,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 cellContent = formatDateForDisplay(act[col.key as keyof Act] as string);
                                             }
                                             else {
-                                                const key = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates'>;
+                                                const key = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                                                 cellContent = act[key] || '';
                                             }
                                         }
@@ -1227,6 +1277,66 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         )})}
                     </tbody>
                 </table>
+
+                {nextWorkPopover && (() => {
+                    const { target, rowIndex, colIndex } = nextWorkPopover;
+                    const cellRect = target.getBoundingClientRect();
+                    const containerRect = tableContainerRef.current!.getBoundingClientRect();
+                    const top = cellRect.bottom - containerRect.top;
+                    const left = cellRect.left - containerRect.left;
+
+                    return (
+                        <div
+                            ref={nextWorkPopoverRef}
+                            className="absolute z-50 bg-white shadow-lg rounded-md border border-slate-200 p-2 flex flex-col gap-1 animate-fade-in-up"
+                            style={{ top: `${top}px`, left: `${left}px` }}
+                        >
+                            <button
+                                className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
+                                onClick={() => {
+                                    setEditingCell({ rowIndex, colIndex });
+                                    setNextWorkPopover(null);
+                                }}
+                            >
+                                Ввести вручную...
+                            </button>
+                            <button
+                                className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
+                                onClick={() => {
+                                    setActPickerForNextWork({ rowIndex });
+                                    setNextWorkPopover(null);
+                                }}
+                            >
+                                Выбрать из акта...
+                            </button>
+                        </div>
+                    );
+                })()}
+
+                {actPickerForNextWork && (
+                    <Modal
+                        isOpen={true}
+                        onClose={() => setActPickerForNextWork(null)}
+                        title="Выберите акт для следующих работ"
+                    >
+                        <div className="max-h-[60vh] overflow-y-auto">
+                            <ul className="divide-y divide-slate-200">
+                                {acts.map((act, index) => {
+                                    if(index === actPickerForNextWork.rowIndex) return null;
+                                    return (
+                                    <li key={act.id} className="p-3 hover:bg-slate-50 cursor-pointer" onClick={() => handleActSelectedForNextWork(act)}>
+                                        <div className="font-semibold text-slate-800">
+                                            Акт №{act.number || '(б/н)'}
+                                        </div>
+                                        <div className="text-sm text-slate-600 mt-1 truncate" title={act.workName}>
+                                            {act.workName || '(Нет наименования работ)'}
+                                        </div>
+                                    </li>
+                                )})}
+                            </ul>
+                        </div>
+                    </Modal>
+                )}
                 
                 {datePopoverState && (
                     <DateEditorPopover

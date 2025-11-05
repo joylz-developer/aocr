@@ -64,13 +64,17 @@ const App: React.FC = () => {
         }
     };
 
-    const handleSaveAct = useCallback((actToSave: Act) => {
+    const handleSaveAct = useCallback((actToSave: Act, insertAtIndex?: number) => {
         setActs(prevActs => {
             const exists = prevActs.some(a => a.id === actToSave.id);
             if (exists) {
                 return prevActs.map(a => (a.id === actToSave.id ? actToSave : a));
             }
-            return [...prevActs, actToSave];
+            
+            const newActs = [...prevActs];
+            const finalIndex = insertAtIndex === undefined ? newActs.length : insertAtIndex;
+            newActs.splice(finalIndex, 0, actToSave);
+            return newActs;
         });
     }, [setActs]);
 

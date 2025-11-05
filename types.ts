@@ -67,6 +67,7 @@ export interface Act {
     };
     
     commissionGroupId?: string;
+    nextWorkActId?: string;
 }
 
 export interface CommissionGroup {
@@ -126,10 +127,12 @@ export interface ImportData {
 
 // Defines which fields from the Act can be columns in the table
 export type ActTableColumnKey = Exclude<keyof Act, 
-    'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 
+    'representatives' | 'builderDetails' | 'contractorDetails' | 
     'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 
-    'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId'
+    'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'nextWorkActId'
 > | 'workDates' | 'commissionGroup';
 
 // Defines the available pages in the application
 export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups';
+
+export type Coords = { rowIndex: number; colIndex: number };
