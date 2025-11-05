@@ -462,21 +462,40 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         
         if (e.detail > 1) e.preventDefault();
         setCopiedCells(null);
-
+    
         const col = columns[colIndex];
         
+        // Special handling for the "Next Work" column to show a popover
         if (col.key === 'nextWork') {
+            // Close any other active editor before showing the popover
+            if (editingCell) {
+                if (!handleEditorSave()) {
+                    // If saving fails (e.g., validation error), don't open the popover
+                    return;
+                }
+                closeEditor();
+            }
+    
+            // Toggle the popover for the current cell
             if (nextWorkPopoverState?.rowIndex === rowIndex && nextWorkPopoverState?.colIndex === colIndex) {
                  setNextWorkPopoverState(null);
             } else {
                 setNextWorkPopoverState({ rowIndex, colIndex, target: e.currentTarget, mode: 'options' });
             }
-        } else {
-            setNextWorkPopoverState(null);
+            
+            // Set this cell as active for visual feedback, but don't initiate drag-selection
+            setSelectedCells(new Set([getCellId(rowIndex, colIndex)]));
+            setActiveCell({ rowIndex, colIndex });
+            
+            // Stop further processing to prevent regular selection logic from interfering
+            return; 
         }
     
+        // If it's not the "Next Work" cell, ensure its popover is closed
+        setNextWorkPopoverState(null);
+        
+        // Regular cell selection logic
         const cellId = getCellId(rowIndex, colIndex);
-    
         if (e.shiftKey && activeCell) {
             const { minRow, maxRow, minCol, maxCol } = normalizeSelection(activeCell, { rowIndex, colIndex });
             const selection = new Set<string>();
@@ -506,7 +525,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (window.getSelection) {
             window.getSelection()?.removeAllRanges();
         }
-        if (columns[colIndex]?.key === 'id') return;
+        const col = columns[colIndex];
+        // Prevent double-click editing on special columns like ID and the interactive "Next Work"
+        if (col?.key === 'id' || col?.key === 'nextWork') {
+            return;
+        }
         
         if (handleEditorSave()) {
              closeEditor();
