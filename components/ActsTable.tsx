@@ -338,6 +338,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         } else {
             const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
             (updatedAct as any)[columnKey] = editorValue;
+            if (col.key === 'nextWork') {
+                // If the user manually edits the "nextWork" field, we should break the link to the other act.
+                updatedAct.nextWorkActId = undefined;
+            }
         }
 
         if (JSON.stringify(updatedAct) !== JSON.stringify(act)) {
