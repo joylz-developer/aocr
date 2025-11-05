@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page } from '../types';
 import { DeleteIcon, DownloadIcon, CalendarIcon } from './Icons';
 import CustomSelect from './CustomSelect';
@@ -166,6 +166,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [fillTargetArea, setFillTargetArea] = useState<{ start: Coords, end: Coords } | null>(null);
     
     const [datePopoverState, setDatePopoverState] = useState<{ act: Act; position: { top: number, left: number, width: number } } | null>(null);
+    const [fillHandleCoords, setFillHandleCoords] = useState<{top: number, left: number} | null>(null);
 
     const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
     const [selectionAnchorRow, setSelectionAnchorRow] = useState<number | null>(null);
@@ -845,18 +846,24 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     }, [selectedCells]);
 
 
-    const fillHandleCoords = useMemo(() => {
-        if (!fillHandleCell) return null;
+    useLayoutEffect(() => {
+        if (!fillHandleCell) {
+            setFillHandleCoords(null);
+            return;
+        }
         const { rowIndex, colIndex } = fillHandleCell;
         const cellElement = tableContainerRef.current?.querySelector(`[data-row-index="${rowIndex}"][data-col-index="${colIndex}"]`);
+    
         if (cellElement) {
-            return {
+            const newCoords = {
                 top: (cellElement as HTMLElement).offsetTop + (cellElement as HTMLElement).offsetHeight - 4,
                 left: (cellElement as HTMLElement).offsetLeft + (cellElement as HTMLElement).offsetWidth - 4,
             };
+            setFillHandleCoords(newCoords);
+        } else {
+            setFillHandleCoords(null);
         }
-        return null;
-    }, [fillHandleCell]);
+    }, [fillHandleCell, columnWidths, acts]);
 
     useEffect(() => {
         const newSelectedCells = new Set<string>();
