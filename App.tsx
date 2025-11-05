@@ -70,7 +70,7 @@ const App: React.FC = () => {
             if (exists) {
                 return prevActs.map(a => (a.id === actToSave.id ? actToSave : a));
             }
-            return [...prevActs, actToSave].sort((a, b) => a.date.localeCompare(b.date));
+            return [...prevActs, actToSave];
         });
     }, [setActs]);
 
@@ -78,6 +78,10 @@ const App: React.FC = () => {
         if (window.confirm('Вы уверены, что хотите удалить этот акт?')) {
             setActs(prevActs => prevActs.filter(a => a.id !== id));
         }
+    }, [setActs]);
+    
+    const handleReorderActs = useCallback((newActs: Act[]) => {
+        setActs(newActs);
     }, [setActs]);
     
     const handleSavePerson = useCallback((personToSave: Person) => {
@@ -231,7 +235,7 @@ const App: React.FC = () => {
         const mergeOrReplace = <T extends {id: string}>(
             key: 'acts' | 'people' | 'organizations' | 'groups',
             setData: React.Dispatch<React.SetStateAction<T[]>>,
-            sortFn: (a: T, b: T) => number
+            sortFn: ((a: T, b: T) => number) | null
         ) => {
             if (importSettings[key]?.import && importData[key]) {
                  if (importSettings[key].mode === 'replace') {
@@ -243,13 +247,14 @@ const App: React.FC = () => {
                     setData(prev => {
                         const itemMap = new Map(prev.map(item => [item.id, item]));
                         selectedItems.forEach(item => itemMap.set(item.id, item));
-                        return Array.from(itemMap.values()).sort(sortFn);
+                        const newArray = Array.from(itemMap.values());
+                        return sortFn ? newArray.sort(sortFn) : newArray;
                     });
                 }
             }
         };
 
-        mergeOrReplace('acts', setActs, (a, b) => a.date.localeCompare(b.date));
+        mergeOrReplace('acts', setActs, null);
         mergeOrReplace('people', setPeople, (a,b) => a.name.localeCompare(b.name));
         mergeOrReplace('organizations', setOrganizations, (a,b) => a.name.localeCompare(b.name));
         mergeOrReplace('groups', setGroups, (a,b) => a.name.localeCompare(b.name));
@@ -276,6 +281,7 @@ const App: React.FC = () => {
                             settings={settings}
                             onSave={handleSaveAct} 
                             onDelete={handleDeleteAct}
+                            onReorderActs={handleReorderActs}
                             setCurrentPage={setCurrentPage}
                         />;
             case 'people':

@@ -16,6 +16,7 @@ interface ActsTableProps {
     visibleColumns: Set<string>;
     onSave: (act: Act) => void;
     onDelete: (id: string) => void;
+    onReorderActs: (newActs: Act[]) => void;
     setCurrentPage: (page: Page) => void;
 }
 
@@ -154,7 +155,7 @@ const DateEditorPopover: React.FC<{
 type Coords = { rowIndex: number; colIndex: number };
 
 // Main Table Component
-const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, onSave, onDelete, setCurrentPage }) => {
+const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, onSave, onDelete, onReorderActs, setCurrentPage }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [dateError, setDateError] = useState<string | null>(null);
@@ -168,8 +169,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [datePopoverState, setDatePopoverState] = useState<{ act: Act; position: { top: number, left: number, width: number } } | null>(null);
     const [fillHandleCoords, setFillHandleCoords] = useState<{top: number, left: number} | null>(null);
 
-    const [selectionAnchorRow, setSelectionAnchorRow] = useState<number | null>(null);
-    const [isDraggingRowSelection, setIsDraggingRowSelection] = useState(false);
+    const [draggedRowIndex, setDraggedRowIndex] = useState<number | null>(null);
+    const [dropTargetRowIndex, setDropTargetRowIndex] = useState<number | null>(null);
 
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -443,7 +444,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
 
     const handleCellMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
-        setSelectionAnchorRow(null);
         tableContainerRef.current?.focus({ preventScroll: true });
         
         if (e.detail > 1) e.preventDefault();
@@ -618,7 +618,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (e.key === 'Escape') {
             e.preventDefault();
             setSelectedCells(new Set());
-            setSelectionAnchorRow(null);
             setActiveCell(null);
             setCopiedCells(null);
             e.currentTarget.blur();
@@ -885,88 +884,46 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             setFillHandleCoords(null);
         }
     }, [fillHandleCell, columnWidths, acts]);
-
-    const handleRowSelectorMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number) => {
-        e.preventDefault();
-        tableContainerRef.current?.focus({ preventScroll: true });
-        setCopiedCells(null);
     
-        let newSelectedCells: Set<string>;
-    
-        if (e.shiftKey && selectionAnchorRow !== null) {
-            newSelectedCells = new Set();
-            const start = Math.min(selectionAnchorRow, rowIndex);
-            const end = Math.max(selectionAnchorRow, rowIndex);
-            for (let r = start; r <= end; r++) {
-                for (let c = 0; c < columns.length; c++) {
-                    newSelectedCells.add(getCellId(r, c));
-                }
-            }
-        } else if (e.ctrlKey || e.metaKey) {
-            newSelectedCells = new Set(selectedCells);
-            
-            // Check if all cells for this row are currently in the selection
-            let allCellsPresent = true;
-            for (let c = 0; c < columns.length; c++) {
-                if (!newSelectedCells.has(getCellId(rowIndex, c))) {
-                    allCellsPresent = false;
-                    break;
-                }
-            }
-    
-            for (let c = 0; c < columns.length; c++) {
-                if (allCellsPresent) {
-                    newSelectedCells.delete(getCellId(rowIndex, c));
-                } else {
-                    newSelectedCells.add(getCellId(rowIndex, c));
-                }
-            }
-            setSelectionAnchorRow(rowIndex);
-        } else {
-            newSelectedCells = new Set();
-            for (let c = 0; c < columns.length; c++) {
-                newSelectedCells.add(getCellId(rowIndex, c));
-            }
-            setSelectionAnchorRow(rowIndex);
-        }
-        
-        setSelectedCells(newSelectedCells);
-        setIsDraggingRowSelection(true);
+    // Drag and Drop Row Reordering Handlers
+    const handleDragStart = (e: React.DragEvent, rowIndex: number) => {
+        setDraggedRowIndex(rowIndex);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(rowIndex)); // Necessary for Firefox
     };
 
-    useEffect(() => {
-        const handleMouseMove = (e: MouseEvent) => {
-            if (!isDraggingRowSelection || selectionAnchorRow === null) return;
-            const target = e.target as HTMLElement;
-            const cell = target.closest<HTMLTableCellElement>('td[data-row-index]');
-            if (!cell || !cell.dataset.rowIndex) return;
+    const handleDragOver = (e: React.DragEvent, rowIndex: number) => {
+        e.preventDefault();
+        if (draggedRowIndex !== null && draggedRowIndex !== rowIndex) {
+            setDropTargetRowIndex(rowIndex);
+        }
+    };
 
-            const currentRowIndex = parseInt(cell.dataset.rowIndex, 10);
-            
-            const start = Math.min(selectionAnchorRow, currentRowIndex);
-            const end = Math.max(selectionAnchorRow, currentRowIndex);
-            
-            const newSelectedCells = new Set<string>();
-            for (let r = start; r <= end; r++) {
-                 for (let c = 0; c < columns.length; c++) {
-                    newSelectedCells.add(getCellId(r, c));
-                }
-            }
-            setSelectedCells(newSelectedCells);
-        };
+    const handleDragLeave = () => {
+        setDropTargetRowIndex(null);
+    };
 
-        const handleMouseUp = () => setIsDraggingRowSelection(false);
-
-        if (isDraggingRowSelection) {
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp, { once: true });
+    const handleDrop = (e: React.DragEvent, targetRowIndex: number) => {
+        e.preventDefault();
+        if (draggedRowIndex === null || draggedRowIndex === targetRowIndex) {
+            return;
         }
 
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        };
-    }, [isDraggingRowSelection, selectionAnchorRow, columns]);
+        const newActs = [...acts];
+        const [draggedAct] = newActs.splice(draggedRowIndex, 1);
+        newActs.splice(targetRowIndex, 0, draggedAct);
+
+        onReorderActs(newActs);
+        
+        setDraggedRowIndex(null);
+        setDropTargetRowIndex(null);
+    };
+    
+    const handleDragEnd = () => {
+        setDraggedRowIndex(null);
+        setDropTargetRowIndex(null);
+    };
+
 
     const handleBulkDelete = () => {
         if (window.confirm(`Вы уверены, что хотите удалить ${selectedRows.size} акт(ов)?`)) {
@@ -1018,12 +975,20 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     <tbody className="bg-white">
                         {acts.map((act, rowIndex) => {
                             const isRowSelected = selectedRows.has(rowIndex);
+                            const isBeingDragged = draggedRowIndex === rowIndex;
+                            const isDropTarget = dropTargetRowIndex === rowIndex;
 
                             return (
-                                <tr key={act.id}>
+                                <tr key={act.id} className={isDropTarget ? 'drop-target-row' : ''}
+                                    onDragOver={(e) => handleDragOver(e, rowIndex)}
+                                    onDrop={(e) => handleDrop(e, rowIndex)}
+                                    onDragLeave={handleDragLeave}
+                                    onDragEnd={handleDragEnd}
+                                >
                                     <td
-                                        className={`sticky left-0 p-0 w-12 min-w-[3rem] z-10 border-r border-b border-slate-200 text-center text-xs text-slate-400 cursor-pointer select-none transition-colors ${isRowSelected ? 'bg-blue-200' : 'bg-slate-50 hover:bg-slate-100'}`}
-                                        onMouseDown={(e) => handleRowSelectorMouseDown(e, rowIndex)}
+                                        className={`sticky left-0 p-0 w-12 min-w-[3rem] z-10 border-r border-b border-slate-200 text-center text-xs text-slate-400 select-none transition-colors grabbable ${isRowSelected ? 'bg-blue-200' : 'bg-slate-50 hover:bg-slate-100'} ${isBeingDragged ? 'opacity-50' : ''}`}
+                                        draggable={true}
+                                        onDragStart={(e) => handleDragStart(e, rowIndex)}
                                         data-row-index={rowIndex}
                                     >
                                         {rowIndex + 1}
@@ -1041,6 +1006,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         const cellClassParts = [
                                             "p-0 border-b border-slate-200 relative transition-colors duration-100",
                                             colIndex < columns.length - 1 ? 'border-r' : '',
+                                            isBeingDragged ? 'opacity-50' : '',
                                         ];
                                         if (isFillTarget) cellClassParts.push('bg-blue-200');
                                         else if (isSelected) cellClassParts.push('bg-blue-100');

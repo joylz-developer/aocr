@@ -141,6 +141,18 @@
       background-position: 0 0, 0 100%, 0 0, 100% 0;
       animation: marching-ants 0.5s linear infinite;
   }
+
+  .grabbable {
+    cursor: grab;
+  }
+
+  .grabbable:active {
+    cursor: grabbing;
+  }
+
+  .drop-target-row > td {
+      border-top: 2px solid #3b82f6; /* blue-500 */
+  }
 </style>
 </head>
 <body class="bg-slate-100 text-slate-800">
