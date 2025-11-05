@@ -169,7 +169,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [datePopoverState, setDatePopoverState] = useState<{ act: Act; position: { top: number, left: number, width: number } } | null>(null);
     const [fillHandleCoords, setFillHandleCoords] = useState<{top: number, left: number} | null>(null);
 
-    const [draggedRowIndex, setDraggedRowIndex] = useState<number | null>(null);
+    const [draggedRowIndices, setDraggedRowIndices] = useState<number[] | null>(null);
     const [dropTargetRowIndex, setDropTargetRowIndex] = useState<number | null>(null);
     const [dropPosition, setDropPosition] = useState<'top' | 'bottom' | null>(null);
 
@@ -889,14 +889,20 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     
     // Drag and Drop Row Reordering Handlers
     const handleDragStart = (e: React.DragEvent, rowIndex: number) => {
-        setDraggedRowIndex(rowIndex);
+        const isDraggingSelection = selectedRows.has(rowIndex);
+        const indicesToDrag = isDraggingSelection
+            ? Array.from(selectedRows).sort((a, b) => a - b)
+            : [rowIndex];
+
+        setDraggedRowIndices(indicesToDrag);
         e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', String(rowIndex)); // Necessary for Firefox
+        e.dataTransfer.setData('application/json', JSON.stringify(indicesToDrag));
+        e.dataTransfer.setData('text/plain', indicesToDrag.join(',')); // For compatibility
     };
 
     const handleDragOver = (e: React.DragEvent, rowIndex: number) => {
         e.preventDefault();
-        if (draggedRowIndex !== null && draggedRowIndex !== rowIndex) {
+        if (draggedRowIndices !== null && !draggedRowIndices.includes(rowIndex)) {
             setDropTargetRowIndex(rowIndex);
             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
             const midpoint = rect.top + rect.height / 2;
@@ -911,32 +917,49 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const handleDrop = (e: React.DragEvent, targetRowIndex: number) => {
         e.preventDefault();
-        if (draggedRowIndex === null) {
+        const draggedIndicesJSON = e.dataTransfer.getData('application/json');
+        
+        if (!draggedIndicesJSON || !draggedRowIndices) {
+            handleDragEnd();
             return;
         }
 
-        let finalTargetIndex = targetRowIndex;
+        const draggedIndices = JSON.parse(draggedIndicesJSON) as number[];
+        if (draggedIndices.length === 0) {
+            handleDragEnd();
+            return;
+        }
+
+        let insertionIndex = targetRowIndex;
         if (dropPosition === 'bottom') {
-            finalTargetIndex++;
+            insertionIndex++;
         }
 
-        const newActs = [...acts];
-        const [draggedAct] = newActs.splice(draggedRowIndex, 1);
+        const draggedActs = draggedIndices.map(index => acts[index]);
+        const remainingActs = acts.filter((_, index) => !draggedIndices.includes(index));
         
-        let adjustedFinalIndex = finalTargetIndex;
-        if (draggedRowIndex < finalTargetIndex) {
-            adjustedFinalIndex--;
-        }
+        const itemsBeforeInsertion = draggedIndices.filter(i => i < insertionIndex).length;
+        const finalInsertionIndex = insertionIndex - itemsBeforeInsertion;
 
-        newActs.splice(adjustedFinalIndex, 0, draggedAct);
+        remainingActs.splice(finalInsertionIndex, 0, ...draggedActs);
+        onReorderActs(remainingActs);
 
-        onReorderActs(newActs);
+        const newSelection = new Set<string>();
+        const newRowIndices = Array.from({ length: draggedActs.length }, (_, i) => finalInsertionIndex + i);
+        
+        newRowIndices.forEach(r => {
+            columns.forEach((_, c) => {
+                newSelection.add(getCellId(r, c));
+            });
+        });
+        setSelectedCells(newSelection);
+        setActiveCell({ rowIndex: finalInsertionIndex, colIndex: 0 });
         
         handleDragEnd();
     };
     
     const handleDragEnd = () => {
-        setDraggedRowIndex(null);
+        setDraggedRowIndices(null);
         setDropTargetRowIndex(null);
         setDropPosition(null);
     };
@@ -1022,7 +1045,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     <tbody className="bg-white">
                         {acts.map((act, rowIndex) => {
                             const isRowSelected = selectedRows.has(rowIndex);
-                            const isBeingDragged = draggedRowIndex === rowIndex;
+                            const isBeingDragged = draggedRowIndices?.includes(rowIndex);
                             const isDropTargetTop = dropTargetRowIndex === rowIndex && dropPosition === 'top';
                             const isDropTargetBottom = dropTargetRowIndex === rowIndex && dropPosition === 'bottom';
                             const trClass = isDropTargetTop ? 'drop-target-row-top' : isDropTargetBottom ? 'drop-target-row-bottom' : '';
