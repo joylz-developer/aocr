@@ -171,6 +171,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const [draggedRowIndex, setDraggedRowIndex] = useState<number | null>(null);
     const [dropTargetRowIndex, setDropTargetRowIndex] = useState<number | null>(null);
+    const [dropPosition, setDropPosition] = useState<'top' | 'bottom' | null>(null);
+
 
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -896,32 +898,77 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         e.preventDefault();
         if (draggedRowIndex !== null && draggedRowIndex !== rowIndex) {
             setDropTargetRowIndex(rowIndex);
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            const midpoint = rect.top + rect.height / 2;
+            setDropPosition(e.clientY > midpoint ? 'bottom' : 'top');
         }
     };
 
     const handleDragLeave = () => {
         setDropTargetRowIndex(null);
+        setDropPosition(null);
     };
 
     const handleDrop = (e: React.DragEvent, targetRowIndex: number) => {
         e.preventDefault();
-        if (draggedRowIndex === null || draggedRowIndex === targetRowIndex) {
+        if (draggedRowIndex === null) {
             return;
+        }
+
+        let finalTargetIndex = targetRowIndex;
+        if (dropPosition === 'bottom') {
+            finalTargetIndex++;
         }
 
         const newActs = [...acts];
         const [draggedAct] = newActs.splice(draggedRowIndex, 1);
-        newActs.splice(targetRowIndex, 0, draggedAct);
+        
+        let adjustedFinalIndex = finalTargetIndex;
+        if (draggedRowIndex < finalTargetIndex) {
+            adjustedFinalIndex--;
+        }
+
+        newActs.splice(adjustedFinalIndex, 0, draggedAct);
 
         onReorderActs(newActs);
         
-        setDraggedRowIndex(null);
-        setDropTargetRowIndex(null);
+        handleDragEnd();
     };
     
     const handleDragEnd = () => {
         setDraggedRowIndex(null);
         setDropTargetRowIndex(null);
+        setDropPosition(null);
+    };
+
+    const handleRowNumberClick = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number) => {
+        e.preventDefault();
+        const rowCellIds = columns.map((_, colIndex) => getCellId(rowIndex, colIndex));
+        const allCellsInRowSelected = rowCellIds.every(id => selectedCells.has(id)) && rowCellIds.length > 0;
+
+        if (e.shiftKey && activeCell) {
+            const startRow = Math.min(activeCell.rowIndex, rowIndex);
+            const endRow = Math.max(activeCell.rowIndex, rowIndex);
+            const newSelection = new Set<string>();
+            for (let r = startRow; r <= endRow; r++) {
+                columns.forEach((_, c) => {
+                    newSelection.add(getCellId(r, c));
+                });
+            }
+            setSelectedCells(newSelection);
+        } else if (e.ctrlKey || e.metaKey) {
+            const newSelection = new Set(selectedCells);
+            if (allCellsInRowSelected) {
+                rowCellIds.forEach(id => newSelection.delete(id));
+            } else {
+                rowCellIds.forEach(id => newSelection.add(id));
+            }
+            setSelectedCells(newSelection);
+            setActiveCell({ rowIndex, colIndex: 0 });
+        } else {
+            setSelectedCells(new Set(rowCellIds));
+            setActiveCell({ rowIndex, colIndex: 0 });
+        }
     };
 
 
@@ -976,10 +1023,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         {acts.map((act, rowIndex) => {
                             const isRowSelected = selectedRows.has(rowIndex);
                             const isBeingDragged = draggedRowIndex === rowIndex;
-                            const isDropTarget = dropTargetRowIndex === rowIndex;
+                            const isDropTargetTop = dropTargetRowIndex === rowIndex && dropPosition === 'top';
+                            const isDropTargetBottom = dropTargetRowIndex === rowIndex && dropPosition === 'bottom';
+                            const trClass = isDropTargetTop ? 'drop-target-row-top' : isDropTargetBottom ? 'drop-target-row-bottom' : '';
+
 
                             return (
-                                <tr key={act.id} className={isDropTarget ? 'drop-target-row' : ''}
+                                <tr key={act.id} className={trClass}
                                     onDragOver={(e) => handleDragOver(e, rowIndex)}
                                     onDrop={(e) => handleDrop(e, rowIndex)}
                                     onDragLeave={handleDragLeave}
@@ -989,6 +1039,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         className={`sticky left-0 p-0 w-12 min-w-[3rem] z-10 border-r border-b border-slate-200 text-center text-xs text-slate-400 select-none transition-colors grabbable ${isRowSelected ? 'bg-blue-200' : 'bg-slate-50 hover:bg-slate-100'} ${isBeingDragged ? 'opacity-50' : ''}`}
                                         draggable={true}
                                         onDragStart={(e) => handleDragStart(e, rowIndex)}
+                                        onClick={(e) => handleRowNumberClick(e, rowIndex)}
                                         data-row-index={rowIndex}
                                     >
                                         {rowIndex + 1}
