@@ -1331,6 +1331,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     if (mode === 'options') {
                         const act = acts[rowIndex];
                         const isLinked = !!act.nextWorkActId;
+                        const hasContent = isLinked || (act.nextWork && act.nextWork.trim() !== '');
 
                         return (
                             <div
@@ -1381,6 +1382,26 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                             Указать акт...
                                         </button>
                                      </>
+                                )}
+                                {hasContent && (
+                                    <>
+                                        <div className="my-1 border-t border-slate-200" />
+                                        <button
+                                            className="flex items-center gap-2 text-left text-sm px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-md"
+                                            onClick={() => {
+                                                const updatedAct = {
+                                                    ...act,
+                                                    nextWork: '',
+                                                    nextWorkActId: undefined
+                                                };
+                                                handleSaveWithTemplateResolution(updatedAct);
+                                                setNextWorkPopoverState(null);
+                                            }}
+                                        >
+                                            <DeleteIcon />
+                                            Очистить
+                                        </button>
+                                    </>
                                 )}
                             </div>
                         );
