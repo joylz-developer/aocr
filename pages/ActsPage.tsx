@@ -17,6 +17,7 @@ interface ActsPageProps {
     onDelete: (id: string) => void;
     onReorderActs: (newActs: Act[]) => void;
     setCurrentPage: (page: Page) => void;
+    requestConfirmation: (title: string, message: React.ReactNode, onConfirm: () => void, confirmText?: string) => void;
 }
 
 // Helper component for interactive tags in the help modal
@@ -110,7 +111,7 @@ const ColumnPicker: React.FC<{
 };
 
 
-const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onDelete, onReorderActs, setCurrentPage }) => {
+const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onDelete, onReorderActs, setCurrentPage, requestConfirmation }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
@@ -191,6 +192,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     onDelete={onDelete}
                     onReorderActs={onReorderActs}
                     setCurrentPage={setCurrentPage}
+                    requestConfirmation={requestConfirmation}
                 />
             </div>
             

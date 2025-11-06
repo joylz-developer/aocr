@@ -3,6 +3,7 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page } from './types';
 import TemplateUploader from './components/TemplateUploader';
 import ImportModal from './components/ImportModal';
+import ConfirmationModal from './components/ConfirmationModal';
 import ActsPage from './pages/ActsPage';
 import PeoplePage from './pages/PeoplePage';
 import OrganizationsPage from './pages/OrganizationsPage';
@@ -47,6 +48,12 @@ const App: React.FC = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const importInputRef = useRef<HTMLInputElement>(null);
     const [importData, setImportData] = useState<ImportData | null>(null);
+    const [confirmation, setConfirmation] = useState<{
+        title: string;
+        message: React.ReactNode;
+        onConfirm: () => void;
+        confirmText?: string;
+    } | null>(null);
     
     const handleTemplateUpload = async (file: File) => {
         try {
@@ -79,9 +86,7 @@ const App: React.FC = () => {
     }, [setActs]);
 
     const handleDeleteAct = useCallback((id: string) => {
-        if (window.confirm('Вы уверены, что хотите удалить этот акт?')) {
-            setActs(prevActs => prevActs.filter(a => a.id !== id));
-        }
+        setActs(prevActs => prevActs.filter(a => a.id !== id));
     }, [setActs]);
     
     const handleReorderActs = useCallback((newActs: Act[]) => {
@@ -102,19 +107,24 @@ const App: React.FC = () => {
         const personToDelete = people.find(p => p.id === id);
         if (!personToDelete) return;
 
-        if (window.confirm(`Вы уверены, что хотите удалить участника "${personToDelete.name}"? Он также будет удален из всех актов.`)) {
-            setPeople(prevPeople => prevPeople.filter(p => p.id !== id));
-            setActs(prevActs => prevActs.map(act => {
-                const newReps = { ...act.representatives };
-                Object.keys(newReps).forEach(key => {
-                    const repKey = key as keyof typeof newReps;
-                    if (newReps[repKey] === id) {
-                        delete newReps[repKey];
-                    }
-                });
-                return { ...act, representatives: newReps };
-            }));
-        }
+        setConfirmation({
+            title: 'Подтверждение удаления',
+            message: `Вы уверены, что хотите удалить участника "${personToDelete.name}"? Он также будет удален из всех актов.`,
+            onConfirm: () => {
+                setPeople(prevPeople => prevPeople.filter(p => p.id !== id));
+                setActs(prevActs => prevActs.map(act => {
+                    const newReps = { ...act.representatives };
+                    Object.keys(newReps).forEach(key => {
+                        const repKey = key as keyof typeof newReps;
+                        if (newReps[repKey] === id) {
+                            delete newReps[repKey];
+                        }
+                    });
+                    return { ...act, representatives: newReps };
+                }));
+                setConfirmation(null);
+            }
+        });
     }, [people, setPeople, setActs]);
 
     const handleSaveOrganization = useCallback((orgToSave: Organization) => {
@@ -138,9 +148,14 @@ const App: React.FC = () => {
             return;
         }
 
-        if (window.confirm(`Вы уверены, что хотите удалить организацию "${orgToDelete.name}"?`)) {
-            setOrganizations(prevOrgs => prevOrgs.filter(o => o.id !== id));
-        }
+        setConfirmation({
+            title: 'Подтверждение удаления',
+            message: `Вы уверены, что хотите удалить организацию "${orgToDelete.name}"?`,
+            onConfirm: () => {
+                setOrganizations(prevOrgs => prevOrgs.filter(o => o.id !== id));
+                setConfirmation(null);
+            }
+        });
     }, [organizations, people, setOrganizations]);
 
     const handleSaveGroup = useCallback((groupToSave: CommissionGroup) => {
@@ -162,13 +177,17 @@ const App: React.FC = () => {
             ? `Группа "${groupToDelete.name}" используется в некоторых актах. Вы уверены, что хотите ее удалить? Связь с актами будет потеряна.`
             : `Вы уверены, что хотите удалить группу "${groupToDelete.name}"?`;
 
-        if (window.confirm(confirmMessage)) {
-            setGroups(prev => prev.filter(g => g.id !== id));
-            // Unlink from acts
-            if (isGroupInUse) {
-                setActs(prev => prev.map(act => act.commissionGroupId === id ? { ...act, commissionGroupId: undefined } : act));
+        setConfirmation({
+            title: 'Подтверждение удаления',
+            message: confirmMessage,
+            onConfirm: () => {
+                setGroups(prev => prev.filter(g => g.id !== id));
+                if (isGroupInUse) {
+                    setActs(prev => prev.map(act => act.commissionGroupId === id ? { ...act, commissionGroupId: undefined } : act));
+                }
+                setConfirmation(null);
             }
-        }
+        });
     }, [groups, acts, setGroups, setActs]);
 
     const handleSaveSettings = useCallback((newSettings: ProjectSettings) => {
@@ -268,10 +287,33 @@ const App: React.FC = () => {
     };
 
     const handleChangeTemplate = () => {
-        if (window.confirm('Вы уверены, что хотите сменить шаблон? Текущий шаблон будет удален.')) {
-            setTemplate(null);
-        }
+        setConfirmation({
+            title: 'Сменить шаблон',
+            message: 'Вы уверены, что хотите сменить шаблон? Текущий шаблон будет удален.',
+            confirmText: 'Сменить',
+            onConfirm: () => {
+                setTemplate(null);
+                setConfirmation(null);
+            }
+        });
     }
+
+    const requestConfirmation = (
+        title: string, 
+        message: React.ReactNode, 
+        onConfirm: () => void, 
+        confirmText?: string
+    ) => {
+        setConfirmation({
+            title,
+            message,
+            onConfirm: () => {
+                onConfirm();
+                setConfirmation(null);
+            },
+            confirmText,
+        });
+    };
 
     const renderPage = () => {
         switch (currentPage) {
@@ -287,6 +329,7 @@ const App: React.FC = () => {
                             onDelete={handleDeleteAct}
                             onReorderActs={handleReorderActs}
                             setCurrentPage={setCurrentPage}
+                            requestConfirmation={requestConfirmation}
                         />;
             case 'people':
                 return <PeoplePage people={people} organizations={organizations} settings={settings} onSave={handleSavePerson} onDelete={handleDeletePerson} />;
@@ -332,6 +375,18 @@ const App: React.FC = () => {
                     onClose={() => setImportData(null)}
                     onImport={handleExecuteImport}
                 />
+            )}
+
+            {confirmation && (
+                <ConfirmationModal
+                    isOpen={!!confirmation}
+                    onClose={() => setConfirmation(null)}
+                    onConfirm={confirmation.onConfirm}
+                    title={confirmation.title}
+                    confirmText={confirmation.confirmText}
+                >
+                    {confirmation.message}
+                </ConfirmationModal>
             )}
         </div>
     );

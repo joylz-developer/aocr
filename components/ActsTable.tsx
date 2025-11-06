@@ -21,6 +21,7 @@ interface ActsTableProps {
     onDelete: (id: string) => void;
     onReorderActs: (newActs: Act[]) => void;
     setCurrentPage: (page: Page) => void;
+    requestConfirmation: (title: string, message: React.ReactNode, onConfirm: () => void, confirmText?: string) => void;
 }
 
 const formatDateForDisplay = (dateString: string): string => {
@@ -156,7 +157,7 @@ const DateEditorPopover: React.FC<{
 
 
 // Main Table Component
-const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, activeCell, setActiveCell, onSave, onDelete, onReorderActs, setCurrentPage }) => {
+const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, activeCell, setActiveCell, onSave, onDelete, onReorderActs, setCurrentPage, requestConfirmation }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [dateError, setDateError] = useState<string | null>(null);
@@ -1034,15 +1035,19 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
 
     const handleBulkDelete = () => {
-        if (window.confirm(`Вы уверены, что хотите удалить ${selectedRows.size} акт(ов)?`)) {
-            selectedRows.forEach(rowIndex => {
-                const actId = acts[rowIndex]?.id;
-                if (actId) {
-                    onDelete(actId);
-                }
-            });
-            setSelectedCells(new Set());
-        }
+        requestConfirmation(
+            'Подтверждение удаления',
+            `Вы уверены, что хотите удалить ${selectedRows.size} акт(ов)?`,
+            () => {
+                selectedRows.forEach(rowIndex => {
+                    const actId = acts[rowIndex]?.id;
+                    if (actId) {
+                        onDelete(actId);
+                    }
+                });
+                setSelectedCells(new Set());
+            }
+        );
     };
     
     const handleBulkDownload = () => {
