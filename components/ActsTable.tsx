@@ -177,8 +177,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         rowIndex: number;
         colIndex: number;
         target: HTMLElement;
-        mode: 'options' | 'picker';
     } | null>(null);
+    const [actPickerState, setActPickerState] = useState<{ sourceRowIndex: number } | null>(null);
 
 
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
@@ -511,7 +511,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         
         // Special handling for the "Next Work" column to show a popover
         if (col?.key === 'nextWork') {
-            setNextWorkPopoverState({ rowIndex, colIndex, target: e.currentTarget, mode: 'options' });
+            setNextWorkPopoverState({ rowIndex, colIndex, target: e.currentTarget });
             return; 
         }
     
@@ -1058,20 +1058,17 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         });
     };
 
-    const handleActSelectedForNextWork = (selectedAct: Act) => {
-        if (!nextWorkPopoverState) return;
-
-        const { rowIndex } = nextWorkPopoverState;
-        const originalAct = acts[rowIndex];
-        if (originalAct) {
+    const handleLinkAct = (sourceRowIndex: number, targetActId: string) => {
+        const originalAct = acts[sourceRowIndex];
+        if (originalAct && originalAct.id !== targetActId) {
             const updatedAct = {
                 ...originalAct,
                 nextWork: '', // Clear manual entry
-                nextWorkActId: selectedAct.id,
+                nextWorkActId: targetActId,
             };
             handleSaveWithTemplateResolution(updatedAct);
         }
-        setNextWorkPopoverState(null);
+        setActPickerState(null);
     };
 
     useEffect(() => {
@@ -1091,9 +1088,28 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, [nextWorkPopoverState]);
+    
+    useEffect(() => {
+        const handleGlobalKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && actPickerState) {
+                e.preventDefault();
+                e.stopPropagation();
+                setActPickerState(null);
+            }
+        };
+
+        if (actPickerState) {
+            window.addEventListener('keydown', handleGlobalKeyDown);
+        }
+
+        return () => {
+            window.removeEventListener('keydown', handleGlobalKeyDown);
+        };
+    }, [actPickerState]);
+
 
     return (
-        <div className="h-full flex flex-col relative">
+        <div className={`h-full flex flex-col relative ${actPickerState ? 'act-picker-mode' : ''}`}>
             <div className="flex-grow overflow-auto border border-slate-200 rounded-md relative focus:outline-none" ref={tableContainerRef} tabIndex={-1} onKeyDown={handleKeyDown}>
                 <table className="min-w-full text-sm border-separate border-spacing-0">
                     <thead className="sticky top-0 bg-slate-50 z-20 shadow-sm">
@@ -1120,7 +1136,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                             const isBeingDragged = draggedRowIndices?.includes(rowIndex);
                             const isDropTargetTop = dropTargetRowIndex === rowIndex && dropPosition === 'top';
                             const isDropTargetBottom = dropTargetRowIndex === rowIndex && dropPosition === 'bottom';
-                            const trClass = isDropTargetTop ? 'drop-target-row-top' : isDropTargetBottom ? 'drop-target-row-bottom' : '';
+                            const isSourceRowForPicker = actPickerState?.sourceRowIndex === rowIndex;
+                            
+                            const trClassParts = [];
+                            if (isDropTargetTop) trClassParts.push('drop-target-row-top');
+                            if (isDropTargetBottom) trClassParts.push('drop-target-row-bottom');
+                            if (isSourceRowForPicker) trClassParts.push('act-picker-source-row');
+                            const trClass = trClassParts.join(' ');
 
 
                             return (
@@ -1129,6 +1151,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                     onDrop={(e) => handleDrop(e, rowIndex)}
                                     onDragLeave={handleDragLeave}
                                     onDragEnd={handleDragEnd}
+                                    onClick={() => {
+                                        if (actPickerState && actPickerState.sourceRowIndex !== rowIndex) {
+                                            handleLinkAct(actPickerState.sourceRowIndex, act.id);
+                                        }
+                                    }}
                                 >
                                     <td
                                         className={`sticky left-0 p-0 w-12 min-w-[3rem] z-10 border-r border-b border-slate-200 text-center text-xs text-slate-400 select-none transition-colors grabbable ${isRowSelected ? 'bg-blue-200' : 'bg-slate-50 hover:bg-slate-100'} ${isBeingDragged ? 'opacity-50' : ''}`}
@@ -1154,9 +1181,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                             colIndex < columns.length - 1 ? 'border-r' : '',
                                             isBeingDragged ? 'opacity-50' : '',
                                         ];
-                                        if (isFillTarget) cellClassParts.push('bg-blue-200');
-                                        else if (isSelected) cellClassParts.push('bg-blue-100');
-                                        else cellClassParts.push('bg-white');
+                                        if (isSourceRowForPicker) {
+                                            // Handled by tr class
+                                        } else if (isFillTarget) {
+                                            cellClassParts.push('bg-blue-200');
+                                        } else if (isSelected) {
+                                            cellClassParts.push('bg-blue-100');
+                                        } else {
+                                            cellClassParts.push('bg-white');
+                                        }
 
                                         const cellClass = cellClassParts.join(' ');
                                         
@@ -1325,100 +1358,73 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 </table>
                 
                 {nextWorkPopoverState && (() => {
-                    const { target, rowIndex, colIndex, mode } = nextWorkPopoverState;
+                    const { target, rowIndex, colIndex } = nextWorkPopoverState;
                     const cellRect = target.getBoundingClientRect();
                     const containerRect = tableContainerRef.current!.getBoundingClientRect();
                     const top = cellRect.bottom - containerRect.top;
                     const left = cellRect.left - containerRect.left;
 
-                    if (mode === 'options') {
-                        const act = acts[rowIndex];
-                        const isLinked = !!act.nextWorkActId;
+                    const act = acts[rowIndex];
+                    const isLinked = !!act.nextWorkActId;
 
-                        return (
-                            <div
-                                ref={nextWorkPopoverRef}
-                                className="absolute z-50 bg-white shadow-lg rounded-md border border-slate-200 p-2 flex flex-col gap-1 animate-fade-in-up"
-                                style={{ top: `${top}px`, left: `${left}px` }}
-                            >
-                                {isLinked ? (
-                                    <>
-                                        <button
-                                            className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
-                                            onClick={() => setNextWorkPopoverState(prev => prev ? { ...prev, mode: 'picker' } : null)}
-                                        >
-                                            Изменить акт...
-                                        </button>
-                                        <button
-                                            className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
-                                            onClick={() => {
-                                                const linkedAct = actsById.get(act.nextWorkActId!);
-                                                const updatedAct = {
-                                                    ...act,
-                                                    nextWork: linkedAct?.workName || '',
-                                                    nextWorkActId: undefined
-                                                };
-                                                handleSaveWithTemplateResolution(updatedAct);
-                                                setNextWorkPopoverState(null);
-                                                setEditingCell({ rowIndex, colIndex });
-                                            }}
-                                        >
-                                            Ввести вручную
-                                        </button>
-                                    </>
-                                ) : (
-                                     <>
-                                        <button
-                                            className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
-                                            onClick={() => {
-                                                setEditingCell({ rowIndex, colIndex });
-                                                setNextWorkPopoverState(null);
-                                            }}
-                                        >
-                                            Вручную
-                                        </button>
-                                        <button
-                                            className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
-                                            onClick={() => setNextWorkPopoverState(prev => prev ? { ...prev, mode: 'picker' } : null)}
-                                        >
-                                            Указать акт...
-                                        </button>
-                                     </>
-                                )}
-                            </div>
-                        );
-                    }
-
-                    if (mode === 'picker') {
-                        const popoverWidth = Math.max(cellRect.width, 350);
-                        return (
-                            <div
-                                ref={nextWorkPopoverRef}
-                                className="absolute z-50 bg-white shadow-lg rounded-md border border-slate-200 flex flex-col animate-fade-in-up"
-                                style={{ top: `${top}px`, left: `${left}px`, width: `${popoverWidth}px` }}
-                            >
-                                <div className="p-2 border-b">
-                                    <h4 className="font-semibold text-slate-800 text-sm">Выберите акт</h4>
-                                </div>
-                                <div className="max-h-[40vh] overflow-y-auto">
-                                    <ul className="divide-y divide-slate-200">
-                                        {acts.map((act, index) => {
-                                            if(index === rowIndex) return null;
-                                            return (
-                                            <li key={act.id} className="p-3 hover:bg-slate-50 cursor-pointer" onClick={() => handleActSelectedForNextWork(act)}>
-                                                <div className="font-semibold text-slate-800 text-sm">
-                                                    Акт №{act.number || '(б/н)'}
-                                                </div>
-                                                <div className="text-xs text-slate-600 mt-1 truncate" title={act.workName}>
-                                                    {act.workName || '(Нет наименования работ)'}
-                                                </div>
-                                            </li>
-                                        )})}
-                                    </ul>
-                                </div>
-                            </div>
-                        )
-                    }
+                    return (
+                        <div
+                            ref={nextWorkPopoverRef}
+                            className="absolute z-50 bg-white shadow-lg rounded-md border border-slate-200 p-2 flex flex-col gap-1 animate-fade-in-up"
+                            style={{ top: `${top}px`, left: `${left}px` }}
+                        >
+                            {isLinked ? (
+                                <>
+                                    <button
+                                        className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
+                                        onClick={() => {
+                                            setActPickerState({ sourceRowIndex: rowIndex });
+                                            setNextWorkPopoverState(null);
+                                        }}
+                                    >
+                                        Изменить акт...
+                                    </button>
+                                    <button
+                                        className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
+                                        onClick={() => {
+                                            const linkedAct = actsById.get(act.nextWorkActId!);
+                                            const updatedAct = {
+                                                ...act,
+                                                nextWork: linkedAct?.workName || '',
+                                                nextWorkActId: undefined
+                                            };
+                                            handleSaveWithTemplateResolution(updatedAct);
+                                            setNextWorkPopoverState(null);
+                                            setEditingCell({ rowIndex, colIndex });
+                                        }}
+                                    >
+                                        Ввести вручную
+                                    </button>
+                                </>
+                            ) : (
+                                 <>
+                                    <button
+                                        className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
+                                        onClick={() => {
+                                            setEditingCell({ rowIndex, colIndex });
+                                            setNextWorkPopoverState(null);
+                                        }}
+                                    >
+                                        Вручную
+                                    </button>
+                                    <button
+                                        className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
+                                        onClick={() => {
+                                            setActPickerState({ sourceRowIndex: rowIndex });
+                                            setNextWorkPopoverState(null);
+                                        }}
+                                    >
+                                        Указать акт...
+                                    </button>
+                                 </>
+                            )}
+                        </div>
+                    );
                 })()}
 
                 {datePopoverState && (
