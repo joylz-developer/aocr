@@ -95,6 +95,19 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
                     {selectedOption ? selectedOption.label : placeholder}
                 </span>
                  <div className="flex items-center gap-1">
+                     {allowClear && value && (
+                        <button
+                            type="button"
+                            className="p-0.5 rounded-full hover:bg-slate-200"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onChange('');
+                            }}
+                            title="Очистить"
+                        >
+                            <CloseIcon className="w-4 h-4 text-slate-500" />
+                        </button>
+                    )}
                      <ChevronDownIcon className={`w-5 h-5 text-slate-400 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'transform rotate-180' : ''}`} />
                 </div>
             </button>

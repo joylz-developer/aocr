@@ -1330,8 +1330,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
                     if (mode === 'options') {
                         const act = acts[rowIndex];
-                        const showManualButton = !act.nextWorkActId;
-                        const showActButton = !!act.nextWorkActId || !act.nextWork;
+                        const isLinked = !!act.nextWorkActId;
 
                         return (
                             <div
@@ -1339,26 +1338,49 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                 className="absolute z-50 bg-white shadow-lg rounded-md border border-slate-200 p-2 flex flex-col gap-1 animate-fade-in-up"
                                 style={{ top: `${top}px`, left: `${left}px` }}
                             >
-                                {showManualButton && (
-                                    <button
-                                        className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
-                                        onClick={() => {
-                                            setEditingCell({ rowIndex, colIndex });
-                                            setNextWorkPopoverState(null);
-                                        }}
-                                    >
-                                        Ввести вручную...
-                                    </button>
-                                )}
-                                {showActButton && (
-                                    <button
-                                        className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
-                                        onClick={() => {
-                                            setNextWorkPopoverState(prev => prev ? { ...prev, mode: 'picker' } : null);
-                                        }}
-                                    >
-                                        Выбрать из акта...
-                                    </button>
+                                {isLinked ? (
+                                    <>
+                                        <button
+                                            className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
+                                            onClick={() => setNextWorkPopoverState(prev => prev ? { ...prev, mode: 'picker' } : null)}
+                                        >
+                                            Изменить акт...
+                                        </button>
+                                        <button
+                                            className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
+                                            onClick={() => {
+                                                const linkedAct = actsById.get(act.nextWorkActId!);
+                                                const updatedAct = {
+                                                    ...act,
+                                                    nextWork: linkedAct?.workName || '',
+                                                    nextWorkActId: undefined
+                                                };
+                                                handleSaveWithTemplateResolution(updatedAct);
+                                                setNextWorkPopoverState(null);
+                                                setEditingCell({ rowIndex, colIndex });
+                                            }}
+                                        >
+                                            Ввести вручную
+                                        </button>
+                                    </>
+                                ) : (
+                                     <>
+                                        <button
+                                            className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
+                                            onClick={() => {
+                                                setEditingCell({ rowIndex, colIndex });
+                                                setNextWorkPopoverState(null);
+                                            }}
+                                        >
+                                            Вручную
+                                        </button>
+                                        <button
+                                            className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
+                                            onClick={() => setNextWorkPopoverState(prev => prev ? { ...prev, mode: 'picker' } : null)}
+                                        >
+                                            Указать акт...
+                                        </button>
+                                     </>
                                 )}
                             </div>
                         );
