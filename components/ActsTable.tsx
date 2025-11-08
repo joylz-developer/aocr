@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords } from '../types';
 import Modal from './Modal';
-import { DeleteIcon, DownloadIcon, CalendarIcon, LinkIcon } from './Icons';
+import { DeleteIcon, DownloadIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon } from './Icons';
 import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
 import { ALL_COLUMNS } from './ActsTableConfig';
+import { ContextMenu, MenuItem, MenuSeparator } from './ContextMenu';
 
 // Props for the main table component
 interface ActsTableProps {
@@ -180,6 +181,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     } | null>(null);
     const [actPickerState, setActPickerState] = useState<{ sourceRowIndex: number } | null>(null);
 
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; rowIndex: number; colIndex: number } | null>(null);
 
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -221,6 +223,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
         return rowsFullySelected;
     }, [selectedCells, columns]);
+
+    const affectedRowsFromSelection = useMemo(() => {
+        return new Set(Array.from(selectedCells, cellId => parseInt(cellId.split(':')[0], 10)));
+    }, [selectedCells]);
 
     const groupOptions = useMemo(() => {
         return groups.map(g => ({ value: g.id, label: g.name }));
@@ -647,6 +653,36 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     }, [selectedCells, acts, columns, groups, handleSaveWithTemplateResolution]);
     
+    const handleClearCells = useCallback(() => {
+        const updatedActsMap = new Map<string, Act>();
+        selectedCells.forEach(cellId => {
+            const [r, c] = cellId.split(':').map(Number);
+            const originalAct = acts[r];
+            if (!originalAct) return;
+
+            let updatedAct = updatedActsMap.get(originalAct.id) || { ...originalAct };
+            const col = columns[c];
+            if (!col || col.key === 'id') return;
+
+            if (col.key === 'workDates') {
+                updatedAct.workStartDate = '';
+                updatedAct.workEndDate = '';
+                updatedAct.date = ''; 
+            } else if (col.key === 'commissionGroup') {
+                updatedAct.commissionGroupId = undefined;
+            } else if (col.key === 'nextWork') {
+                updatedAct.nextWork = '';
+                updatedAct.nextWorkActId = undefined;
+            } else {
+                const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
+                (updatedAct as any)[columnKey] = '';
+            }
+            updatedActsMap.set(originalAct.id, updatedAct);
+        });
+        
+        Array.from(updatedActsMap.values()).forEach(handleSaveWithTemplateResolution);
+    }, [selectedCells, acts, columns, handleSaveWithTemplateResolution]);
+    
     const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
         if (editingCell) {
             return;
@@ -674,36 +710,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
         if ((e.key === 'Delete' || e.key === 'Backspace') && selectedCells.size > 0 && selectedRows.size === 0) {
             e.preventDefault();
-            const updatedActsMap = new Map<string, Act>();
-
-            selectedCells.forEach(cellId => {
-                const [r, c] = cellId.split(':').map(Number);
-                const originalAct = acts[r];
-                if (!originalAct) return;
-
-                let updatedAct = updatedActsMap.get(originalAct.id) || { ...originalAct };
-                const col = columns[c];
-                if (!col || col.key === 'id') return;
-
-                if (col.key === 'workDates') {
-                    updatedAct.workStartDate = '';
-                    updatedAct.workEndDate = '';
-                    updatedAct.date = ''; 
-                } else if (col.key === 'commissionGroup') {
-                    updatedAct.commissionGroupId = undefined;
-                } else if (col.key === 'nextWork') {
-                    updatedAct.nextWork = '';
-                    updatedAct.nextWorkActId = undefined;
-                }
-                else {
-                    const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
-                    (updatedAct as any)[columnKey] = '';
-                }
-                updatedActsMap.set(originalAct.id, updatedAct);
-            });
-            
-            const actsToSave = Array.from(updatedActsMap.values());
-            actsToSave.forEach(handleSaveWithTemplateResolution);
+            handleClearCells();
         }
         
         if (e.code === 'KeyC' && isCtrlKey) {
@@ -715,7 +722,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             e.preventDefault();
             handlePaste();
         }
-    }, [editingCell, selectedCells, acts, columns, handleSaveWithTemplateResolution, handleCopy, handlePaste, selectedRows, activeCell, setActiveCell]);
+    }, [editingCell, selectedCells, handleClearCells, handleCopy, handlePaste, selectedRows, activeCell, setActiveCell]);
 
 
     useEffect(() => {
@@ -1102,6 +1109,86 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         };
     }, [actPickerState]);
 
+    // --- Context Menu Handlers ---
+    const handleContextMenu = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
+        e.preventDefault();
+        
+        const cellId = getCellId(rowIndex, colIndex);
+        if (!selectedCells.has(cellId)) {
+            setSelectedCells(new Set([cellId]));
+            setActiveCell({ rowIndex, colIndex });
+        }
+
+        setContextMenu({
+            x: e.clientX,
+            y: e.clientY,
+            rowIndex,
+            colIndex,
+        });
+    };
+    
+    const handleContextMenuClose = () => {
+        setContextMenu(null);
+    };
+
+    const handleContextMenuEdit = () => {
+        if (!contextMenu) return;
+        handleCellDoubleClick({} as React.MouseEvent<HTMLTableCellElement>, contextMenu.rowIndex, contextMenu.colIndex);
+        handleContextMenuClose();
+    };
+
+    const handleContextMenuCopy = () => {
+        handleCopy();
+        handleContextMenuClose();
+    };
+
+    const handleContextMenuPaste = () => {
+        handlePaste();
+        handleContextMenuClose();
+    };
+
+    const handleContextMenuClear = () => {
+        handleClearCells();
+        handleContextMenuClose();
+    };
+    
+    const handleContextMenuInsertRow = (offset: number) => { // 0 for above, 1 for below
+        if (!contextMenu) return;
+        const newAct: Act = {
+            id: crypto.randomUUID(),
+            number: '', date: new Date().toISOString().split('T')[0], objectName: settings.objectName, builderDetails: '',
+            contractorDetails: '', designerDetails: '', workPerformer: '', workName: '', projectDocs: '', materials: '', certs: '',
+            workStartDate: '', workEndDate: '', regulations: '', nextWork: '', additionalInfo: settings.defaultAdditionalInfo || '',
+            copiesCount: String(settings.defaultCopiesCount), attachments: settings.defaultAttachments || '', representatives: {},
+        };
+        const insertIndex = contextMenu.rowIndex + offset;
+        onSave(newAct, insertIndex);
+        handleContextMenuClose();
+    };
+    
+    const handleContextMenuDeleteRows = () => {
+        const actIdsToDelete = Array.from(affectedRowsFromSelection).map(rowIndex => acts[rowIndex]?.id).filter(Boolean);
+        if (actIdsToDelete.length > 0) {
+            onRequestDelete(actIdsToDelete);
+        }
+        handleContextMenuClose();
+    };
+    
+    const handleContextMenuDownloadRows = () => {
+        if (!template) {
+            alert('Шаблон не загружен.');
+            handleContextMenuClose();
+            return;
+        }
+        affectedRowsFromSelection.forEach(rowIndex => {
+            const act = acts[rowIndex];
+            if (act) {
+                generateDocument(template, act, people);
+            }
+        });
+        handleContextMenuClose();
+    };
+
 
     return (
         <div className={`h-full flex flex-col relative ${actPickerState ? 'act-picker-mode' : ''}`}>
@@ -1335,7 +1422,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 data-col-index={colIndex}
                                                 onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
                                                 onDoubleClick={(e) => handleCellDoubleClick(e, rowIndex, colIndex)}
-                                                onContextMenu={(e) => e.preventDefault()}
+                                                onContextMenu={(e) => handleContextMenu(e, rowIndex, colIndex)}
                                             >
                                                 <div className={isEditing
                                                     ? "relative w-full h-auto"
@@ -1459,6 +1546,62 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         </button>
                     </div>
                 </div>
+            )}
+            {contextMenu && (
+                <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={handleContextMenuClose}>
+                    <MenuItem
+                        icon={<EditIcon />}
+                        label="Изменить"
+                        onClick={handleContextMenuEdit}
+                        disabled={columns[contextMenu.colIndex]?.key === 'id'}
+                    />
+                    <MenuSeparator />
+                    <MenuItem 
+                        icon={<CopyIcon/>} 
+                        label="Копировать" 
+                        shortcut="Ctrl+C" 
+                        onClick={handleContextMenuCopy} 
+                        disabled={selectedCells.size === 0}
+                    />
+                    <MenuItem 
+                        icon={<PasteIcon />} 
+                        label="Вставить" 
+                        shortcut="Ctrl+V" 
+                        onClick={handleContextMenuPaste} 
+                    />
+                    <MenuItem 
+                        icon={<SparklesIcon />} 
+                        label="Очистить" 
+                        shortcut="Del" 
+                        onClick={handleContextMenuClear}
+                        disabled={selectedCells.size === 0}
+                    />
+                    <MenuSeparator />
+                    <MenuItem
+                        icon={<RowAboveIcon />}
+                        label="Вставить строку выше"
+                        onClick={() => handleContextMenuInsertRow(0)}
+                    />
+                     <MenuItem
+                        icon={<RowBelowIcon />}
+                        label="Вставить строку ниже"
+                        onClick={() => handleContextMenuInsertRow(1)}
+                    />
+                    <MenuSeparator />
+                    <MenuItem
+                        icon={<DeleteIcon />}
+                        label={`Удалить ${affectedRowsFromSelection.size > 1 ? `строки (${affectedRowsFromSelection.size})` : 'строку'}`}
+                        onClick={handleContextMenuDeleteRows}
+                        disabled={affectedRowsFromSelection.size === 0}
+                        className="text-red-600"
+                    />
+                    <MenuItem
+                        icon={<DownloadIcon />}
+                        label={`Скачать ${affectedRowsFromSelection.size > 1 ? `акты (${affectedRowsFromSelection.size})` : 'акт'}`}
+                        onClick={handleContextMenuDownloadRows}
+                        disabled={affectedRowsFromSelection.size === 0}
+                    />
+                </ContextMenu>
             )}
         </div>
     );
