@@ -1133,7 +1133,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const handleContextMenuEdit = () => {
         if (!contextMenu) return;
-        handleCellDoubleClick({} as React.MouseEvent<HTMLTableCellElement>, contextMenu.rowIndex, contextMenu.colIndex);
+        const { rowIndex, colIndex } = contextMenu;
+        const cellElement = tableContainerRef.current?.querySelector(`[data-row-index="${rowIndex}"][data-col-index="${colIndex}"]`);
+        
+        // Create a fake event object with the target element for the popover positioning logic.
+        const fakeEvent = (cellElement ? { currentTarget: cellElement } : {}) as unknown as React.MouseEvent<HTMLTableCellElement>;
+    
+        handleCellDoubleClick(fakeEvent, rowIndex, colIndex);
         handleContextMenuClose();
     };
 

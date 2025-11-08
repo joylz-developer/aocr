@@ -88,19 +88,19 @@ const GroupForm: React.FC<{
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label className={labelClass}>Застройщик (технический заказчик)</label>
-                        <CustomSelect options={orgOptions} value={formData.builderOrgId || ''} onChange={(value) => handleOrgChange('builderOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
+                        <CustomSelect options={orgOptions} value={formData.builderOrgId || ''} onChange={(value) => handleOrgChange('builderOrgId', value)} placeholder="Не выбрано" className="mt-1" />
                     </div>
                     <div>
                         <label className={labelClass}>Лицо, осуществляющее строительство (Подрядчик)</label>
-                        <CustomSelect options={orgOptions} value={formData.contractorOrgId || ''} onChange={(value) => handleOrgChange('contractorOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
+                        <CustomSelect options={orgOptions} value={formData.contractorOrgId || ''} onChange={(value) => handleOrgChange('contractorOrgId', value)} placeholder="Не выбрано" className="mt-1" />
                     </div>
                      <div>
                         <label className={labelClass}>Лицо, осуществившее подготовку проекта</label>
-                        <CustomSelect options={orgOptions} value={formData.designerOrgId || ''} onChange={(value) => handleOrgChange('designerOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
+                        <CustomSelect options={orgOptions} value={formData.designerOrgId || ''} onChange={(value) => handleOrgChange('designerOrgId', value)} placeholder="Не выбрано" className="mt-1" />
                     </div>
                      <div>
                         <label className={labelClass}>Лицо, выполнившее работы</label>
-                        <CustomSelect options={orgOptions} value={formData.workPerformerOrgId || ''} onChange={(value) => handleOrgChange('workPerformerOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
+                        <CustomSelect options={orgOptions} value={formData.workPerformerOrgId || ''} onChange={(value) => handleOrgChange('workPerformerOrgId', value)} placeholder="Не выбрано" className="mt-1" />
                     </div>
                 </div>
             </div>
