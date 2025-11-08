@@ -4,6 +4,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 import Modal from '../components/Modal';
 import { PlusIcon, HelpIcon, ColumnsIcon } from '../components/Icons';
 import ActsTable from '../components/ActsTable';
+import DeleteActsConfirmationModal from '../components/DeleteActsConfirmationModal';
 import { ALL_COLUMNS } from '../components/ActsTableConfig';
 
 interface ActsPageProps {
@@ -14,10 +15,9 @@ interface ActsPageProps {
     template: string | null;
     settings: ProjectSettings;
     onSave: (act: Act, insertAtIndex?: number) => void;
-    onDelete: (id: string) => void;
+    onMoveToTrash: (ids: string[]) => void;
     onReorderActs: (newActs: Act[]) => void;
     setCurrentPage: (page: Page) => void;
-    requestConfirmation: (title: string, message: React.ReactNode, onConfirm: () => void, confirmText?: string) => void;
 }
 
 // Helper component for interactive tags in the help modal
@@ -111,13 +111,15 @@ const ColumnPicker: React.FC<{
 };
 
 
-const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onDelete, onReorderActs, setCurrentPage, requestConfirmation }) => {
+const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onMoveToTrash, onReorderActs, setCurrentPage }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
         'acts_table_visible_columns_v4', 
         new Set(ALL_COLUMNS.filter(c => c.key !== 'id').map(c => c.key))
     );
+    const [actsPendingDeletion, setActsPendingDeletion] = useState<Act[] | null>(null);
+
     
     const pickableColumns = useMemo(() => {
         return ALL_COLUMNS.filter(col => {
@@ -156,6 +158,12 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         onSave(newAct, insertIndex);
     };
 
+    const handleRequestDelete = (actIds: string[]) => {
+        const actsToDelete = acts.filter(a => actIds.includes(a.id));
+        setActsPendingDeletion(actsToDelete);
+    };
+
+
     return (
         <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
             <div className="flex justify-between items-center mb-6 flex-shrink-0">
@@ -189,13 +197,25 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     activeCell={activeCell}
                     setActiveCell={setActiveCell}
                     onSave={onSave}
-                    onDelete={onDelete}
+                    onRequestDelete={handleRequestDelete}
                     onReorderActs={onReorderActs}
                     setCurrentPage={setCurrentPage}
-                    requestConfirmation={requestConfirmation}
                 />
             </div>
             
+            {actsPendingDeletion && (
+                <DeleteActsConfirmationModal
+                    isOpen={!!actsPendingDeletion}
+                    onClose={() => setActsPendingDeletion(null)}
+                    actsToDelete={actsPendingDeletion}
+                    allActs={acts}
+                    onConfirm={(finalActIdsToDelete) => {
+                        onMoveToTrash(finalActIdsToDelete);
+                        setActsPendingDeletion(null);
+                    }}
+                />
+            )}
+
             <Modal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} title="Справка по заполнению шаблона">
                 <div className="prose max-w-none text-slate-700 allow-text-selection">
                     <p>Для генерации документов ваш .docx шаблон должен содержать теги-заполнители. Приложение заменит эти теги на данные из формы. Нажмите на любой тег ниже, чтобы скопировать его.</p>

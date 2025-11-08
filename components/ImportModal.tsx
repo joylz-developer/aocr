@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Modal from './Modal';
-import { ImportData, ImportSettings, ImportMode, ImportSettingsCategory, Act, Person, Organization, ProjectSettings, CommissionGroup } from '../types';
+import { ImportData, ImportSettings, ImportMode, ImportSettingsCategory, Act, Person, Organization, ProjectSettings, CommissionGroup, DeletedActEntry } from '../types';
 
 interface ImportModalProps {
     data: ImportData;
@@ -8,8 +8,8 @@ interface ImportModalProps {
     onImport: (settings: ImportSettings) => void;
 }
 
-type CategoryKey = 'acts' | 'people' | 'organizations' | 'groups';
-type CategoryItem = Act | Person | Organization | CommissionGroup;
+type CategoryKey = 'acts' | 'people' | 'organizations' | 'groups' | 'deletedActs';
+type CategoryItem = Act | Person | Organization | CommissionGroup | DeletedActEntry;
 
 const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) => {
 
@@ -20,6 +20,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
         people: { import: !!data.people?.length, mode: 'merge', selectedIds: data.people?.map(i => i.id) },
         organizations: { import: !!data.organizations?.length, mode: 'merge', selectedIds: data.organizations?.map(i => i.id) },
         groups: { import: !!data.groups?.length, mode: 'merge', selectedIds: data.groups?.map(i => i.id) },
+        deletedActs: { import: !!data.deletedActs?.length, mode: 'merge', selectedIds: data.deletedActs?.map(i => i.act.id) },
     });
     
     const isDataPresent =
@@ -28,7 +29,8 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
         (data.acts && data.acts.length > 0) ||
         (data.people && data.people.length > 0) ||
         (data.organizations && data.organizations.length > 0) ||
-        (data.groups && data.groups.length > 0);
+        (data.groups && data.groups.length > 0) ||
+        (data.deletedActs && data.deletedActs.length > 0);
 
 
     const handleCheckboxChange = (category: CategoryKey, value: boolean) => {
@@ -59,7 +61,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
     };
     
     const handleSelectAll = (category: CategoryKey, selectAll: boolean) => {
-        const allIds = (data[category] as CategoryItem[] | undefined)?.map(item => item.id) || [];
+        const allIds = (data[category] as CategoryItem[] | undefined)?.map(item => 'act' in item ? item.act.id : item.id) || [];
         setSettings(prev => ({
             ...prev,
             [category]: { ...prev[category], selectedIds: selectAll ? allIds : [] }
@@ -145,17 +147,26 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
                         </div>
                         <div className="max-h-40 overflow-y-auto space-y-1 p-1 pr-2 rounded-md border bg-white">
                             {items.map(item => {
-                                const displayName = 'name' in item ? item.name : ('number' in item ? `Акт №${item.number}`: 'Неизвестная запись');
+                                const id = 'act' in item ? item.act.id : item.id;
+                                let displayName = 'Неизвестная запись';
+                                if ('act' in item) {
+                                    displayName = `Акт №${item.act.number || 'б/н'}`;
+                                } else if ('name' in item) {
+                                    displayName = item.name;
+                                } else if ('number' in item) {
+                                    displayName = `Акт №${item.number}`;
+                                }
+
                                 return (
-                                <div key={item.id} className="flex items-center p-2 rounded hover:bg-slate-100">
+                                <div key={id} className="flex items-center p-2 rounded hover:bg-slate-100">
                                     <input
                                         type="checkbox"
-                                        id={`item-${category}-${item.id}`}
-                                        checked={categorySettings.selectedIds?.includes(item.id)}
-                                        onChange={(e) => handleItemSelectionChange(category, item.id, e.target.checked)}
+                                        id={`item-${category}-${id}`}
+                                        checked={categorySettings.selectedIds?.includes(id)}
+                                        onChange={(e) => handleItemSelectionChange(category, id, e.target.checked)}
                                         className="h-4 w-4 form-checkbox-custom"
                                     />
-                                    <label htmlFor={`item-${category}-${item.id}`} className="ml-3 block text-sm text-slate-700 truncate cursor-pointer" title={displayName}>
+                                    <label htmlFor={`item-${category}-${id}`} className="ml-3 block text-sm text-slate-700 truncate cursor-pointer" title={displayName}>
                                        {displayName}
                                     </label>
                                 </div>
@@ -210,6 +221,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
                     <ImportOptionRow category="people" label="Участники" items={data.people} />
                     <ImportOptionRow category="organizations" label="Организации" items={data.organizations} />
                     <ImportOptionRow category="groups" label="Группы комиссий" items={data.groups} />
+                    <ImportOptionRow category="deletedActs" label="Акты в корзине" items={data.deletedActs} />
                     </>
                 )}
 

@@ -113,6 +113,7 @@ export interface ImportSettings {
     people: ImportSettingsCategory;
     organizations: ImportSettingsCategory;
     groups: ImportSettingsCategory;
+    deletedActs?: ImportSettingsCategory;
 }
 
 
@@ -123,6 +124,7 @@ export interface ImportData {
     people?: Person[];
     organizations?: Organization[];
     groups?: CommissionGroup[];
+    deletedActs?: DeletedActEntry[];
 }
 
 // Defines which fields from the Act can be columns in the table
@@ -133,6 +135,12 @@ export type ActTableColumnKey = Exclude<keyof Act,
 > | 'workDates' | 'commissionGroup';
 
 // Defines the available pages in the application
-export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups';
+export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups' | 'trash';
 
 export type Coords = { rowIndex: number; colIndex: number };
+
+export interface DeletedActEntry {
+  act: Act;
+  deletedOn: string; // ISO string
+  associatedGroup?: CommissionGroup; // Snapshot of the group at time of deletion
+}

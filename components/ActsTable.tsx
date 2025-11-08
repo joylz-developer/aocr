@@ -18,10 +18,9 @@ interface ActsTableProps {
     activeCell: Coords | null;
     setActiveCell: (cell: Coords | null) => void;
     onSave: (act: Act, insertAtIndex?: number) => void;
-    onDelete: (id: string) => void;
+    onRequestDelete: (ids: string[]) => void;
     onReorderActs: (newActs: Act[]) => void;
     setCurrentPage: (page: Page) => void;
-    requestConfirmation: (title: string, message: React.ReactNode, onConfirm: () => void, confirmText?: string) => void;
 }
 
 const formatDateForDisplay = (dateString: string): string => {
@@ -157,7 +156,7 @@ const DateEditorPopover: React.FC<{
 
 
 // Main Table Component
-const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, activeCell, setActiveCell, onSave, onDelete, onReorderActs, setCurrentPage, requestConfirmation }) => {
+const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, activeCell, setActiveCell, onSave, onRequestDelete, onReorderActs, setCurrentPage }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [dateError, setDateError] = useState<string | null>(null);
@@ -1035,19 +1034,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
 
     const handleBulkDelete = () => {
-        requestConfirmation(
-            'Подтверждение удаления',
-            `Вы уверены, что хотите удалить ${selectedRows.size} акт(ов)?`,
-            () => {
-                selectedRows.forEach(rowIndex => {
-                    const actId = acts[rowIndex]?.id;
-                    if (actId) {
-                        onDelete(actId);
-                    }
-                });
-                setSelectedCells(new Set());
-            }
-        );
+        const actIdsToDelete = Array.from(selectedRows).map(rowIndex => acts[rowIndex]?.id).filter(Boolean);
+        if (actIdsToDelete.length > 0) {
+            onRequestDelete(actIdsToDelete);
+        }
     };
     
     const handleBulkDownload = () => {

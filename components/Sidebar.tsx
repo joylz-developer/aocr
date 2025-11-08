@@ -1,6 +1,6 @@
 import React from 'react';
 import { Page } from '../types';
-import { ChevronLeftIcon, ActsIcon, PeopleIcon, OrganizationsIcon, SettingsIcon, ImportIcon, ExportIcon, TemplateIcon, GroupsIcon } from './Icons';
+import { ChevronLeftIcon, ActsIcon, PeopleIcon, OrganizationsIcon, SettingsIcon, ImportIcon, ExportIcon, TemplateIcon, GroupsIcon, TrashIcon } from './Icons';
 
 interface SidebarProps {
     isOpen: boolean;
@@ -8,6 +8,7 @@ interface SidebarProps {
     currentPage: Page;
     setCurrentPage: (page: Page) => void;
     isTemplateLoaded: boolean;
+    trashCount: number;
     onImport: () => void;
     onExport: () => void;
     onChangeTemplate: () => void;
@@ -16,13 +17,14 @@ interface SidebarProps {
 const SidebarButton: React.FC<{
     icon: React.ReactNode;
     label: string;
+    badge?: number;
     isActive?: boolean;
     isOpen: boolean;
     disabled?: boolean;
     onClick?: () => void;
     title?: string;
-}> = ({ icon, label, isActive = false, isOpen, disabled = false, title, ...props }) => {
-    const baseClasses = "flex items-center w-full text-left rounded-md transition-colors duration-200";
+}> = ({ icon, label, badge, isActive = false, isOpen, disabled = false, title, ...props }) => {
+    const baseClasses = "flex items-center w-full text-left rounded-md transition-colors duration-200 relative";
     const sizeClasses = isOpen ? "px-4 py-2.5" : "p-3 justify-center";
     const stateClasses = disabled
         ? "text-slate-400 cursor-not-allowed"
@@ -39,11 +41,16 @@ const SidebarButton: React.FC<{
         >
             <div className="flex-shrink-0">{icon}</div>
             {isOpen && <span className="ml-4 text-sm font-medium whitespace-nowrap">{label}</span>}
+             {badge > 0 && (
+                <span className={`absolute top-1 text-white text-xs font-bold rounded-full h-5 min-w-[1.25rem] flex items-center justify-center px-1 ${isOpen ? 'right-2' : 'right-1'} ${isActive ? 'bg-blue-500' : 'bg-red-500'}`}>
+                    {badge}
+                </span>
+            )}
         </button>
     );
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentPage, setCurrentPage, isTemplateLoaded, onImport, onExport, onChangeTemplate }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentPage, setCurrentPage, isTemplateLoaded, trashCount, onImport, onExport, onChangeTemplate }) => {
     const navItems = [
         { page: 'acts', label: 'Акты', icon: <ActsIcon className="w-5 h-5" /> },
         { page: 'people', label: 'Участники', icon: <PeopleIcon className="w-5 h-5" /> },
@@ -80,6 +87,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentPage, setCu
             </nav>
 
             <div className="p-3 border-t space-y-1">
+                 <SidebarButton
+                    icon={<TrashIcon className="w-5 h-5" />}
+                    label="Корзина"
+                    isOpen={isOpen}
+                    isActive={currentPage === 'trash'}
+                    disabled={!isTemplateLoaded}
+                    onClick={() => setCurrentPage('trash')}
+                    badge={trashCount}
+                 />
                  <SidebarButton
                     icon={<ImportIcon className="w-5 h-5" />}
                     label="Импорт"

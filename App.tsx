@@ -1,14 +1,16 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page } from './types';
+import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry } from './types';
 import TemplateUploader from './components/TemplateUploader';
 import ImportModal from './components/ImportModal';
 import ConfirmationModal from './components/ConfirmationModal';
+import RestoreGroupConfirmationModal from './components/RestoreGroupConfirmationModal';
 import ActsPage from './pages/ActsPage';
 import PeoplePage from './pages/PeoplePage';
 import OrganizationsPage from './pages/OrganizationsPage';
 import SettingsPage from './pages/SettingsPage';
 import GroupsPage from './pages/GroupsPage';
+import TrashPage from './pages/TrashPage';
 import Sidebar from './components/Sidebar';
 import { saveAs } from 'file-saver';
 
@@ -30,6 +32,7 @@ const fileToBase64 = (file: File): Promise<string> =>
 const App: React.FC = () => {
     const [template, setTemplate] = useLocalStorage<string | null>('docx_template', null);
     const [acts, setActs] = useLocalStorage<Act[]>('acts_data', []);
+    const [deletedActs, setDeletedActs] = useLocalStorage<DeletedActEntry[]>('deleted_acts', []);
     const [people, setPeople] = useLocalStorage<Person[]>('people_data', []);
     const [organizations, setOrganizations] = useLocalStorage<Organization[]>('organizations_data', []);
     const [groups, setGroups] = useLocalStorage<CommissionGroup[]>('commission_groups', []);
@@ -55,6 +58,12 @@ const App: React.FC = () => {
         confirmText?: string;
     } | null>(null);
     
+    const [restoreGroupConfirmation, setRestoreGroupConfirmation] = useState<{
+        entriesToRestore: DeletedActEntry[];
+        groupsToRestore: CommissionGroup[];
+        onConfirm: (restoreGroups: boolean) => void;
+    } | null>(null);
+
     const handleTemplateUpload = async (file: File) => {
         try {
             const isFirstTime = acts.length === 0 && people.length === 0 && organizations.length === 0;
@@ -85,13 +94,90 @@ const App: React.FC = () => {
         });
     }, [setActs]);
 
-    const handleDeleteAct = useCallback((id: string) => {
-        setActs(prevActs => prevActs.filter(a => a.id !== id));
-    }, [setActs]);
-    
+    // FIX: Add missing handleReorderActs function to handle drag-and-drop reordering of acts.
     const handleReorderActs = useCallback((newActs: Act[]) => {
         setActs(newActs);
     }, [setActs]);
+
+    const handleMoveActsToTrash = useCallback((actIds: string[]) => {
+        const actsToMove = acts.filter(a => actIds.includes(a.id));
+        const remainingActs = acts.filter(a => !actIds.includes(a.id));
+        
+        const groupsMap = new Map(groups.map(g => [g.id, g]));
+
+        const newDeletedEntries: DeletedActEntry[] = actsToMove.map(act => ({
+            act,
+            deletedOn: new Date().toISOString(),
+            associatedGroup: act.commissionGroupId ? groupsMap.get(act.commissionGroupId) : undefined
+        }));
+        
+        const updatedRemainingActs = remainingActs.map(act => {
+            if (act.nextWorkActId && actIds.includes(act.nextWorkActId)) {
+                const deletedLinkedAct = actsToMove.find(a => a.id === act.nextWorkActId);
+                return {
+                    ...act,
+                    nextWork: deletedLinkedAct?.workName || `[Удаленный Акт №${deletedLinkedAct?.number || 'б/н'}]`,
+                    nextWorkActId: undefined
+                };
+            }
+            return act;
+        });
+
+        setDeletedActs(prev => [...prev, ...newDeletedEntries].sort((a,b) => new Date(b.deletedOn).getTime() - new Date(a.deletedOn).getTime()));
+        setActs(updatedRemainingActs);
+    }, [acts, groups, setActs, setDeletedActs]);
+
+    const handleRestoreActs = useCallback((entriesToRestore: DeletedActEntry[]) => {
+        const uniqueGroupsToRestore = new Map<string, CommissionGroup>();
+        
+        entriesToRestore.forEach(entry => {
+            if (entry.associatedGroup) {
+                const groupExists = groups.some(g => g.id === entry.associatedGroup!.id);
+                if (!groupExists) {
+                    uniqueGroupsToRestore.set(entry.associatedGroup.id, entry.associatedGroup);
+                }
+            }
+        });
+
+        const groupsToRestoreList = Array.from(uniqueGroupsToRestore.values());
+
+        const performRestore = (restoreAssociatedGroups: boolean) => {
+            const actsToRestore = entriesToRestore.map(entry => entry.act);
+            
+            if (!restoreAssociatedGroups) {
+                actsToRestore.forEach(act => {
+                    if (act.commissionGroupId && uniqueGroupsToRestore.has(act.commissionGroupId)) {
+                        act.commissionGroupId = undefined;
+                    }
+                });
+            }
+            
+            setActs(prev => [...prev, ...actsToRestore]);
+            
+            if (restoreAssociatedGroups) {
+                setGroups(prev => [...prev, ...groupsToRestoreList].sort((a, b) => a.name.localeCompare(b.name)));
+            }
+
+            const entryIdsToRestore = new Set(entriesToRestore.map(e => e.act.id));
+            setDeletedActs(prev => prev.filter(entry => !entryIdsToRestore.has(entry.act.id)));
+            setRestoreGroupConfirmation(null);
+        };
+
+        if (groupsToRestoreList.length > 0) {
+            setRestoreGroupConfirmation({
+                entriesToRestore,
+                groupsToRestore: groupsToRestoreList,
+                onConfirm: performRestore
+            });
+        } else {
+            performRestore(false);
+        }
+    }, [groups, setActs, setGroups, setDeletedActs]);
+
+    const handlePermanentlyDeleteActs = useCallback((entryIds: string[]) => {
+        setDeletedActs(prev => prev.filter(entry => !entryIds.includes(entry.act.id)));
+    }, [setDeletedActs]);
+
     
     const handleSavePerson = useCallback((personToSave: Person) => {
         setPeople(prevPeople => {
@@ -109,23 +195,34 @@ const App: React.FC = () => {
 
         setConfirmation({
             title: 'Подтверждение удаления',
-            message: `Вы уверены, что хотите удалить участника "${personToDelete.name}"? Он также будет удален из всех актов.`,
+            message: `Вы уверены, что хотите удалить участника "${personToDelete.name}"? Он также будет удален из всех актов и групп комиссий.`,
             onConfirm: () => {
                 setPeople(prevPeople => prevPeople.filter(p => p.id !== id));
-                setActs(prevActs => prevActs.map(act => {
-                    const newReps = { ...act.representatives };
+                
+                const updateRepresentatives = (reps: { [key: string]: string }) => {
+                    const newReps = { ...reps };
                     Object.keys(newReps).forEach(key => {
-                        const repKey = key as keyof typeof newReps;
-                        if (newReps[repKey] === id) {
-                            delete newReps[repKey];
+                        if (newReps[key] === id) {
+                            delete newReps[key];
                         }
                     });
-                    return { ...act, representatives: newReps };
-                }));
+                    return newReps;
+                };
+
+                setActs(prevActs => prevActs.map(act => ({
+                     ...act, 
+                     representatives: updateRepresentatives(act.representatives)
+                })));
+
+                setGroups(prevGroups => prevGroups.map(group => ({
+                    ...group,
+                    representatives: updateRepresentatives(group.representatives)
+                })));
+
                 setConfirmation(null);
             }
         });
-    }, [people, setPeople, setActs]);
+    }, [people, setPeople, setActs, setGroups]);
 
     const handleSaveOrganization = useCallback((orgToSave: Organization) => {
         setOrganizations(prevOrgs => {
@@ -203,6 +300,7 @@ const App: React.FC = () => {
                 organizations,
                 groups,
                 projectSettings: settings,
+                deletedActs,
             };
             const jsonString = JSON.stringify(dataToExport, null, 2);
             const blob = new Blob([jsonString], { type: 'application/json' });
@@ -230,7 +328,7 @@ const App: React.FC = () => {
                 
                 const data: ImportData = JSON.parse(text);
                 
-                if (data.template !== undefined || Array.isArray(data.acts) || Array.isArray(data.people) || Array.isArray(data.organizations) || Array.isArray(data.groups) || data.projectSettings) {
+                if (data.template !== undefined || Array.isArray(data.acts) || Array.isArray(data.people) || Array.isArray(data.organizations) || Array.isArray(data.groups) || data.projectSettings || Array.isArray(data.deletedActs)) {
                     setImportData(data);
                 } else {
                     alert('Ошибка: Неверный формат файла.');
@@ -255,21 +353,22 @@ const App: React.FC = () => {
             setSettings(importData.projectSettings);
         }
         
-        const mergeOrReplace = <T extends {id: string}>(
-            key: 'acts' | 'people' | 'organizations' | 'groups',
-            setData: React.Dispatch<React.SetStateAction<T[]>>,
+        const mergeOrReplace = <T extends {id: string} | DeletedActEntry>(
+            key: 'acts' | 'people' | 'organizations' | 'groups' | 'deletedActs',
+            setData: React.Dispatch<React.SetStateAction<any>>,
             sortFn: ((a: T, b: T) => number) | null
         ) => {
             if (importSettings[key]?.import && importData[key]) {
                  if (importSettings[key].mode === 'replace') {
-                    // FIX: Cast to unknown first to satisfy TypeScript's strict type checking for generic unions.
-                    setData(importData[key] as unknown as T[]);
+                    setData(importData[key]);
                 } else {
-                    // FIX: Cast to unknown first to satisfy TypeScript's strict type checking for generic unions.
-                    const selectedItems = (importData[key] as unknown as T[]).filter(item => importSettings[key].selectedIds?.includes(item.id));
-                    setData(prev => {
-                        const itemMap = new Map(prev.map(item => [item.id, item]));
-                        selectedItems.forEach(item => itemMap.set(item.id, item));
+                    const selectedItems = (importData[key] as T[]).filter(item => {
+                        const id = 'act' in item ? item.act.id : item.id;
+                        return importSettings[key].selectedIds?.includes(id)
+                    });
+                    setData((prev: T[]) => {
+                        const itemMap = new Map(prev.map(item => ['act' in item ? item.act.id : item.id, item]));
+                        selectedItems.forEach(item => itemMap.set('act' in item ? item.act.id : item.id, item));
                         const newArray = Array.from(itemMap.values());
                         return sortFn ? newArray.sort(sortFn) : newArray;
                     });
@@ -278,9 +377,10 @@ const App: React.FC = () => {
         };
 
         mergeOrReplace('acts', setActs, null);
-        mergeOrReplace('people', setPeople, (a,b) => a.name.localeCompare(b.name));
-        mergeOrReplace('organizations', setOrganizations, (a,b) => a.name.localeCompare(b.name));
-        mergeOrReplace('groups', setGroups, (a,b) => a.name.localeCompare(b.name));
+        mergeOrReplace('deletedActs', setDeletedActs, (a, b) => new Date((b as DeletedActEntry).deletedOn).getTime() - new Date((a as DeletedActEntry).deletedOn).getTime());
+        mergeOrReplace('people', setPeople, (a,b) => (a as Person).name.localeCompare((b as Person).name));
+        mergeOrReplace('organizations', setOrganizations, (a,b) => (a as Organization).name.localeCompare((b as Organization).name));
+        mergeOrReplace('groups', setGroups, (a,b) => (a as CommissionGroup).name.localeCompare((b as CommissionGroup).name));
         
         setImportData(null);
         alert('Данные успешно импортированы!');
@@ -326,10 +426,9 @@ const App: React.FC = () => {
                             template={template}
                             settings={settings}
                             onSave={handleSaveAct} 
-                            onDelete={handleDeleteAct}
+                            onMoveToTrash={handleMoveActsToTrash}
                             onReorderActs={handleReorderActs}
                             setCurrentPage={setCurrentPage}
-                            requestConfirmation={requestConfirmation}
                         />;
             case 'people':
                 return <PeoplePage people={people} organizations={organizations} settings={settings} onSave={handleSavePerson} onDelete={handleDeletePerson} />;
@@ -337,6 +436,13 @@ const App: React.FC = () => {
                  return <OrganizationsPage organizations={organizations} settings={settings} onSave={handleSaveOrganization} onDelete={handleDeleteOrganization} />;
              case 'groups':
                 return <GroupsPage groups={groups} people={people} organizations={organizations} onSave={handleSaveGroup} onDelete={handleDeleteGroup} />;
+            case 'trash':
+                return <TrashPage 
+                            deletedActs={deletedActs}
+                            onRestore={handleRestoreActs}
+                            onPermanentlyDelete={handlePermanentlyDeleteActs}
+                            requestConfirmation={requestConfirmation}
+                        />;
             case 'settings':
                 return <SettingsPage settings={settings} onSave={handleSaveSettings} />;
             default:
@@ -353,6 +459,7 @@ const App: React.FC = () => {
                 currentPage={currentPage}
                 setCurrentPage={setCurrentPage}
                 isTemplateLoaded={!!template}
+                trashCount={deletedActs.length}
                 onImport={handleImportClick}
                 onExport={handleExportData}
                 onChangeTemplate={handleChangeTemplate}
@@ -387,6 +494,15 @@ const App: React.FC = () => {
                 >
                     {confirmation.message}
                 </ConfirmationModal>
+            )}
+
+            {restoreGroupConfirmation && (
+                 <RestoreGroupConfirmationModal
+                    isOpen={!!restoreGroupConfirmation}
+                    onClose={() => setRestoreGroupConfirmation(null)}
+                    groupsToRestore={restoreGroupConfirmation.groupsToRestore}
+                    onConfirm={restoreGroupConfirmation.onConfirm}
+                />
             )}
         </div>
     );
