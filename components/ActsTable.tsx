@@ -1573,14 +1573,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         icon={<PasteIcon />} 
                         label="Вставить" 
                         shortcut="Ctrl+V" 
-                        onClick={handleContextMenuPaste} 
+                        onClick={handleContextMenuPaste}
+                        disabled={columns[contextMenu.colIndex]?.key === 'id'}
                     />
                     <MenuItem 
                         icon={<SparklesIcon />} 
                         label="Очистить" 
                         shortcut="Del" 
                         onClick={handleContextMenuClear}
-                        disabled={selectedCells.size === 0}
+                        disabled={selectedCells.size === 0 || columns[contextMenu.colIndex]?.key === 'id'}
                     />
                     <MenuSeparator />
                     <MenuItem
