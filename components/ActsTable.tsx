@@ -515,6 +515,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             }
         }
         
+        // Сбросить выделение ячеек, чтобы убрать маркер автозаполнения
+        setSelectedCells(new Set());
+
         // Special handling for the "Next Work" column to show a popover
         if (col?.key === 'nextWork') {
             setNextWorkPopoverState({ rowIndex, colIndex, target: e.currentTarget });
