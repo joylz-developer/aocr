@@ -166,6 +166,47 @@
       background-color: #dbeafe; /* blue-100 */
       cursor: pointer;
   }
+
+  /* --- Styles for Custom Scrollbar Hiding & Shadows --- */
+
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  .no-scrollbar::-webkit-scrollbar {
+      display: none;
+  }
+
+  /* Hide scrollbar for IE, Edge and Firefox */
+  .no-scrollbar {
+      -ms-overflow-style: none;  /* IE and Edge */
+      scrollbar-width: none;  /* Firefox */
+  }
+
+  /* 
+     Scroll Shadows Logic:
+     Uses background-attachment: local vs scroll to show gradients only when scrolled.
+  */
+  .scroll-shadows {
+      /* Shadow covers (white) */
+      background:
+          /* Shadow Cover Top */
+          linear-gradient(white 30%, rgba(255,255,255,0)),
+          /* Shadow Cover Bottom */
+          linear-gradient(rgba(255,255,255,0), white 70%) 0 100%,
+          /* Shadow Top (Blueish) */
+          radial-gradient(farthest-side at 50% 0, rgba(37, 99, 235, 0.4), rgba(0,0,0,0)),
+          /* Shadow Bottom (Blueish) */
+          radial-gradient(farthest-side at 50% 100%, rgba(37, 99, 235, 0.4), rgba(0,0,0,0)) 0 100%;
+      
+      background-repeat: no-repeat;
+      background-color: white; /* Fallback */
+      background-size: 100% 40px, 100% 40px, 100% 14px, 100% 14px;
+      
+      /* 
+         'local' attaches to the content (moves with it). 
+         'scroll' attaches to the box (stays fixed).
+         When content is scrolled to top, the white 'local' gradient covers the 'scroll' shadow.
+      */
+      background-attachment: local, local, scroll, scroll;
+  }
 </style>
 </head>
 <body class="bg-slate-100 text-slate-800">

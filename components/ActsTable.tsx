@@ -1375,7 +1375,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                             onChange={handleEditorChange}
                                                             onKeyDown={handleEditorKeyDown}
                                                             type={'text'}
-                                                            className={`w-full h-full block bg-white box-border px-2 py-1.5 border-2 border-blue-500 rounded-md z-30 resize-none text-sm outline-none`}
+                                                            className={`w-full h-full block bg-white box-border px-2 py-1.5 border-2 border-blue-500 rounded-md z-30 resize-none text-sm outline-none no-scrollbar scroll-shadows`}
                                                             rows={col.type === 'textarea' ? 1 : undefined}
                                                             onClick={e => e.stopPropagation()}
                                                         />
