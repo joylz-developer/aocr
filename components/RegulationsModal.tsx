@@ -14,16 +14,77 @@ interface RegulationsModalProps {
 const RegulationsModal: React.FC<RegulationsModalProps> = ({ isOpen, onClose, regulations, onSelect }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    
+    // Default options for modal matching the main page defaults
+    const [groupChanges, setGroupChanges] = useState(true);
+    const [smartSort, setSmartSort] = useState(true);
 
     const filteredRegulations = useMemo(() => {
-        if (!searchTerm) return regulations.slice(0, 50); // Show first 50 by default for performance
-        const lowerTerm = searchTerm.toLowerCase();
-        return regulations.filter(reg => 
-            reg.designation.toLowerCase().includes(lowerTerm) || 
-            reg.title.toLowerCase().includes(lowerTerm) ||
-            reg.fullName.toLowerCase().includes(lowerTerm)
-        ).slice(0, 50); // Limit results
-    }, [regulations, searchTerm]);
+        let processed = [...regulations];
+
+        // 1. Grouping Logic
+        if (groupChanges) {
+            const parentMap = new Map<string, Regulation>();
+            const changes: Regulation[] = [];
+            const others: Regulation[] = [];
+
+            processed.forEach(reg => {
+                const changeMatch = reg.designation.match(/^Изменение №\s*(\d+)\s*к\s+(.*)$/i);
+                if (changeMatch) {
+                    changes.push(reg);
+                } else {
+                    const parent = { ...reg, embeddedChanges: [] as Regulation[] };
+                    parentMap.set(reg.designation.trim(), parent);
+                    others.push(parent);
+                }
+            });
+
+            const orphanedChanges: Regulation[] = [];
+            changes.forEach(change => {
+                const changeMatch = change.designation.match(/^Изменение №\s*(\d+)\s*к\s+(.*)$/i);
+                if (changeMatch) {
+                    const parentName = changeMatch[2].trim();
+                    const parent = parentMap.get(parentName);
+                    if (parent) {
+                        parent.embeddedChanges = parent.embeddedChanges || [];
+                        parent.embeddedChanges.push(change);
+                         parent.embeddedChanges.sort((a, b) => {
+                             const numA = parseInt(a.designation.match(/^Изменение №\s*(\d+)/i)?.[1] || '0', 10);
+                             const numB = parseInt(b.designation.match(/^Изменение №\s*(\d+)/i)?.[1] || '0', 10);
+                             return numA - numB;
+                        });
+                    } else {
+                        orphanedChanges.push(change);
+                    }
+                } else {
+                    orphanedChanges.push(change);
+                }
+            });
+
+            processed = [...others, ...orphanedChanges];
+        }
+
+        // 2. Sorting Logic
+        if (smartSort) {
+            const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+            processed.sort((a, b) => {
+                return collator.compare(a.designation, b.designation);
+            });
+        }
+
+        // 3. Search Filter
+        if (searchTerm) {
+            const lowerTerm = searchTerm.toLowerCase();
+            processed = processed.filter(reg => 
+                reg.designation.toLowerCase().includes(lowerTerm) || 
+                reg.title.toLowerCase().includes(lowerTerm) ||
+                reg.fullName.toLowerCase().includes(lowerTerm)
+            );
+        }
+        
+        // Limit results for performance if no search term, otherwise show more matches
+        return searchTerm ? processed : processed.slice(0, 50); 
+    }, [regulations, searchTerm, groupChanges, smartSort]);
 
     const handleToggle = (id: string) => {
         setSelectedIds(prev => {
@@ -38,6 +99,15 @@ const RegulationsModal: React.FC<RegulationsModalProps> = ({ isOpen, onClose, re
     };
 
     const handleConfirm = () => {
+        // When confirming, if a parent is selected, do we return just the parent? 
+        // Or do we want to include its changes in the text output? 
+        // Currently, ActsTable takes the list and formats "Designation Title". 
+        // If the user wants specific text for changes, they might need to be selected individually if ungrouped, 
+        // or we trust the user selects the parent "SP X" and that implies "SP X with changes".
+        // The standard usually implies using the latest version with changes.
+        
+        // We need to find the original regulation objects from the source array to ensure referential integrity if needed,
+        // or use the processed ones. Using source `regulations` is safer for ID matching.
         const selectedRegs = regulations.filter(r => selectedIds.has(r.id));
         onSelect(selectedRegs);
         onClose();
@@ -55,7 +125,7 @@ const RegulationsModal: React.FC<RegulationsModalProps> = ({ isOpen, onClose, re
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Выбор нормативных документов">
             <div className="flex flex-col h-[70vh]">
-                <div className="mb-4">
+                <div className="mb-4 space-y-3">
                     <input
                         type="text"
                         placeholder="Поиск по обозначению или названию..."
@@ -64,6 +134,26 @@ const RegulationsModal: React.FC<RegulationsModalProps> = ({ isOpen, onClose, re
                         onChange={(e) => setSearchTerm(e.target.value)}
                         autoFocus
                     />
+                    <div className="flex gap-4 text-xs text-slate-600 px-1">
+                         <label className="flex items-center cursor-pointer select-none">
+                            <input 
+                                type="checkbox" 
+                                className="h-3 w-3 form-checkbox-custom"
+                                checked={groupChanges}
+                                onChange={(e) => setGroupChanges(e.target.checked)}
+                            />
+                            <span className="ml-1.5">Группировать изменения</span>
+                        </label>
+                         <label className="flex items-center cursor-pointer select-none">
+                            <input 
+                                type="checkbox" 
+                                className="h-3 w-3 form-checkbox-custom"
+                                checked={smartSort}
+                                onChange={(e) => setSmartSort(e.target.checked)}
+                            />
+                            <span className="ml-1.5">Умная сортировка</span>
+                        </label>
+                    </div>
                 </div>
 
                 <div className="flex-grow overflow-y-auto border border-slate-200 rounded-md bg-slate-50">
@@ -87,6 +177,11 @@ const RegulationsModal: React.FC<RegulationsModalProps> = ({ isOpen, onClose, re
                                             <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(reg.status)}`}>
                                                 {reg.status}
                                             </span>
+                                             {reg.embeddedChanges && reg.embeddedChanges.length > 0 && (
+                                                <span className="text-xs text-slate-500 bg-slate-100 px-1.5 rounded border border-slate-200">
+                                                    +{reg.embeddedChanges.length} изм.
+                                                </span>
+                                            )}
                                         </div>
                                         <p className="text-sm text-slate-600 line-clamp-2" title={reg.title}>{reg.title}</p>
                                         {reg.replacement && (

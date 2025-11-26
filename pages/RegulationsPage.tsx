@@ -10,18 +10,83 @@ interface RegulationsPageProps {
 
 const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRegulations }) => {
     const [searchTerm, setSearchTerm] = useState('');
+    const [groupChanges, setGroupChanges] = useState(true);
+    const [smartSort, setSmartSort] = useState(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isLoading, setIsLoading] = useState(false);
 
-    const filteredRegulations = useMemo(() => {
-        if (!searchTerm) return regulations;
-        const lowerTerm = searchTerm.toLowerCase();
-        return regulations.filter(reg => 
-            reg.designation.toLowerCase().includes(lowerTerm) || 
-            reg.title.toLowerCase().includes(lowerTerm) || 
-            (reg.replacement && reg.replacement.toLowerCase().includes(lowerTerm))
-        );
-    }, [regulations, searchTerm]);
+    // This useMemo handles Sorting and Grouping logic
+    const displayedRegulations = useMemo(() => {
+        let processed = [...regulations];
+
+        // 1. Grouping Logic
+        // We identify regulations that are "Changes" (e.g. "Изменение №1 к СП 1...") and attach them to the parent.
+        if (groupChanges) {
+            const parentMap = new Map<string, Regulation>();
+            const changes: Regulation[] = [];
+            const others: Regulation[] = [];
+
+            // Separate potential parents and changes
+            processed.forEach(reg => {
+                const changeMatch = reg.designation.match(/^Изменение №\s*(\d+)\s*к\s+(.*)$/i);
+                if (changeMatch) {
+                    changes.push(reg);
+                } else {
+                    // Clone to avoid mutating original state in strict mode issues, and init embeddedChanges
+                    const parent = { ...reg, embeddedChanges: [] as Regulation[] };
+                    parentMap.set(reg.designation.trim(), parent);
+                    others.push(parent);
+                }
+            });
+
+            // Associate changes with parents
+            const orphanedChanges: Regulation[] = [];
+            changes.forEach(change => {
+                const changeMatch = change.designation.match(/^Изменение №\s*(\d+)\s*к\s+(.*)$/i);
+                if (changeMatch) {
+                    const parentName = changeMatch[2].trim();
+                    const parent = parentMap.get(parentName);
+                    if (parent) {
+                        parent.embeddedChanges = parent.embeddedChanges || [];
+                        parent.embeddedChanges.push(change);
+                        // Sort embedded changes by number
+                        parent.embeddedChanges.sort((a, b) => {
+                             const numA = parseInt(a.designation.match(/^Изменение №\s*(\d+)/i)?.[1] || '0', 10);
+                             const numB = parseInt(b.designation.match(/^Изменение №\s*(\d+)/i)?.[1] || '0', 10);
+                             return numA - numB;
+                        });
+                    } else {
+                        orphanedChanges.push(change);
+                    }
+                } else {
+                    orphanedChanges.push(change);
+                }
+            });
+
+            processed = [...others, ...orphanedChanges];
+        }
+
+        // 2. Sorting Logic
+        if (smartSort) {
+            // Natural Sort (Numerically aware)
+            const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+            processed.sort((a, b) => {
+                return collator.compare(a.designation, b.designation);
+            });
+        }
+
+        // 3. Search Filter
+        if (searchTerm) {
+            const lowerTerm = searchTerm.toLowerCase();
+            processed = processed.filter(reg => 
+                reg.designation.toLowerCase().includes(lowerTerm) || 
+                reg.title.toLowerCase().includes(lowerTerm) || 
+                (reg.replacement && reg.replacement.toLowerCase().includes(lowerTerm))
+            );
+        }
+
+        return processed;
+    }, [regulations, searchTerm, groupChanges, smartSort]);
 
     const handleUploadClick = () => {
         fileInputRef.current?.click();
@@ -55,17 +120,13 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
                     fullJson: item
                 })).filter(r => r.designation); // Filter out empty entries
 
-                // Merge or Replace? Let's Merge by Designation for now to avoid duplicates if possible, or just Replace list.
-                // Prompt implies "Load this database", so let's append but check duplicates? 
-                // Simple approach: Replace list or Append. Let's Append but filter dupes by designation.
-                
                 const existingDesignations = new Set(regulations.map(r => r.designation));
                 const uniqueNew = parsedRegulations.filter(r => !existingDesignations.has(r.designation));
                 
                 if (uniqueNew.length === 0 && parsedRegulations.length > 0) {
                      alert("Все загруженные нормативы уже есть в базе.");
                 } else {
-                    onSaveRegulations([...regulations, ...uniqueNew].sort((a,b) => a.designation.localeCompare(b.designation)));
+                    onSaveRegulations([...regulations, ...uniqueNew]);
                     alert(`Успешно добавлено ${uniqueNew.length} документов.`);
                 }
 
@@ -95,9 +156,9 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
-            <div className="flex justify-between items-center mb-6 flex-shrink-0">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0 gap-4">
                 <h1 className="text-2xl font-bold text-slate-800">Нормативные документы (СП)</h1>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                      <button 
                         onClick={handleClearDatabase} 
                         className="flex items-center bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded-md hover:bg-red-100"
@@ -116,39 +177,83 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
                 </div>
             </div>
 
-            <div className="mb-4">
-                 <input
+             <div className="flex flex-col gap-4 mb-4">
+                <input
                     type="text"
                     placeholder="Поиск по обозначению, названию..."
                     className="w-full px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
+                
+                <div className="flex items-center gap-6 text-sm text-slate-700 bg-slate-50 p-3 rounded-md border border-slate-200">
+                    <label className="flex items-center cursor-pointer select-none">
+                        <input 
+                            type="checkbox" 
+                            className="h-4 w-4 form-checkbox-custom"
+                            checked={groupChanges}
+                            onChange={(e) => setGroupChanges(e.target.checked)}
+                        />
+                        <span className="ml-2">Группировать изменения с основным СП</span>
+                    </label>
+                     <label className="flex items-center cursor-pointer select-none">
+                        <input 
+                            type="checkbox" 
+                            className="h-4 w-4 form-checkbox-custom"
+                            checked={smartSort}
+                            onChange={(e) => setSmartSort(e.target.checked)}
+                        />
+                        <span className="ml-2">Сортировать по номеру и истории версий</span>
+                    </label>
+                </div>
             </div>
 
             <div className="flex-grow overflow-auto border border-slate-200 rounded-md">
                 <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50 sticky top-0">
+                    <thead className="bg-slate-50 sticky top-0 z-10">
                         <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Обозначение</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider w-48">Обозначение</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider w-40">Изменения</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Название</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Статус</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Замена</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider w-32">Статус</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider w-40">Замена</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-200">
-                        {filteredRegulations.length > 0 ? filteredRegulations.map(reg => (
+                        {displayedRegulations.length > 0 ? displayedRegulations.map(reg => (
                             <tr key={reg.id} className="hover:bg-slate-50">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-800">{reg.designation}</td>
-                                <td className="px-6 py-4 text-sm text-slate-600 min-w-[300px]">
-                                    <div className="whitespace-normal line-clamp-2" title={reg.title}>{reg.title}</div>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-800 align-top">
+                                    {reg.designation}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
+                                <td className="px-6 py-4 text-sm text-slate-600 align-top">
+                                    {reg.embeddedChanges && reg.embeddedChanges.length > 0 ? (
+                                        <div className="flex flex-wrap gap-1">
+                                            {reg.embeddedChanges.map(change => {
+                                                const changeNum = change.designation.match(/№\s*(\d+)/)?.[1] || '?';
+                                                return (
+                                                    <span 
+                                                        key={change.id} 
+                                                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${change.status.includes('Действует') ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}
+                                                        title={change.designation + ' (' + change.status + ')'}
+                                                    >
+                                                        №{changeNum}
+                                                    </span>
+                                                )
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <span className="text-slate-300">-</span>
+                                    )}
+                                </td>
+                                <td className="px-6 py-4 text-sm text-slate-600 min-w-[300px] align-top">
+                                    <div className="whitespace-normal" title={reg.title}>{reg.title}</div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap align-top">
                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(reg.status)}`}>
                                         {reg.status}
                                     </span>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 align-top">
                                     {reg.replacement ? (
                                         <span className="text-red-600 font-medium">{reg.replacement}</span>
                                     ) : '-'}
@@ -156,7 +261,7 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
                             </tr>
                         )) : (
                             <tr>
-                                <td colSpan={4} className="text-center py-16 text-slate-500">
+                                <td colSpan={5} className="text-center py-16 text-slate-500">
                                     {regulations.length === 0 ? (
                                         <div className="flex flex-col items-center">
                                             <BookIcon className="w-12 h-12 mb-2 text-slate-300" />
@@ -173,7 +278,7 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
                 </table>
             </div>
              <div className="mt-2 text-xs text-slate-500 text-right">
-                Всего документов: {regulations.length}
+                Отображено записей: {displayedRegulations.length} (Всего: {regulations.length})
             </div>
         </div>
     );

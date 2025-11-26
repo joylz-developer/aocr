@@ -30,6 +30,9 @@ export interface Regulation {
     activeDate?: string;
     orgApprover?: string;
     fullJson?: any; // Keep original data just in case
+    
+    // UI Only field for grouping
+    embeddedChanges?: Regulation[]; 
 }
 
 // Map of representative roles to their descriptions
