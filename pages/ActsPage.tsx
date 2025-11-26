@@ -1,5 +1,6 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords } from '../types';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import Modal from '../components/Modal';
 import { PlusIcon, HelpIcon, ColumnsIcon } from '../components/Icons';
@@ -12,6 +13,7 @@ interface ActsPageProps {
     people: Person[];
     organizations: Organization[];
     groups: CommissionGroup[];
+    regulations: Regulation[];
     template: string | null;
     settings: ProjectSettings;
     onSave: (act: Act, insertAtIndex?: number) => void;
@@ -111,7 +113,7 @@ const ColumnPicker: React.FC<{
 };
 
 
-const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, template, settings, onSave, onMoveToTrash, onReorderActs, setCurrentPage }) => {
+const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, regulations, template, settings, onSave, onMoveToTrash, onReorderActs, setCurrentPage }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
@@ -191,6 +193,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     people={people}
                     organizations={organizations}
                     groups={groups}
+                    regulations={regulations}
                     template={template}
                     settings={settings}
                     visibleColumns={visibleColumns}

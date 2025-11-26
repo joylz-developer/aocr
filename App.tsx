@@ -1,6 +1,7 @@
+
 import React, { useState, useCallback, useRef } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry } from './types';
+import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation } from './types';
 import TemplateUploader from './components/TemplateUploader';
 import ImportModal from './components/ImportModal';
 import ConfirmationModal from './components/ConfirmationModal';
@@ -11,6 +12,7 @@ import OrganizationsPage from './pages/OrganizationsPage';
 import SettingsPage from './pages/SettingsPage';
 import GroupsPage from './pages/GroupsPage';
 import TrashPage from './pages/TrashPage';
+import RegulationsPage from './pages/RegulationsPage';
 import Sidebar from './components/Sidebar';
 import { saveAs } from 'file-saver';
 
@@ -36,6 +38,7 @@ const App: React.FC = () => {
     const [people, setPeople] = useLocalStorage<Person[]>('people_data', []);
     const [organizations, setOrganizations] = useLocalStorage<Organization[]>('organizations_data', []);
     const [groups, setGroups] = useLocalStorage<CommissionGroup[]>('commission_groups', []);
+    const [regulations, setRegulations] = useLocalStorage<Regulation[]>('regulations_data', []);
     const [settings, setSettings] = useLocalStorage<ProjectSettings>('project_settings', {
         objectName: '',
         defaultCopiesCount: 2,
@@ -94,7 +97,6 @@ const App: React.FC = () => {
         });
     }, [setActs]);
 
-    // FIX: Add missing handleReorderActs function to handle drag-and-drop reordering of acts.
     const handleReorderActs = useCallback((newActs: Act[]) => {
         setActs(newActs);
     }, [setActs]);
@@ -299,6 +301,7 @@ const App: React.FC = () => {
                 people,
                 organizations,
                 groups,
+                regulations,
                 projectSettings: settings,
                 deletedActs,
             };
@@ -328,7 +331,7 @@ const App: React.FC = () => {
                 
                 const data: ImportData = JSON.parse(text);
                 
-                if (data.template !== undefined || Array.isArray(data.acts) || Array.isArray(data.people) || Array.isArray(data.organizations) || Array.isArray(data.groups) || data.projectSettings || Array.isArray(data.deletedActs)) {
+                if (data.template !== undefined || Array.isArray(data.acts) || Array.isArray(data.people) || Array.isArray(data.organizations) || Array.isArray(data.groups) || Array.isArray(data.regulations) || data.projectSettings || Array.isArray(data.deletedActs)) {
                     setImportData(data);
                 } else {
                     alert('Ошибка: Неверный формат файла.');
@@ -354,7 +357,7 @@ const App: React.FC = () => {
         }
         
         const mergeOrReplace = <T extends {id: string} | DeletedActEntry>(
-            key: 'acts' | 'people' | 'organizations' | 'groups' | 'deletedActs',
+            key: 'acts' | 'people' | 'organizations' | 'groups' | 'deletedActs' | 'regulations',
             setData: React.Dispatch<React.SetStateAction<any>>,
             sortFn: ((a: T, b: T) => number) | null
         ) => {
@@ -381,6 +384,7 @@ const App: React.FC = () => {
         mergeOrReplace('people', setPeople, (a,b) => (a as Person).name.localeCompare((b as Person).name));
         mergeOrReplace('organizations', setOrganizations, (a,b) => (a as Organization).name.localeCompare((b as Organization).name));
         mergeOrReplace('groups', setGroups, (a,b) => (a as CommissionGroup).name.localeCompare((b as CommissionGroup).name));
+        mergeOrReplace('regulations', setRegulations, (a,b) => (a as Regulation).designation.localeCompare((b as Regulation).designation));
         
         setImportData(null);
         alert('Данные успешно импортированы!');
@@ -423,6 +427,7 @@ const App: React.FC = () => {
                             people={people} 
                             organizations={organizations}
                             groups={groups}
+                            regulations={regulations}
                             template={template}
                             settings={settings}
                             onSave={handleSaveAct} 
@@ -443,6 +448,8 @@ const App: React.FC = () => {
                             onPermanentlyDelete={handlePermanentlyDeleteActs}
                             requestConfirmation={requestConfirmation}
                         />;
+            case 'regulations':
+                return <RegulationsPage regulations={regulations} onSaveRegulations={setRegulations} />;
             case 'settings':
                 return <SettingsPage settings={settings} onSave={handleSaveSettings} />;
             default:

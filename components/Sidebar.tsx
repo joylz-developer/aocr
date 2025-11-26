@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { Page } from '../types';
-import { ChevronLeftIcon, ActsIcon, PeopleIcon, OrganizationsIcon, SettingsIcon, ImportIcon, ExportIcon, TemplateIcon, GroupsIcon, TrashIcon } from './Icons';
+import { ChevronLeftIcon, ActsIcon, PeopleIcon, OrganizationsIcon, SettingsIcon, ImportIcon, ExportIcon, TemplateIcon, GroupsIcon, TrashIcon, BookIcon } from './Icons';
 
 interface SidebarProps {
     isOpen: boolean;
@@ -56,6 +57,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentPage, setCu
         { page: 'people', label: 'Участники', icon: <PeopleIcon className="w-5 h-5" /> },
         { page: 'organizations', label: 'Организации', icon: <OrganizationsIcon className="w-5 h-5" /> },
         { page: 'groups', label: 'Группы комиссий', icon: <GroupsIcon className="w-5 h-5" /> },
+        { page: 'regulations', label: 'Нормативы', icon: <BookIcon className="w-5 h-5" /> },
         { page: 'settings', label: 'Настройки', icon: <SettingsIcon className="w-5 h-5" /> },
     ];
 

@@ -1,11 +1,13 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
-import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords } from '../types';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation } from '../types';
 import Modal from './Modal';
-import { DeleteIcon, DownloadIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon } from './Icons';
+import { DeleteIcon, DownloadIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon } from './Icons';
 import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
 import { ALL_COLUMNS } from './ActsTableConfig';
 import { ContextMenu, MenuItem, MenuSeparator } from './ContextMenu';
+import RegulationsModal from './RegulationsModal';
 
 // Props for the main table component
 interface ActsTableProps {
@@ -13,6 +15,7 @@ interface ActsTableProps {
     people: Person[];
     organizations: Organization[];
     groups: CommissionGroup[];
+    regulations: Regulation[];
     template: string | null;
     settings: ProjectSettings;
     visibleColumns: Set<string>;
@@ -157,7 +160,7 @@ const DateEditorPopover: React.FC<{
 
 
 // Main Table Component
-const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, template, settings, visibleColumns, activeCell, setActiveCell, onSave, onRequestDelete, onReorderActs, setCurrentPage }) => {
+const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, template, settings, visibleColumns, activeCell, setActiveCell, onSave, onRequestDelete, onReorderActs, setCurrentPage }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [dateError, setDateError] = useState<string | null>(null);
@@ -180,6 +183,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         target: HTMLElement;
     } | null>(null);
     const [actPickerState, setActPickerState] = useState<{ sourceRowIndex: number } | null>(null);
+    const [regulationsModalOpen, setRegulationsModalOpen] = useState(false);
 
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; rowIndex: number; colIndex: number } | null>(null);
 
@@ -370,7 +374,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (!editingCell) return;
     
         const handleClickOutside = (event: MouseEvent) => {
-            if (datePopoverState) return;
+            if (datePopoverState || regulationsModalOpen) return;
     
             if (editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
                 handleEditorSave(); // Attempt to save
@@ -386,7 +390,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             clearTimeout(timerId);
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [editingCell, datePopoverState, handleEditorSave, closeEditor]);
+    }, [editingCell, datePopoverState, handleEditorSave, closeEditor, regulationsModalOpen]);
 
 
     useEffect(() => {
@@ -446,6 +450,27 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     closeEditor();
                 }
             }
+        }
+    };
+    
+    const handleRegulationsSelect = (selectedRegs: Regulation[]) => {
+        if (!editingCell) return;
+        
+        const newText = selectedRegs.map(reg => `${reg.designation} ${reg.title}`).join('; ');
+        
+        setEditorValue(prev => {
+            if (!prev) return newText;
+            const sep = prev.trim().endsWith(';') ? ' ' : '; ';
+            return prev + sep + newText;
+        });
+        
+        if (editorRef.current instanceof HTMLTextAreaElement) {
+             setTimeout(() => {
+                 if (editorRef.current) {
+                    editorRef.current.style.height = 'auto';
+                    editorRef.current.style.height = `${editorRef.current.scrollHeight}px`;
+                 }
+             }, 0);
         }
     };
 
@@ -1365,6 +1390,33 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                         {isError && <div className="text-red-600 text-xs mt-1 text-left w-full px-1">{dateError}</div>}
                                                     </div>
                                                 )
+                                             } else if (col.key === 'regulations') {
+                                                 const EditorComponent = col.type === 'textarea' ? 'textarea' : 'input';
+                                                 cellContent = (
+                                                    <div ref={editorContainerRef} className="w-full h-full relative">
+                                                        <EditorComponent
+                                                            ref={editorRef as any}
+                                                            value={editorValue}
+                                                            onChange={handleEditorChange}
+                                                            onKeyDown={handleEditorKeyDown}
+                                                            type={'text'}
+                                                            className={`w-full h-full block bg-white box-border px-1.5 py-0.5 pr-8 border-2 border-blue-500 rounded-md z-30 resize-none text-sm leading-snug outline-none no-scrollbar scroll-shadows`}
+                                                            rows={col.type === 'textarea' ? 1 : undefined}
+                                                            onClick={e => e.stopPropagation()}
+                                                        />
+                                                         <button 
+                                                            type="button" 
+                                                            className="absolute right-1 top-1 p-1 text-slate-400 hover:text-blue-600 rounded-full hover:bg-slate-100 z-40 bg-white shadow-sm border border-slate-200"
+                                                            title="Выбрать из справочника"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setRegulationsModalOpen(true);
+                                                            }}
+                                                        >
+                                                            <BookIcon className="w-4 h-4"/>
+                                                        </button>
+                                                    </div>
+                                                 )
                                              } else {
                                                 const EditorComponent = col.type === 'textarea' ? 'textarea' : 'input';
                                                 cellContent = (
@@ -1612,6 +1664,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         disabled={affectedRowsFromSelection.size === 0}
                     />
                 </ContextMenu>
+            )}
+
+            {regulationsModalOpen && (
+                <RegulationsModal 
+                    isOpen={regulationsModalOpen}
+                    onClose={() => setRegulationsModalOpen(false)}
+                    regulations={regulations}
+                    onSelect={handleRegulationsSelect}
+                />
             )}
         </div>
     );

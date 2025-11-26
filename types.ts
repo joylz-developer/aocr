@@ -1,3 +1,4 @@
+
 export interface Person {
     id: string;
     name: string;
@@ -15,6 +16,20 @@ export interface Organization {
     address: string;
     phone?: string;
     sro?: string;
+}
+
+export interface Regulation {
+    id: string;
+    designation: string; // Обозначение
+    fullName: string; // Полное название
+    status: string; // Статус
+    title: string; // Заглавие на русском языке
+    replacement?: string; // Обозначение заменяющего
+    registrationDate?: string;
+    approvalDate?: string;
+    activeDate?: string;
+    orgApprover?: string;
+    fullJson?: any; // Keep original data just in case
 }
 
 // Map of representative roles to their descriptions
@@ -113,6 +128,7 @@ export interface ImportSettings {
     people: ImportSettingsCategory;
     organizations: ImportSettingsCategory;
     groups: ImportSettingsCategory;
+    regulations?: ImportSettingsCategory;
     deletedActs?: ImportSettingsCategory;
 }
 
@@ -124,6 +140,7 @@ export interface ImportData {
     people?: Person[];
     organizations?: Organization[];
     groups?: CommissionGroup[];
+    regulations?: Regulation[];
     deletedActs?: DeletedActEntry[];
 }
 
@@ -135,7 +152,7 @@ export type ActTableColumnKey = Exclude<keyof Act,
 > | 'workDates' | 'commissionGroup';
 
 // Defines the available pages in the application
-export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups' | 'trash';
+export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups' | 'trash' | 'regulations';
 
 export type Coords = { rowIndex: number; colIndex: number };
 
