@@ -1339,7 +1339,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                                 value={editorValue}
                                                                 onChange={handleEditorChange}
                                                                 onKeyDown={handleEditorKeyDown}
-                                                                className={`w-full block bg-white box-border px-1.5 pr-8 py-1 border-2 rounded-md z-30 text-sm leading-snug outline-none ${isError ? 'border-red-500' : 'border-blue-500'}`}
+                                                                className={`w-full block bg-white box-border px-1.5 pr-8 py-0.5 border-2 rounded-md z-30 text-sm leading-snug outline-none ${isError ? 'border-red-500' : 'border-blue-500'}`}
                                                                 onClick={e => e.stopPropagation()}
                                                             />
                                                             <button 
@@ -1375,7 +1375,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                             onChange={handleEditorChange}
                                                             onKeyDown={handleEditorKeyDown}
                                                             type={'text'}
-                                                            className={`w-full h-full block bg-white box-border px-1.5 py-1 border-2 border-blue-500 rounded-md z-30 resize-none text-sm leading-snug outline-none no-scrollbar scroll-shadows`}
+                                                            className={`w-full h-full block bg-white box-border px-1.5 py-0.5 border-2 border-blue-500 rounded-md z-30 resize-none text-sm leading-snug outline-none no-scrollbar scroll-shadows`}
                                                             rows={col.type === 'textarea' ? 1 : undefined}
                                                             onClick={e => e.stopPropagation()}
                                                         />
