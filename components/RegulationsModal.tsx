@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import Modal from './Modal';
 import { Regulation } from '../types';
 import { BookIcon } from './Icons';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 
 interface RegulationsModalProps {
     isOpen: boolean;
@@ -15,14 +16,20 @@ const RegulationsModal: React.FC<RegulationsModalProps> = ({ isOpen, onClose, re
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     
-    // Default options for modal matching the main page defaults
+    // UI state that matches RegulationsPage
     const [groupChanges, setGroupChanges] = useState(true);
-    const [smartSort, setSmartSort] = useState(true);
+    // Shared state using same key as Page
+    const [showActiveOnly, setShowActiveOnly] = useLocalStorage<boolean>('regulations_show_active_only', false);
 
     const filteredRegulations = useMemo(() => {
         let processed = [...regulations];
 
-        // 1. Grouping Logic
+        // 1. Filter Inactive
+        if (showActiveOnly) {
+            processed = processed.filter(reg => reg.status.toLowerCase().includes('действует'));
+        }
+
+        // 2. Grouping Logic
         if (groupChanges) {
             const parentMap = new Map<string, Regulation>();
             const changes: Regulation[] = [];
@@ -64,15 +71,13 @@ const RegulationsModal: React.FC<RegulationsModalProps> = ({ isOpen, onClose, re
             processed = [...others, ...orphanedChanges];
         }
 
-        // 2. Sorting Logic
-        if (smartSort) {
-            const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-            processed.sort((a, b) => {
-                return collator.compare(a.designation, b.designation);
-            });
-        }
+        // 3. Sorting Logic - Always On (Smart Sort)
+        const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+        processed.sort((a, b) => {
+            return collator.compare(a.designation, b.designation);
+        });
 
-        // 3. Search Filter
+        // 4. Search Filter
         if (searchTerm) {
             const lowerTerm = searchTerm.toLowerCase();
             processed = processed.filter(reg => 
@@ -84,7 +89,7 @@ const RegulationsModal: React.FC<RegulationsModalProps> = ({ isOpen, onClose, re
         
         // Limit results for performance if no search term, otherwise show more matches
         return searchTerm ? processed : processed.slice(0, 50); 
-    }, [regulations, searchTerm, groupChanges, smartSort]);
+    }, [regulations, searchTerm, groupChanges, showActiveOnly]);
 
     const handleToggle = (id: string) => {
         setSelectedIds(prev => {
@@ -99,15 +104,6 @@ const RegulationsModal: React.FC<RegulationsModalProps> = ({ isOpen, onClose, re
     };
 
     const handleConfirm = () => {
-        // When confirming, if a parent is selected, do we return just the parent? 
-        // Or do we want to include its changes in the text output? 
-        // Currently, ActsTable takes the list and formats "Designation Title". 
-        // If the user wants specific text for changes, they might need to be selected individually if ungrouped, 
-        // or we trust the user selects the parent "SP X" and that implies "SP X with changes".
-        // The standard usually implies using the latest version with changes.
-        
-        // We need to find the original regulation objects from the source array to ensure referential integrity if needed,
-        // or use the processed ones. Using source `regulations` is safer for ID matching.
         const selectedRegs = regulations.filter(r => selectedIds.has(r.id));
         onSelect(selectedRegs);
         onClose();
@@ -142,16 +138,16 @@ const RegulationsModal: React.FC<RegulationsModalProps> = ({ isOpen, onClose, re
                                 checked={groupChanges}
                                 onChange={(e) => setGroupChanges(e.target.checked)}
                             />
-                            <span className="ml-1.5">Группировать изменения</span>
+                            <span className="ml-1.5">Группировать изменения с основным СП</span>
                         </label>
                          <label className="flex items-center cursor-pointer select-none">
                             <input 
                                 type="checkbox" 
                                 className="h-3 w-3 form-checkbox-custom"
-                                checked={smartSort}
-                                onChange={(e) => setSmartSort(e.target.checked)}
+                                checked={showActiveOnly}
+                                onChange={(e) => setShowActiveOnly(e.target.checked)}
                             />
-                            <span className="ml-1.5">Умная сортировка</span>
+                            <span className="ml-1.5">Скрыть не действующие</span>
                         </label>
                     </div>
                 </div>

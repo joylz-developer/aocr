@@ -8,6 +8,7 @@ import { generateDocument } from '../services/docGenerator';
 import { ALL_COLUMNS } from './ActsTableConfig';
 import { ContextMenu, MenuItem, MenuSeparator } from './ContextMenu';
 import RegulationsModal from './RegulationsModal';
+import RegulationsInput from './RegulationsInput';
 
 // Props for the main table component
 interface ActsTableProps {
@@ -413,7 +414,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             }
             
             setEditorValue(String(initialValue));
-            editorRef.current.focus();
+            if (col.key !== 'regulations') { // RegulationsInput has its own focus logic
+                 editorRef.current.focus();
+            }
     
             if (editorRef.current instanceof HTMLTextAreaElement) {
                 const el = editorRef.current;
@@ -422,7 +425,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     el.style.height = `${el.scrollHeight}px`;
                     el.selectionStart = el.selectionEnd = el.value.length;
                 }, 0);
-            } else {
+            } else if (editorRef.current instanceof HTMLInputElement) {
                 editorRef.current.select();
             }
         }
@@ -456,7 +459,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const handleRegulationsSelect = (selectedRegs: Regulation[]) => {
         if (!editingCell) return;
         
-        const newText = selectedRegs.map(reg => `${reg.designation} ${reg.title}`).join('; ');
+        const newText = selectedRegs.map(reg => reg.designation).join('; ');
         
         setEditorValue(prev => {
             if (!prev) return newText;
@@ -464,6 +467,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             return prev + sep + newText;
         });
         
+        // Don't close editor automatically, let user see added chips
         if (editorRef.current instanceof HTMLTextAreaElement) {
              setTimeout(() => {
                  if (editorRef.current) {
@@ -1391,30 +1395,16 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                     </div>
                                                 )
                                              } else if (col.key === 'regulations') {
-                                                 const EditorComponent = col.type === 'textarea' ? 'textarea' : 'input';
                                                  cellContent = (
-                                                    <div ref={editorContainerRef} className="w-full h-full relative">
-                                                        <EditorComponent
-                                                            ref={editorRef as any}
+                                                    <div ref={editorContainerRef} className="w-full h-full relative z-30">
+                                                        <RegulationsInput
                                                             value={editorValue}
-                                                            onChange={handleEditorChange}
-                                                            onKeyDown={handleEditorKeyDown}
-                                                            type={'text'}
-                                                            className={`w-full h-full block bg-white box-border px-1.5 py-0.5 pr-8 border-2 border-blue-500 rounded-md z-30 resize-none text-sm leading-snug outline-none no-scrollbar scroll-shadows`}
-                                                            rows={col.type === 'textarea' ? 1 : undefined}
-                                                            onClick={e => e.stopPropagation()}
-                                                        />
-                                                         <button 
-                                                            type="button" 
-                                                            className="absolute right-1 top-1 p-1 text-slate-400 hover:text-blue-600 rounded-full hover:bg-slate-100 z-40 bg-white shadow-sm border border-slate-200"
-                                                            title="Выбрать из справочника"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setRegulationsModalOpen(true);
+                                                            onChange={setEditorValue}
+                                                            regulations={regulations}
+                                                            onOpenDictionary={() => {
+                                                                 setRegulationsModalOpen(true);
                                                             }}
-                                                        >
-                                                            <BookIcon className="w-4 h-4"/>
-                                                        </button>
+                                                        />
                                                     </div>
                                                  )
                                              } else {
@@ -1444,6 +1434,30 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 cellContent = group ? group.name : '';
                                             } else if (col.type === 'date') {
                                                 cellContent = formatDateForDisplay(act[col.key as keyof Act] as string);
+                                            } else if (col.key === 'regulations') {
+                                                const rawValue = act.regulations || '';
+                                                // Try to render chips even in view mode for better look, otherwise text
+                                                const items = rawValue.split(';').map(s => s.trim()).filter(Boolean);
+                                                if (items.length > 0) {
+                                                    cellContent = (
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {items.map((item, idx) => {
+                                                                const isKnown = regulations.some(r => r.designation === item);
+                                                                return isKnown ? (
+                                                                     <span key={idx} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium border bg-blue-50 text-blue-700 border-blue-100 whitespace-nowrap">
+                                                                        {item}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span key={idx} className="inline-flex items-center text-sm">
+                                                                        {item}{idx < items.length - 1 ? '; ' : ''}
+                                                                    </span>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    )
+                                                } else {
+                                                    cellContent = '';
+                                                }
                                             } else if (col.key === 'nextWork') {
                                                 if (act.nextWorkActId) {
                                                     const linkedAct = actsById.get(act.nextWorkActId);
@@ -1486,7 +1500,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 onContextMenu={(e) => handleContextMenu(e, rowIndex, colIndex)}
                                             >
                                                 <div className={isEditing
-                                                    ? "relative w-full h-auto"
+                                                    ? "relative w-full h-auto min-h-[1.5rem]"
                                                     : "disable-cell-text-selection px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug relative"
                                                 }>
                                                      {cellContent}

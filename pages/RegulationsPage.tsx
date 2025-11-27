@@ -3,6 +3,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Regulation } from '../types';
 import { PlusIcon, TrashIcon, BookIcon, CloseIcon } from '../components/Icons';
 import Modal from '../components/Modal';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 
 interface RegulationsPageProps {
     regulations: Regulation[];
@@ -65,8 +66,8 @@ const RegulationDetails: React.FC<{ regulation: Regulation; onClose: () => void 
 const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRegulations }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [groupChanges, setGroupChanges] = useState(true);
-    const [smartSort, setSmartSort] = useState(true);
-    const [showActiveOnly, setShowActiveOnly] = useState(false);
+    // Shared state for Active Only filter
+    const [showActiveOnly, setShowActiveOnly] = useLocalStorage<boolean>('regulations_show_active_only', false);
     
     const [viewingRegulation, setViewingRegulation] = useState<Regulation | null>(null);
     const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
@@ -129,13 +130,11 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
             processed = [...others, ...orphanedChanges];
         }
 
-        // 3. Sorting Logic
-        if (smartSort) {
-            const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-            processed.sort((a, b) => {
-                return collator.compare(a.designation, b.designation);
-            });
-        }
+        // 3. Sorting Logic - ALWAYS ON (Smart Sort)
+        const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+        processed.sort((a, b) => {
+            return collator.compare(a.designation, b.designation);
+        });
 
         // 4. Search Filter
         if (searchTerm) {
@@ -148,7 +147,7 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
         }
 
         return processed;
-    }, [regulations, searchTerm, groupChanges, smartSort, showActiveOnly]);
+    }, [regulations, searchTerm, groupChanges, showActiveOnly]);
 
     const handleUploadClick = () => {
         fileInputRef.current?.click();
@@ -299,15 +298,6 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
                             onChange={(e) => setGroupChanges(e.target.checked)}
                         />
                         <span className="ml-2">Группировать изменения с основным СП</span>
-                    </label>
-                     <label className="flex items-center cursor-pointer select-none">
-                        <input 
-                            type="checkbox" 
-                            className="h-4 w-4 form-checkbox-custom"
-                            checked={smartSort}
-                            onChange={(e) => setSmartSort(e.target.checked)}
-                        />
-                        <span className="ml-2">Сортировать по номеру и истории версий</span>
                     </label>
                     <label className="flex items-center cursor-pointer select-none">
                         <input 
