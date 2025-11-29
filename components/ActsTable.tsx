@@ -205,7 +205,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; rowIndex: number; colIndex: number } | null>(null);
 
-    const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const tableContainerRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
     const editorContainerRef = useRef<HTMLDivElement>(null);
@@ -593,7 +592,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
     
     const handleRowHeaderMouseDown = (e: React.MouseEvent, rowIndex: number) => {
-        e.preventDefault();
+        // NOTE: preventDefault() removed here to allow drag-and-drop to initiate
         tableContainerRef.current?.focus({ preventScroll: true });
         
         const newSelectedCells = new Set<string>();
@@ -1144,9 +1143,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setDropColPosition(null);
     };
 
-    // Calculate fill handle position
-    useEffect(() => {
-         if (selectedCells.size > 0 && tableContainerRef.current) {
+    const updateFillHandlePosition = useCallback(() => {
+        if (selectedCells.size > 0 && tableContainerRef.current) {
             const coordsList = Array.from(selectedCells).map(id => {
                 const [rowIndex, colIndex] = id.split(':').map(Number);
                 return { rowIndex, colIndex };
@@ -1154,26 +1152,47 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             const maxRow = Math.max(...coordsList.map(c => c.rowIndex));
             const maxCol = Math.max(...coordsList.map(c => c.colIndex));
 
-            // Find the cell element
-            // We need to query selector carefully as rows might be virtualized in future, but for now they are all there
-            // Actually, querying by data attribute is reliable
-            const cell = tableContainerRef.current.querySelector(`td[data-row-index="${maxRow}"][data-col-index="${maxCol}"]`);
+            // Find the cell element by data attributes
+            const cellSelector = `td[data-row-index="${maxRow}"][data-col-index="${maxCol}"]`;
+            const cell = tableContainerRef.current.querySelector(cellSelector);
             
             if (cell) {
                  const rect = (cell as HTMLElement).getBoundingClientRect();
                  const containerRect = tableContainerRef.current.getBoundingClientRect();
                  
-                 setFillHandleCoords({
-                     top: (rect.bottom - containerRect.top) + tableContainerRef.current.scrollTop - 4,
-                     left: (rect.right - containerRect.left) + tableContainerRef.current.scrollLeft - 4
-                 });
+                 // Calculate position relative to the container's scroll position
+                 // We add scrollTop/scrollLeft because the absolute position is inside the scrolling container
+                 const top = (rect.bottom - containerRect.top) + tableContainerRef.current.scrollTop - 5;
+                 const left = (rect.right - containerRect.left) + tableContainerRef.current.scrollLeft - 5;
+
+                 setFillHandleCoords({ top, left });
             } else {
                  setFillHandleCoords(null);
             }
          } else {
              setFillHandleCoords(null);
          }
-    }, [selectedCells, acts, columns]); // Recalc on data change too
+    }, [selectedCells]);
+
+    // Update fill handle on selection change
+    useEffect(() => {
+        updateFillHandlePosition();
+    }, [updateFillHandlePosition, acts, columns]);
+
+    // Update fill handle on scroll
+    useEffect(() => {
+        const container = tableContainerRef.current;
+        if (!container) return;
+
+        const handleScroll = () => {
+             // Use requestAnimationFrame for smoother updates during scroll
+             requestAnimationFrame(updateFillHandlePosition);
+        };
+
+        container.addEventListener('scroll', handleScroll);
+        return () => container.removeEventListener('scroll', handleScroll);
+    }, [updateFillHandlePosition]);
+
 
     const handleColumnHeaderClick = (e: React.MouseEvent, colIndex: number) => {
         // If clicking sort or drag handle, don't select?
@@ -1230,7 +1249,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             onKeyDown={handleKeyDown}
             ref={tableContainerRef}
         >
-            <div className="flex-grow overflow-auto relative scroll-shadows">
+            <div className="flex-grow overflow-auto relative scroll-shadows p-4">
                 <table className="w-full border-collapse text-sm min-w-max">
                     <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                         <tr>
@@ -1318,7 +1337,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                     {isCopied && <div className="copied-cell-overlay" />}
                                                     
                                                     {isEditing ? (
-                                                        <div ref={editorContainerRef} className="h-full w-full min-h-[1.5em]">
+                                                        <div ref={editorContainerRef} className="h-full w-full min-h-[1.5em] bg-transparent">
                                                            {col.key === 'commissionGroup' ? (
                                                                 <CustomSelect
                                                                     options={groupOptions}
@@ -1346,12 +1365,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                                     value={editorValue}
                                                                     onChange={handleEditorChange}
                                                                     onKeyDown={handleEditorKeyDown}
-                                                                    className="w-full h-full min-h-[60px] resize-none outline-none bg-white p-1"
+                                                                    className="w-full h-full min-h-[60px] resize-none outline-none bg-transparent p-0 m-0 border-none focus:ring-0 leading-normal"
                                                                 />
                                                             )}
                                                         </div>
                                                     ) : (
-                                                        <div className="w-full h-full min-h-[1.5em] whitespace-pre-wrap break-words">
+                                                        <div className="w-full h-full min-h-[1.5em] whitespace-pre-wrap break-words leading-normal">
                                                             {col.key === 'workDates' ? (
                                                                 <div className="flex justify-between items-center group/date">
                                                                      <span>
@@ -1432,7 +1451,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                  {/* Fill Handle */}
                  {fillHandleCoords && !editingCell && (
                     <div
-                        className="absolute w-3 h-3 bg-blue-600 border border-white cursor-crosshair z-20 pointer-events-auto"
+                        className="absolute w-2.5 h-2.5 bg-blue-600 border border-white cursor-crosshair z-20 pointer-events-auto shadow-sm"
                         style={{ top: fillHandleCoords.top, left: fillHandleCoords.left }}
                         onMouseDown={(e) => {
                             e.preventDefault();
