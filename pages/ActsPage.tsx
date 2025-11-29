@@ -120,6 +120,12 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         'acts_table_visible_columns_v4', 
         new Set(ALL_COLUMNS.filter(c => c.key !== 'id').map(c => c.key))
     );
+    // New state for column order
+    const [columnOrder, setColumnOrder] = useLocalStorage<string[]>(
+        'acts_table_column_order',
+        ALL_COLUMNS.map(c => c.key)
+    );
+
     const [actsPendingDeletion, setActsPendingDeletion] = useState<Act[] | null>(null);
 
     
@@ -197,6 +203,8 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     template={template}
                     settings={settings}
                     visibleColumns={visibleColumns}
+                    columnOrder={columnOrder}
+                    onColumnOrderChange={setColumnOrder}
                     activeCell={activeCell}
                     setActiveCell={setActiveCell}
                     onSave={onSave}

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation } from '../types';
 import Modal from './Modal';
-import { DeleteIcon, DownloadIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon } from './Icons';
+import { DeleteIcon, DownloadIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon, CloseIcon } from './Icons';
 import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
 import { ALL_COLUMNS } from './ActsTableConfig';
@@ -21,6 +21,8 @@ interface ActsTableProps {
     template: string | null;
     settings: ProjectSettings;
     visibleColumns: Set<string>;
+    columnOrder: string[];
+    onColumnOrderChange: (newOrder: string[]) => void;
     activeCell: Coords | null;
     setActiveCell: (cell: Coords | null) => void;
     onSave: (act: Act, insertAtIndex?: number) => void;
@@ -161,7 +163,7 @@ const DateEditorPopover: React.FC<{
 };
 
 // Main Table Component
-const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, template, settings, visibleColumns, activeCell, setActiveCell, onSave, onRequestDelete, onReorderActs, setCurrentPage }) => {
+const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, template, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, onSave, onRequestDelete, onReorderActs, setCurrentPage }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [dateError, setDateError] = useState<string | null>(null);
@@ -174,9 +176,16 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [datePopoverState, setDatePopoverState] = useState<{ act: Act; position: { top: number, left: number, width: number } } | null>(null);
     const [fillHandleCoords, setFillHandleCoords] = useState<{top: number, left: number} | null>(null);
 
+    // Row Drag States
     const [draggedRowIndices, setDraggedRowIndices] = useState<number[] | null>(null);
     const [dropTargetRowIndex, setDropTargetRowIndex] = useState<number | null>(null);
     const [dropPosition, setDropPosition] = useState<'top' | 'bottom' | null>(null);
+
+    // Column Drag States
+    const [draggedColKey, setDraggedColKey] = useState<string | null>(null);
+    const [dropTargetColKey, setDropTargetColKey] = useState<string | null>(null);
+    const [dropColPosition, setDropColPosition] = useState<'left' | 'right' | null>(null);
+
 
     const [nextWorkPopoverState, setNextWorkPopoverState] = useState<{
         rowIndex: number;
@@ -206,14 +215,29 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         return new Map(acts.map(a => [a.id, a]));
     }, [acts]);
 
-    const columns = useMemo(() => ALL_COLUMNS.filter(col => {
-        if (!visibleColumns.has(col.key)) return false;
-        if (col.key === 'date' && !settings.showActDate) return false;
-        if (col.key === 'additionalInfo' && !settings.showAdditionalInfo) return false;
-        if (col.key === 'attachments' && !settings.showAttachments) return false;
-        if (col.key === 'copiesCount' && !settings.showCopiesCount) return false;
-        return true;
-    }), [settings, visibleColumns]);
+    const columns = useMemo(() => {
+        // Map available columns by key for easy lookup
+        const colMap = new Map(ALL_COLUMNS.map(col => [col.key, col]));
+        
+        // Start with the persisted order, filter valid and visible columns
+        const orderedCols = columnOrder
+            .filter(key => colMap.has(key as any) && visibleColumns.has(key))
+            .map(key => colMap.get(key as any)!);
+
+        // Check if there are any visible columns NOT in the order list (e.g. new features) and append them
+        const orderedKeys = new Set(orderedCols.map(c => c.key));
+        const missingCols = ALL_COLUMNS.filter(c => visibleColumns.has(c.key) && !orderedKeys.has(c.key));
+
+        const finalCols = [...orderedCols, ...missingCols];
+
+        return finalCols.filter(col => {
+            if (col.key === 'date' && !settings.showActDate) return false;
+            if (col.key === 'additionalInfo' && !settings.showAdditionalInfo) return false;
+            if (col.key === 'attachments' && !settings.showAttachments) return false;
+            if (col.key === 'copiesCount' && !settings.showCopiesCount) return false;
+            return true;
+        });
+    }, [settings, visibleColumns, columnOrder]);
 
     const getCellId = (rowIndex: number, colIndex: number) => `${rowIndex}:${colIndex}`;
 
@@ -236,6 +260,26 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
         return rowsFullySelected;
     }, [selectedCells, columns]);
+    
+    // Check if a full column is selected
+    const selectedColumns = useMemo(() => {
+        if (selectedCells.size === 0 || acts.length === 0) return new Set<number>();
+        
+        const cellsByCol = new Map<number, number>();
+        for (const cellId of selectedCells) {
+            const [, colIndex] = cellId.split(':').map(Number);
+            cellsByCol.set(colIndex, (cellsByCol.get(colIndex) || 0) + 1);
+        }
+
+        const colsFullySelected = new Set<number>();
+        for (const [colIndex, count] of cellsByCol.entries()) {
+            if (count === acts.length) {
+                colsFullySelected.add(colIndex);
+            }
+        }
+        return colsFullySelected;
+    }, [selectedCells, acts.length]);
+
 
     const affectedRowsFromSelection = useMemo(() => {
         return new Set(Array.from(selectedCells, cellId => parseInt(cellId.split(':')[0], 10)));
@@ -917,880 +961,629 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             window.addEventListener('mousemove', handleMouseMove);
             window.addEventListener('mouseup', handleMouseUp, { once: true });
         }
-
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isFilling, selectedCells, fillTargetArea, acts, columns, groups, handleSaveWithTemplateResolution, handleGroupChange]);
+    }, [isFilling, selectedCells, fillTargetArea, acts, columns, groups, handleGroupChange, handleSaveWithTemplateResolution]);
 
 
-    const handleResizeStart = useCallback((e: React.MouseEvent, columnKey: string) => {
-        e.preventDefault();
-        const thElement = (e.target as HTMLElement).parentElement;
-        if (!thElement) return;
-        const startX = e.clientX;
-        const startWidth = thElement.offsetWidth;
-
-        const handleMouseMove = (moveEvent: MouseEvent) => {
-            const newWidth = startWidth + (moveEvent.clientX - startX);
-            if (newWidth > 60) {
-                setColumnWidths(prev => ({ ...prev, [columnKey]: newWidth }));
-            }
-        };
-
-        const handleMouseUp = () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        };
-
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
-    }, []);
-
-    const fillHandleCell = useMemo(() => {
-        if (selectedCells.size === 0) return null;
-        let maxRow = -1, maxColInMaxRow = -1;
-        for (const cellId of selectedCells) {
-            const [r, c] = cellId.split(':').map(Number);
-            if (r > maxRow) {
-                maxRow = r;
-                maxColInMaxRow = c;
-            } else if (r === maxRow && c > maxColInMaxRow) {
-                maxColInMaxRow = c;
-            }
+    // ROW DRAG & DROP LOGIC
+    const handleRowDragStart = (e: React.DragEvent<HTMLTableRowElement>, rowIndex: number) => {
+        if (editingCell) return e.preventDefault();
+        
+        let indicesToDrag = [rowIndex];
+        // If the dragged row is part of a selection, drag all selected rows
+        if (selectedRows.has(rowIndex)) {
+            indicesToDrag = Array.from(selectedRows).sort((a,b) => a-b);
         }
-        return maxRow === -1 ? null : { rowIndex: maxRow, colIndex: maxColInMaxRow };
-    }, [selectedCells]);
-
-
-    useLayoutEffect(() => {
-        if (!fillHandleCell) {
-            setFillHandleCoords(null);
-            return;
-        }
-        const { rowIndex, colIndex } = fillHandleCell;
-        const cellElement = tableContainerRef.current?.querySelector(`[data-row-index="${rowIndex}"][data-col-index="${colIndex}"]`);
-    
-        if (cellElement) {
-            const newCoords = {
-                top: (cellElement as HTMLElement).offsetTop + (cellElement as HTMLElement).offsetHeight - 4,
-                left: (cellElement as HTMLElement).offsetLeft + (cellElement as HTMLElement).offsetWidth - 4,
-            };
-            setFillHandleCoords(newCoords);
-        } else {
-            setFillHandleCoords(null);
-        }
-    }, [fillHandleCell, columnWidths, acts]);
-    
-    // Drag and Drop Row Reordering Handlers
-    const handleDragStart = (e: React.DragEvent, rowIndex: number) => {
-        const isDraggingSelection = selectedRows.has(rowIndex);
-        const indicesToDrag = isDraggingSelection
-            ? Array.from(selectedRows).sort((a, b) => a - b)
-            : [rowIndex];
-
         setDraggedRowIndices(indicesToDrag);
         e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('application/json', JSON.stringify(indicesToDrag));
-        e.dataTransfer.setData('text/plain', indicesToDrag.join(',')); // For compatibility
+        
+        // Custom drag image could be set here
+        e.dataTransfer.setData('text/plain', JSON.stringify(indicesToDrag));
     };
 
-    const handleDragOver = (e: React.DragEvent, rowIndex: number) => {
+    const handleRowDragOver = (e: React.DragEvent<HTMLTableRowElement>, rowIndex: number) => {
+        e.preventDefault(); // Necessary to allow dropping
+        if (!draggedRowIndices) return;
+
+        // Determine drop position (top or bottom of the row)
+        const rect = e.currentTarget.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        const pos = e.clientY < midY ? 'top' : 'bottom';
+        
+        setDropTargetRowIndex(rowIndex);
+        setDropPosition(pos);
+    };
+
+    const handleRowDrop = (e: React.DragEvent<HTMLTableRowElement>) => {
         e.preventDefault();
-        if (draggedRowIndices !== null && !draggedRowIndices.includes(rowIndex)) {
-            setDropTargetRowIndex(rowIndex);
-            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            const midpoint = rect.top + rect.height / 2;
-            setDropPosition(e.clientY > midpoint ? 'bottom' : 'top');
-        }
-    };
-
-    const handleDragLeave = () => {
-        setDropTargetRowIndex(null);
-        setDropPosition(null);
-    };
-
-    const handleDrop = (e: React.DragEvent, targetRowIndex: number) => {
-        e.preventDefault();
-        const draggedIndicesJSON = e.dataTransfer.getData('application/json');
+        if (!draggedRowIndices || dropTargetRowIndex === null || !dropPosition) return;
         
-        if (!draggedIndicesJSON || !draggedRowIndices) {
-            handleDragEnd();
-            return;
-        }
-
-        const draggedIndices = JSON.parse(draggedIndicesJSON) as number[];
-        if (draggedIndices.length === 0) {
-            handleDragEnd();
-            return;
-        }
-
-        let insertionIndex = targetRowIndex;
-        if (dropPosition === 'bottom') {
-            insertionIndex++;
-        }
-
-        const draggedActs = draggedIndices.map(index => acts[index]);
-        const remainingActs = acts.filter((_, index) => !draggedIndices.includes(index));
+        // Calculate new index
+        let insertIndex = dropTargetRowIndex;
+        if (dropPosition === 'bottom') insertIndex++;
         
-        const itemsBeforeInsertion = draggedIndices.filter(i => i < insertionIndex).length;
-        const finalInsertionIndex = insertionIndex - itemsBeforeInsertion;
-
-        remainingActs.splice(finalInsertionIndex, 0, ...draggedActs);
-        onReorderActs(remainingActs);
-
-        const newSelection = new Set<string>();
-        const newRowIndices = Array.from({ length: draggedActs.length }, (_, i) => finalInsertionIndex + i);
+        // Adjust insert index if dragging downwards and index is after source
+        // This logic can be complex with multiple items. Simplest strategy:
+        // Remove all items, then insert at adjusted target.
         
-        newRowIndices.forEach(r => {
-            columns.forEach((_, c) => {
-                newSelection.add(getCellId(r, c));
-            });
-        });
-        setSelectedCells(newSelection);
-        setActiveCell({ rowIndex: finalInsertionIndex, colIndex: 0 });
+        const draggedActs = draggedRowIndices.map(i => acts[i]);
+        const remainingActs = acts.filter((_, i) => !draggedRowIndices.includes(i));
         
-        handleDragEnd();
-    };
-    
-    const handleDragEnd = () => {
+        // Recalculate insert index for the remaining array
+        // We need to know how many items *before* the target were removed
+        const numRemovedBeforeTarget = draggedRowIndices.filter(i => i < insertIndex).length;
+        const adjustedInsertIndex = Math.max(0, insertIndex - numRemovedBeforeTarget);
+        
+        const newActs = [
+            ...remainingActs.slice(0, adjustedInsertIndex),
+            ...draggedActs,
+            ...remainingActs.slice(adjustedInsertIndex)
+        ];
+        
+        onReorderActs(newActs);
+        
+        // Reset state
         setDraggedRowIndices(null);
         setDropTargetRowIndex(null);
         setDropPosition(null);
+        setSelectedCells(new Set()); // Clear selection after move to avoid confusion
+    };
+    
+    // COLUMN DRAG & DROP LOGIC
+    const handleColumnDragStart = (e: React.DragEvent<HTMLTableHeaderCellElement>, colKey: string) => {
+        if (editingCell) return e.preventDefault();
+        setDraggedColKey(colKey);
+        e.dataTransfer.effectAllowed = 'move';
     };
 
-    const handleRowNumberClick = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number) => {
+    const handleColumnDragOver = (e: React.DragEvent<HTMLTableHeaderCellElement>, colKey: string) => {
         e.preventDefault();
-        const rowCellIds = columns.map((_, colIndex) => getCellId(rowIndex, colIndex));
-        const allCellsInRowSelected = rowCellIds.every(id => selectedCells.has(id)) && rowCellIds.length > 0;
+        if (!draggedColKey || draggedColKey === colKey) return;
 
-        if (e.shiftKey && activeCell) {
-            const startRow = Math.min(activeCell.rowIndex, rowIndex);
-            const endRow = Math.max(activeCell.rowIndex, rowIndex);
-            const newSelection = new Set<string>();
-            for (let r = startRow; r <= endRow; r++) {
-                columns.forEach((_, c) => {
-                    newSelection.add(getCellId(r, c));
-                });
-            }
-            setSelectedCells(newSelection);
-        } else if (e.ctrlKey || e.metaKey) {
-            const newSelection = new Set(selectedCells);
-            if (allCellsInRowSelected) {
-                rowCellIds.forEach(id => newSelection.delete(id));
+        const rect = e.currentTarget.getBoundingClientRect();
+        const midX = rect.left + rect.width / 2;
+        const pos = e.clientX < midX ? 'left' : 'right';
+
+        setDropTargetColKey(colKey);
+        setDropColPosition(pos);
+    };
+
+    const handleColumnDrop = () => {
+        if (!draggedColKey || !dropTargetColKey || !dropColPosition) return;
+
+        const currentOrder = columns.map(c => c.key);
+        const fromIndex = currentOrder.indexOf(draggedColKey as any);
+        const toIndex = currentOrder.indexOf(dropTargetColKey as any);
+
+        if (fromIndex === -1 || toIndex === -1) return;
+
+        const newOrder = [...currentOrder];
+        newOrder.splice(fromIndex, 1); // Remove from old pos
+        
+        // Calculate new insertion index
+        let insertIndex = toIndex;
+        if (fromIndex < toIndex) insertIndex--; // Adjust for removal if moving right
+        if (dropColPosition === 'right') insertIndex++;
+        
+        newOrder.splice(insertIndex, 0, draggedColKey as any);
+
+        // Update the full order preference list, preserving invisible columns order
+        const fullOrder = [...columnOrder];
+        // We only reordered visible columns relative to each other.
+        // A simple robust way is to filter fullOrder to remove moved item, then insert it.
+        // But we must respect the relative position to the *target* column in the full list.
+        
+        const fullFromIndex = fullOrder.indexOf(draggedColKey);
+        const fullTargetIndex = fullOrder.indexOf(dropTargetColKey);
+        
+        if (fullFromIndex !== -1 && fullTargetIndex !== -1) {
+            const newFullOrder = [...fullOrder];
+            newFullOrder.splice(fullFromIndex, 1);
+            
+            // Re-find target index as it might have shifted
+            let newTargetIndex = newFullOrder.indexOf(dropTargetColKey);
+            if (dropColPosition === 'right') newTargetIndex++;
+            
+            newFullOrder.splice(newTargetIndex, 0, draggedColKey);
+            onColumnOrderChange(newFullOrder);
+        }
+
+        setDraggedColKey(null);
+        setDropTargetColKey(null);
+        setDropColPosition(null);
+    };
+
+    // Calculate fill handle position
+    useEffect(() => {
+         if (selectedCells.size > 0 && tableContainerRef.current) {
+            const coordsList = Array.from(selectedCells).map(id => {
+                const [rowIndex, colIndex] = id.split(':').map(Number);
+                return { rowIndex, colIndex };
+            });
+            const maxRow = Math.max(...coordsList.map(c => c.rowIndex));
+            const maxCol = Math.max(...coordsList.map(c => c.colIndex));
+
+            // Find the cell element
+            // We need to query selector carefully as rows might be virtualized in future, but for now they are all there
+            // Actually, querying by data attribute is reliable
+            const cell = tableContainerRef.current.querySelector(`td[data-row-index="${maxRow}"][data-col-index="${maxCol}"]`);
+            
+            if (cell) {
+                 const rect = (cell as HTMLElement).getBoundingClientRect();
+                 const containerRect = tableContainerRef.current.getBoundingClientRect();
+                 
+                 setFillHandleCoords({
+                     top: (rect.bottom - containerRect.top) + tableContainerRef.current.scrollTop - 4,
+                     left: (rect.right - containerRect.left) + tableContainerRef.current.scrollLeft - 4
+                 });
             } else {
-                rowCellIds.forEach(id => newSelection.add(id));
+                 setFillHandleCoords(null);
             }
-            setSelectedCells(newSelection);
-            setActiveCell({ rowIndex, colIndex: 0 });
+         } else {
+             setFillHandleCoords(null);
+         }
+    }, [selectedCells, acts, columns]); // Recalc on data change too
+
+    const handleColumnHeaderClick = (e: React.MouseEvent, colIndex: number) => {
+        // If clicking sort or drag handle, don't select?
+        // For now, simple click selects column
+        if (e.ctrlKey || e.metaKey) {
+             const newSelectedCells = new Set(selectedCells);
+             // Add/remove column cells
+             const isSelected = selectedColumns.has(colIndex);
+             if (isSelected) {
+                 for(let r=0; r<acts.length; r++) newSelectedCells.delete(getCellId(r, colIndex));
+             } else {
+                 for(let r=0; r<acts.length; r++) newSelectedCells.add(getCellId(r, colIndex));
+             }
+             setSelectedCells(newSelectedCells);
         } else {
-            setSelectedCells(new Set(rowCellIds));
-            setActiveCell({ rowIndex, colIndex: 0 });
+             const newSelectedCells = new Set<string>();
+             for(let r=0; r<acts.length; r++) newSelectedCells.add(getCellId(r, colIndex));
+             setSelectedCells(newSelectedCells);
         }
+    }
+
+
+    const getHighlightClass = (rowIndex: number, colIndex: number) => {
+        if (!fillTargetArea) return '';
+        const { minRow, maxRow, minCol, maxCol } = normalizeSelection(fillTargetArea.start, fillTargetArea.end);
+        if (rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol) {
+            return 'bg-blue-100/50';
+        }
+        return '';
     };
 
-
-    const handleBulkDelete = () => {
-        const actIdsToDelete = Array.from(selectedRows).map(rowIndex => acts[rowIndex]?.id).filter(Boolean);
-        if (actIdsToDelete.length > 0) {
-            onRequestDelete(actIdsToDelete);
-        }
-    };
-    
-    const handleBulkDownload = () => {
-        if (!template) {
-            alert('Шаблон не загружен.');
-            return;
-        }
-        selectedRows.forEach(rowIndex => {
-            const act = acts[rowIndex];
-            if (act) {
-                generateDocument(template, act, people);
-            }
-        });
-    };
-
-    const handleLinkAct = (sourceRowIndex: number, targetActId: string) => {
-        const originalAct = acts[sourceRowIndex];
-        if (originalAct && originalAct.id !== targetActId) {
-            const updatedAct = {
-                ...originalAct,
-                nextWork: '', // Clear manual entry
-                nextWorkActId: targetActId,
-            };
-            handleSaveWithTemplateResolution(updatedAct);
-        }
-        setActPickerState(null);
-    };
-    
-    // Listen for outside clicks to close Regulation Popover
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (regulationPopoverRef.current && !regulationPopoverRef.current.contains(event.target as Node)) {
-                setRegulationPopoverState(null);
-            }
-        };
-
-        if (regulationPopoverState) {
-            document.addEventListener('mousedown', handleClickOutside);
-        } else {
-            document.removeEventListener('mousedown', handleClickOutside);
-        }
-
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, [regulationPopoverState]);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (nextWorkPopoverRef.current && !nextWorkPopoverRef.current.contains(event.target as Node)) {
-                setNextWorkPopoverState(null);
-            }
-        };
-
-        if (nextWorkPopoverState) {
-            document.addEventListener('mousedown', handleClickOutside);
-        } else {
-            document.removeEventListener('mousedown', handleClickOutside);
-        }
-
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, [nextWorkPopoverState]);
-    
-    useEffect(() => {
-        const handleGlobalKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && actPickerState) {
-                e.preventDefault();
-                e.stopPropagation();
-                setActPickerState(null);
-            }
-        };
-
-        if (actPickerState) {
-            window.addEventListener('keydown', handleGlobalKeyDown);
-        }
-
-        return () => {
-            window.removeEventListener('keydown', handleGlobalKeyDown);
-        };
-    }, [actPickerState]);
-
-    // --- Context Menu Handlers ---
-    const handleContextMenu = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
+    const handleContextMenu = (e: React.MouseEvent, rowIndex: number, colIndex: number) => {
         e.preventDefault();
-        
-        const cellId = getCellId(rowIndex, colIndex);
-        if (!selectedCells.has(cellId)) {
-            setSelectedCells(new Set([cellId]));
-            setActiveCell({ rowIndex, colIndex });
-        }
-
-        setContextMenu({
-            x: e.clientX,
-            y: e.clientY,
-            rowIndex,
-            colIndex,
-        });
-    };
-    
-    const handleContextMenuClose = () => {
-        setContextMenu(null);
+        setContextMenu({ x: e.clientX, y: e.clientY, rowIndex, colIndex });
     };
 
-    const handleContextMenuEdit = () => {
-        if (!contextMenu) return;
-        const { rowIndex, colIndex } = contextMenu;
-        const cellElement = tableContainerRef.current?.querySelector(`[data-row-index="${rowIndex}"][data-col-index="${colIndex}"]`);
-        
-        // Create a fake event object with the target element for the popover positioning logic.
-        const fakeEvent = (cellElement ? { currentTarget: cellElement } : {}) as unknown as React.MouseEvent<HTMLTableCellElement>;
-    
-        handleCellDoubleClick(fakeEvent, rowIndex, colIndex);
-        handleContextMenuClose();
-    };
-
-    const handleContextMenuCopy = () => {
-        handleCopy();
-        handleContextMenuClose();
-    };
-
-    const handleContextMenuPaste = () => {
-        handlePaste();
-        handleContextMenuClose();
-    };
-
-    const handleContextMenuClear = () => {
-        handleClearCells();
-        handleContextMenuClose();
-    };
-    
-    const handleContextMenuInsertRow = (offset: number) => { // 0 for above, 1 for below
-        if (!contextMenu) return;
-        const newAct: Act = {
-            id: crypto.randomUUID(),
-            number: '', date: new Date().toISOString().split('T')[0], objectName: settings.objectName, builderDetails: '',
-            contractorDetails: '', designerDetails: '', workPerformer: '', workName: '', projectDocs: '', materials: '', certs: '',
-            workStartDate: '', workEndDate: '', regulations: '', nextWork: '', additionalInfo: settings.defaultAdditionalInfo || '',
-            copiesCount: String(settings.defaultCopiesCount), attachments: settings.defaultAttachments || '', representatives: {},
-        };
-        const insertIndex = contextMenu.rowIndex + offset;
-        onSave(newAct, insertIndex);
-        handleContextMenuClose();
-    };
-    
-    const handleContextMenuDeleteRows = () => {
-        const actIdsToDelete = Array.from(affectedRowsFromSelection).map(rowIndex => acts[rowIndex]?.id).filter(Boolean);
-        if (actIdsToDelete.length > 0) {
-            onRequestDelete(actIdsToDelete);
-        }
-        handleContextMenuClose();
-    };
-    
-    const handleContextMenuDownloadRows = () => {
-        if (!template) {
-            alert('Шаблон не загружен.');
-            handleContextMenuClose();
-            return;
-        }
-        affectedRowsFromSelection.forEach(rowIndex => {
-            const act = acts[rowIndex];
-            if (act) {
-                generateDocument(template, act, people);
+    // Scroll to active cell logic
+    useEffect(() => {
+        if (activeCell && tableContainerRef.current) {
+            const { rowIndex, colIndex } = activeCell;
+            const cell = tableContainerRef.current.querySelector(`td[data-row-index="${rowIndex}"][data-col-index="${colIndex}"]`);
+            if (cell) {
+                // Basic scroll into view logic if needed, but browser default focus handling usually does this
+                // cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
             }
-        });
-        handleContextMenuClose();
-    };
+        }
+    }, [activeCell]);
 
 
     return (
-        <div className={`h-full flex flex-col relative ${actPickerState ? 'act-picker-mode' : ''}`}>
-            <div className="flex-grow overflow-auto border border-slate-200 rounded-md relative focus:outline-none" ref={tableContainerRef} tabIndex={-1} onKeyDown={handleKeyDown}>
-                <table className="min-w-full text-sm border-separate border-spacing-0">
-                    <thead className="sticky top-0 bg-slate-50 z-20 shadow-sm">
+        <div 
+            className="h-full flex flex-col relative outline-none" 
+            tabIndex={0} 
+            onKeyDown={handleKeyDown}
+            ref={tableContainerRef}
+        >
+            <div className="flex-grow overflow-auto relative scroll-shadows">
+                <table className="w-full border-collapse text-sm min-w-max">
+                    <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                         <tr>
-                            <th className="sticky left-0 bg-slate-50 p-0 w-12 min-w-[3rem] z-30 border-r border-b border-slate-200"></th>
-                            {columns.map((col, colIndex) => (
-                                <th 
-                                    key={col.key} 
-                                    className={`px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider border-b border-slate-200 relative ${colIndex < columns.length -1 ? 'border-r' : ''}`}
-                                    style={{ width: columnWidths[col.key] ? `${columnWidths[col.key]}px` : undefined }}
+                            {columns.map((col, index) => (
+                                <th
+                                    key={col.key}
+                                    className={`
+                                        border border-slate-300 px-2 py-2 font-medium text-slate-600 text-left select-none relative
+                                        ${col.widthClass}
+                                        ${selectedColumns.has(index) ? 'bg-blue-100' : ''}
+                                        ${draggedColKey === col.key ? 'opacity-50' : ''}
+                                        ${dropTargetColKey === col.key && dropColPosition === 'left' ? 'border-l-4 border-l-blue-500' : ''}
+                                        ${dropTargetColKey === col.key && dropColPosition === 'right' ? 'border-r-4 border-r-blue-500' : ''}
+                                        grabbable
+                                    `}
+                                    draggable={!editingCell}
+                                    onDragStart={(e) => handleColumnDragStart(e, col.key)}
+                                    onDragOver={(e) => handleColumnDragOver(e, col.key)}
+                                    onDrop={handleColumnDrop}
+                                    onClick={(e) => handleColumnHeaderClick(e, index)}
                                 >
                                     {col.label}
-                                     <div 
-                                        onMouseDown={(e) => handleResizeStart(e, col.key)}
-                                        className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize"
-                                     />
+                                    {/* Resizer could go here */}
                                 </th>
                             ))}
                         </tr>
                     </thead>
-                    <tbody className="bg-white">
-                        {acts.map((act, rowIndex) => {
-                            const isRowSelected = selectedRows.has(rowIndex);
-                            const isBeingDragged = draggedRowIndices?.includes(rowIndex);
-                            const isDropTargetTop = dropTargetRowIndex === rowIndex && dropPosition === 'top';
-                            const isDropTargetBottom = dropTargetRowIndex === rowIndex && dropPosition === 'bottom';
-                            const isSourceRowForPicker = actPickerState?.sourceRowIndex === rowIndex;
-                            
-                            const trClassParts = [];
-                            if (isDropTargetTop) trClassParts.push('drop-target-row-top');
-                            if (isDropTargetBottom) trClassParts.push('drop-target-row-bottom');
-                            if (isSourceRowForPicker) trClassParts.push('act-picker-source-row');
-                            const trClass = trClassParts.join(' ');
-
-
-                            return (
-                                <tr key={act.id} className={trClass}
-                                    onDragOver={(e) => handleDragOver(e, rowIndex)}
-                                    onDrop={(e) => handleDrop(e, rowIndex)}
-                                    onDragLeave={handleDragLeave}
-                                    onDragEnd={handleDragEnd}
-                                    onClick={() => {
-                                        if (actPickerState && actPickerState.sourceRowIndex !== rowIndex) {
-                                            handleLinkAct(actPickerState.sourceRowIndex, act.id);
-                                        }
-                                    }}
-                                >
-                                    <td
-                                        className={`sticky left-0 p-0 w-12 min-w-[3rem] z-10 border-r border-b border-slate-200 text-center text-xs text-slate-400 select-none transition-colors grabbable ${isRowSelected ? 'bg-blue-200' : 'bg-slate-50 hover:bg-slate-100'} ${isBeingDragged ? 'opacity-50' : ''}`}
-                                        draggable={true}
-                                        onDragStart={(e) => handleDragStart(e, rowIndex)}
-                                        onClick={(e) => handleRowNumberClick(e, rowIndex)}
-                                        data-row-index={rowIndex}
+                    <tbody>
+                        {acts.length > 0 ? (
+                            acts.map((act, rowIndex) => {
+                                const isRowSelected = selectedRows.has(rowIndex);
+                                const isRowDragged = draggedRowIndices?.includes(rowIndex);
+                                const isDropTarget = dropTargetRowIndex === rowIndex;
+                                
+                                return (
+                                    <tr 
+                                        key={act.id} 
+                                        className={`
+                                            group
+                                            ${isRowSelected ? 'bg-blue-50' : 'hover:bg-slate-50'}
+                                            ${isRowDragged ? 'opacity-40' : ''}
+                                            ${isDropTarget && dropPosition === 'top' ? 'drop-target-row-top' : ''}
+                                            ${isDropTarget && dropPosition === 'bottom' ? 'drop-target-row-bottom' : ''}
+                                            ${actPickerState?.sourceRowIndex === rowIndex ? 'act-picker-source-row' : ''}
+                                        `}
+                                        draggable={!editingCell}
+                                        onDragStart={(e) => handleRowDragStart(e, rowIndex)}
+                                        onDragOver={(e) => handleRowDragOver(e, rowIndex)}
+                                        onDrop={handleRowDrop}
                                     >
-                                        {rowIndex + 1}
-                                    </td>
-                                    {columns.map((col, colIndex) => {
-                                        const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colIndex === colIndex;
-                                        const cellId = getCellId(rowIndex, colIndex);
-                                        const isActive = activeCell?.rowIndex === rowIndex && activeCell?.colIndex === colIndex;
-                                        const isSelected = selectedCells.has(cellId);
-                                        const isCopied = copiedCells?.has(cellId);
-
-                                        const { minRow, maxRow, minCol, maxCol } = fillTargetArea ? normalizeSelection(fillTargetArea.start, fillTargetArea.end) : { minRow: -1, maxRow: -1, minCol: -1, maxCol: -1 };
-                                        const isFillTarget = rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol;
-
-                                        const cellClassParts = [
-                                            "p-0 border-b border-slate-200 relative transition-colors duration-100 group",
-                                            colIndex < columns.length - 1 ? 'border-r' : '',
-                                            isBeingDragged ? 'opacity-50' : '',
-                                        ];
-                                        if (isSourceRowForPicker) {
-                                            // Handled by tr class
-                                        } else if (isFillTarget) {
-                                            cellClassParts.push('bg-blue-200');
-                                        } else if (isSelected) {
-                                            cellClassParts.push('bg-blue-100');
-                                        } else {
-                                            cellClassParts.push('bg-white');
-                                        }
-
-                                        const cellClass = cellClassParts.join(' ');
-                                        
-                                        const borderDivs = [];
-                                        if (isSelected) {
-                                            const hasTop = !selectedCells.has(getCellId(rowIndex - 1, colIndex));
-                                            const hasBottom = !selectedCells.has(getCellId(rowIndex + 1, colIndex));
-                                            const hasLeft = !selectedCells.has(getCellId(rowIndex, colIndex - 1));
-                                            const hasRight = !selectedCells.has(getCellId(rowIndex, colIndex + 1));
+                                        {columns.map((col, colIndex) => {
+                                            const cellId = getCellId(rowIndex, colIndex);
+                                            const isSelected = selectedCells.has(cellId);
+                                            const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colIndex === colIndex;
+                                            const isCopied = copiedCells?.has(cellId);
                                             
-                                            const classes: string[] = ['absolute', 'inset-0', 'border-blue-400', 'pointer-events-none', 'z-10'];
-                                            if(hasTop) classes.push('border-t');
-                                            if(hasBottom) classes.push('border-b');
-                                            if(hasLeft) classes.push('border-l');
-                                            if(hasRight) classes.push('border-r');
-                                            
-                                            borderDivs.push(<div key="selection-border" className={classes.join(' ')}></div>);
-                                        }
-                                        if (isCopied) {
-                                            borderDivs.push(<div key="copy-border" className="copied-cell-overlay" />);
-                                        }
-                                        if (isActive) {
-                                            borderDivs.push(<div key="active-border" className="absolute inset-0 border-2 border-blue-600 pointer-events-none z-20"></div>);
-                                        }
-
-                                        let cellContent;
-
-                                        if (isEditing) {
-                                             if (col.key === 'commissionGroup') {
-                                                cellContent = (
-                                                    <div ref={editorContainerRef} className="w-full h-full">
-                                                        <CustomSelect 
-                                                            startOpen={true}
-                                                            options={groupOptions} 
-                                                            value={act.commissionGroupId || ''}
-                                                            onChange={(value) => {
-                                                                handleGroupChange(act, value);
-                                                                closeEditor();
-                                                            }}
-                                                            placeholder="-- Выберите группу --"
-                                                            onCreateNew={() => {
-                                                                handleCreateNewGroup();
-                                                                closeEditor();
-                                                            }}
-                                                            allowClear={true}
-                                                        />
-                                                    </div>
-                                                );
-                                             } else if (col.key === 'workDates') {
-                                                const isError = !!dateError;
-                                                cellContent = (
-                                                    <div ref={editorContainerRef} className="flex flex-col">
-                                                        <div className="relative w-full">
-                                                            <input
-                                                                ref={editorRef as any}
-                                                                value={editorValue}
-                                                                onChange={handleEditorChange}
-                                                                onKeyDown={handleEditorKeyDown}
-                                                                className={`w-full block bg-white box-border px-1.5 pr-8 py-0.5 border-2 rounded-md z-30 text-sm leading-snug outline-none ${isError ? 'border-red-500' : 'border-blue-500'}`}
-                                                                onClick={e => e.stopPropagation()}
-                                                            />
-                                                            <button 
-                                                                type="button" 
-                                                                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-blue-600 rounded-full hover:bg-slate-100 z-30"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    const cellRect = e.currentTarget.closest('td')!.getBoundingClientRect();
-                                                                    const containerRect = tableContainerRef.current!.getBoundingClientRect();
-                                                                    setDatePopoverState({
-                                                                        act: act,
-                                                                        position: {
-                                                                            top: cellRect.bottom - containerRect.top + 5,
-                                                                            left: cellRect.left - containerRect.left,
-                                                                            width: cellRect.width,
-                                                                        }
-                                                                    });
-                                                                }}
-                                                            >
-                                                                <CalendarIcon className="w-5 h-5"/>
-                                                            </button>
+                                            return (
+                                                <td
+                                                    key={col.key}
+                                                    data-row-index={rowIndex}
+                                                    data-col-index={colIndex}
+                                                    className={`
+                                                        border border-slate-300 px-2 py-1 relative align-top transition-colors
+                                                        ${isSelected ? 'bg-blue-100 outline outline-2 outline-blue-500 z-10' : ''}
+                                                        ${isCopied ? 'relative' : ''}
+                                                        ${getHighlightClass(rowIndex, colIndex)}
+                                                        ${col.key === 'id' ? 'text-xs text-slate-400 select-all' : ''}
+                                                        ${col.key === 'commissionGroup' ? 'text-slate-600' : ''}
+                                                        cursor-default
+                                                    `}
+                                                    onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
+                                                    onDoubleClick={(e) => handleCellDoubleClick(e, rowIndex, colIndex)}
+                                                    onContextMenu={(e) => handleContextMenu(e, rowIndex, colIndex)}
+                                                    style={{ height: '1px' }} // Hack to make cell grow with content but allow 100% height child
+                                                >
+                                                    {isCopied && <div className="copied-cell-overlay" />}
+                                                    
+                                                    {isEditing ? (
+                                                        <div ref={editorContainerRef} className="h-full w-full min-h-[1.5em]">
+                                                           {col.key === 'commissionGroup' ? (
+                                                                <CustomSelect
+                                                                    options={groupOptions}
+                                                                    value={editorValue}
+                                                                    onChange={(val) => {
+                                                                        handleGroupChange(act, val);
+                                                                        closeEditor();
+                                                                    }}
+                                                                    startOpen={true}
+                                                                    onCreateNew={handleCreateNewGroup}
+                                                                    allowClear
+                                                                    className="w-full"
+                                                                />
+                                                            ) : col.key === 'regulations' ? (
+                                                                <RegulationsInput 
+                                                                    value={editorValue}
+                                                                    onChange={setEditorValue}
+                                                                    regulations={regulations}
+                                                                    onOpenDictionary={() => setRegulationsModalOpen(true)}
+                                                                    onInfoClick={(des, target) => handleShowRegulationInfo(des, target)}
+                                                                />
+                                                            ) : (
+                                                                <textarea
+                                                                    ref={editorRef as React.RefObject<HTMLTextAreaElement>}
+                                                                    value={editorValue}
+                                                                    onChange={handleEditorChange}
+                                                                    onKeyDown={handleEditorKeyDown}
+                                                                    className="w-full h-full min-h-[60px] resize-none outline-none bg-white p-1"
+                                                                />
+                                                            )}
                                                         </div>
-                                                        {isError && <div className="text-red-600 text-xs mt-1 text-left w-full px-1">{dateError}</div>}
-                                                    </div>
-                                                )
-                                             } else if (col.key === 'regulations') {
-                                                 cellContent = (
-                                                    <div ref={editorContainerRef} className="w-full h-full relative z-30">
-                                                        <RegulationsInput
-                                                            value={editorValue}
-                                                            onChange={setEditorValue}
-                                                            regulations={regulations}
-                                                            onOpenDictionary={() => {
-                                                                 setRegulationsModalOpen(true);
-                                                            }}
-                                                            onInfoClick={handleShowRegulationInfo}
-                                                        />
-                                                    </div>
-                                                 )
-                                             } else {
-                                                const EditorComponent = col.type === 'textarea' ? 'textarea' : 'input';
-                                                cellContent = (
-                                                    <div ref={editorContainerRef} className="w-full h-full">
-                                                        <EditorComponent
-                                                            ref={editorRef as any}
-                                                            value={editorValue}
-                                                            onChange={handleEditorChange}
-                                                            onKeyDown={handleEditorKeyDown}
-                                                            type={'text'}
-                                                            className={`w-full h-full block bg-white box-border px-1.5 py-0.5 border-2 border-blue-500 rounded-md z-30 resize-none text-sm leading-snug outline-none no-scrollbar scroll-shadows`}
-                                                            rows={col.type === 'textarea' ? 1 : undefined}
-                                                            onClick={e => e.stopPropagation()}
-                                                        />
-                                                    </div>
-                                                );
-                                            }
-                                        } else {
-                                            if (col.key === 'workDates') {
-                                                const start = formatDateForDisplay(act.workStartDate);
-                                                const end = formatDateForDisplay(act.workEndDate);
-                                                cellContent = (start && end && start !== end) ? `${start} - ${end}` : (start || '...');
-                                            } else if (col.key === 'commissionGroup') {
-                                                const group = groups.find(g => g.id === act.commissionGroupId);
-                                                cellContent = group ? group.name : '';
-                                            } else if (col.type === 'date') {
-                                                cellContent = formatDateForDisplay(act[col.key as keyof Act] as string);
-                                            } else if (col.key === 'regulations') {
-                                                const rawValue = act.regulations || '';
-                                                // Try to render chips even in view mode for better look, otherwise text
-                                                const items = rawValue.split(';').map(s => s.trim()).filter(Boolean);
-                                                if (items.length > 0) {
-                                                    cellContent = (
-                                                        <div className="flex flex-wrap gap-1">
-                                                            {items.map((item, idx) => {
-                                                                const isKnown = regulations.some(r => r.designation === item);
-                                                                const chipClass = isKnown 
-                                                                    ? "bg-blue-50 text-blue-700 border-blue-100 cursor-pointer hover:bg-blue-100" 
-                                                                    : "bg-slate-50 text-slate-600 border-slate-200";
-
-                                                                return (
-                                                                     <span 
-                                                                        key={idx} 
-                                                                        className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium border whitespace-nowrap ${chipClass}`}
-                                                                        onClick={(e) => {
-                                                                            if (isKnown) {
-                                                                                e.stopPropagation();
-                                                                                handleShowRegulationInfo(item, e.currentTarget);
-                                                                            }
-                                                                        }}
-                                                                        title={isKnown ? "Нажмите для информации" : ""}
-                                                                    >
-                                                                        {item}
+                                                    ) : (
+                                                        <div className="w-full h-full min-h-[1.5em] whitespace-pre-wrap break-words">
+                                                            {col.key === 'workDates' ? (
+                                                                <div className="flex justify-between items-center group/date">
+                                                                     <span>
+                                                                        {act.workStartDate ? formatDateForDisplay(act.workStartDate) : <span className="text-slate-300 italic">Начало</span>}
+                                                                        {' - '}
+                                                                        {act.workEndDate ? formatDateForDisplay(act.workEndDate) : <span className="text-slate-300 italic">Конец</span>}
                                                                     </span>
-                                                                )
-                                                            })}
+                                                                    <button 
+                                                                        className="opacity-0 group-hover/date:opacity-100 text-slate-400 hover:text-blue-600 p-1"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            const rect = e.currentTarget.getBoundingClientRect();
+                                                                            setDatePopoverState({ 
+                                                                                act, 
+                                                                                position: { top: rect.bottom + window.scrollY, left: rect.left + window.scrollX, width: 200 } 
+                                                                            });
+                                                                        }}
+                                                                    >
+                                                                        <CalendarIcon className="w-4 h-4" />
+                                                                    </button>
+                                                                </div>
+                                                            ) : col.key === 'commissionGroup' ? (
+                                                                groups.find(g => g.id === act.commissionGroupId)?.name || ''
+                                                            ) : col.type === 'date' ? (
+                                                                formatDateForDisplay(act[col.key as keyof Act] as string)
+                                                            ) : col.key === 'regulations' ? (
+                                                                // Render view-mode regulations with chips if possible
+                                                                act.regulations ? (
+                                                                    <div className="flex flex-wrap gap-1">
+                                                                        {act.regulations.split(';').map(s => s.trim()).filter(Boolean).map((regName, idx) => {
+                                                                            const reg = regulations.find(r => r.designation === regName);
+                                                                             // Styling based on status if known
+                                                                            let chipClass = "bg-slate-100 text-slate-800 border-slate-300"; 
+                                                                            if (reg) {
+                                                                                 if (reg.status?.toLowerCase().includes('действует')) chipClass = "bg-green-100 text-green-800 border-green-200";
+                                                                                 else if (reg.status?.toLowerCase().includes('заменен') || reg.status?.toLowerCase().includes('отменен')) chipClass = "bg-red-100 text-red-800 border-red-200";
+                                                                                 else chipClass = "bg-blue-100 text-blue-800 border-blue-200";
+                                                                            }
+                                                                            
+                                                                            return (
+                                                                                <span 
+                                                                                    key={idx} 
+                                                                                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs border ${chipClass} ${reg ? 'cursor-pointer hover:underline' : ''}`}
+                                                                                    onClick={(e) => {
+                                                                                        if (reg) {
+                                                                                            e.stopPropagation();
+                                                                                            handleShowRegulationInfo(regName, e.currentTarget);
+                                                                                        }
+                                                                                    }}
+                                                                                >
+                                                                                    {regName}
+                                                                                </span>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                ) : ''
+                                                            ) : (
+                                                                String(act[col.key as keyof Act] || '')
+                                                            )}
                                                         </div>
-                                                    )
-                                                } else {
-                                                    cellContent = '';
-                                                }
-                                            } else if (col.key === 'nextWork') {
-                                                if (act.nextWorkActId) {
-                                                    const linkedAct = actsById.get(act.nextWorkActId);
-                                                    if (linkedAct) {
-                                                        const displayName = linkedAct.workName?.trim() || `[Акт №${linkedAct.number || 'б/н'}]`;
-                                                        const isPlaceholder = !linkedAct.workName?.trim();
-                                                        cellContent = (
-                                                            <div className="flex items-center gap-1.5 text-blue-600 group-hover:underline cursor-pointer" title={`Связано с Актом №${linkedAct.number || 'б/н'}`}>
-                                                                <LinkIcon className="w-3.5 h-3.5 flex-shrink-0" />
-                                                                <span className={isPlaceholder ? 'italic text-slate-500' : ''}>
-                                                                    {displayName}
-                                                                </span>
-                                                            </div>
-                                                        );
-                                                    } else {
-                                                        cellContent = (
-                                                             <div className="flex items-center gap-1.5 text-red-500" title="Связанный акт был удален или не найден">
-                                                                <LinkIcon className="w-3.5 h-3.5 flex-shrink-0" />
-                                                                <span className="italic">[Связь нарушена]</span>
-                                                            </div>
-                                                        );
-                                                    }
-                                                } else {
-                                                    cellContent = act.nextWork || '';
-                                                }
-                                            } else {
-                                                const key = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
-                                                cellContent = act[key] || '';
-                                            }
-                                        }
-                                        
-                                        return (
-                                            <td 
-                                                key={col.key}
-                                                className={cellClass}
-                                                data-row-index={rowIndex}
-                                                data-col-index={colIndex}
-                                                onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
-                                                onDoubleClick={(e) => handleCellDoubleClick(e, rowIndex, colIndex)}
-                                                onContextMenu={(e) => handleContextMenu(e, rowIndex, colIndex)}
-                                            >
-                                                <div className={isEditing
-                                                    ? "relative w-full h-auto min-h-[1.5rem]"
-                                                    : "disable-cell-text-selection px-2 py-1.5 h-full w-full whitespace-pre-wrap leading-snug relative"
-                                                }>
-                                                     {cellContent}
-                                                </div>
-                                                {borderDivs}
-                                            </td>
-                                        );
-                                    })}
-                                </tr>
-                        )})}
+                                                    )}
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                );
+                            })
+                        ) : (
+                             <tr>
+                                <td colSpan={columns.length} className="text-center py-10 text-slate-500">
+                                    Нет актов. Нажмите "Создать акт", чтобы добавить первый.
+                                </td>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
-                
-                {nextWorkPopoverState && (() => {
-                    const { target, rowIndex, colIndex } = nextWorkPopoverState;
-                    const cellRect = target.getBoundingClientRect();
-                    const containerRect = tableContainerRef.current!.getBoundingClientRect();
-                    const top = cellRect.bottom - containerRect.top;
-                    const left = cellRect.left - containerRect.left;
 
-                    const act = acts[rowIndex];
-                    const isLinked = !!act.nextWorkActId;
-
-                    return (
-                        <div
-                            ref={nextWorkPopoverRef}
-                            className="absolute z-50 bg-white shadow-lg rounded-md border border-slate-200 p-2 flex flex-col gap-1 animate-fade-in-up"
-                            style={{ top: `${top}px`, left: `${left}px` }}
-                        >
-                            {isLinked ? (
-                                <>
-                                    <button
-                                        className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
-                                        onClick={() => {
-                                            setActPickerState({ sourceRowIndex: rowIndex });
-                                            setNextWorkPopoverState(null);
-                                        }}
-                                    >
-                                        Изменить акт...
-                                    </button>
-                                    <button
-                                        className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
-                                        onClick={() => {
-                                            const linkedAct = actsById.get(act.nextWorkActId!);
-                                            const updatedAct = {
-                                                ...act,
-                                                nextWork: linkedAct?.workName || '',
-                                                nextWorkActId: undefined
-                                            };
-                                            handleSaveWithTemplateResolution(updatedAct);
-                                            setNextWorkPopoverState(null);
-                                            setEditingCell({ rowIndex, colIndex });
-                                        }}
-                                    >
-                                        Ввести вручную
-                                    </button>
-                                </>
-                            ) : (
-                                 <>
-                                    <button
-                                        className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
-                                        onClick={() => {
-                                            setEditingCell({ rowIndex, colIndex });
-                                            setNextWorkPopoverState(null);
-                                        }}
-                                    >
-                                        Вручную
-                                    </button>
-                                    <button
-                                        className="text-left text-sm px-3 py-1.5 hover:bg-slate-100 rounded-md"
-                                        onClick={() => {
-                                            setActPickerState({ sourceRowIndex: rowIndex });
-                                            setNextWorkPopoverState(null);
-                                        }}
-                                    >
-                                        Указать акт...
-                                    </button>
-                                 </>
-                            )}
-                        </div>
-                    );
-                })()}
-
-                {datePopoverState && (
-                    <DateEditorPopover
-                        act={datePopoverState.act}
-                        onActChange={(updatedAct) => {
-                           setDatePopoverState(prev => prev ? { ...prev, act: updatedAct } : null);
-                           handleSaveWithTemplateResolution(updatedAct);
-                        }}
-                        onClose={() => setDatePopoverState(null)}
-                        position={datePopoverState.position}
-                    />
-                )}
-                
-                {/* Regulation Popover */}
-                {regulationPopoverState && (() => {
-                    const { regulation, target } = regulationPopoverState;
-                    const cellRect = target.getBoundingClientRect();
-                    const containerRect = tableContainerRef.current!.getBoundingClientRect();
-                    
-                    // Position calculations to ensure it fits (basic logic)
-                    let top = cellRect.bottom - containerRect.top + 5;
-                    const left = Math.max(0, Math.min(cellRect.left - containerRect.left, containerRect.width - 320));
-
-                    return (
-                        <div 
-                            ref={regulationPopoverRef}
-                            className="absolute z-50 bg-white shadow-xl rounded-lg border border-slate-200 w-80 max-w-[90vw] animate-fade-in-up flex flex-col"
-                            style={{ top: `${top}px`, left: `${left}px` }}
-                        >
-                            <div className="p-3 border-b border-slate-100 bg-slate-50 rounded-t-lg flex justify-between items-start">
-                                <div>
-                                    <h4 className="font-bold text-slate-800 text-sm">{regulation.designation}</h4>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border mt-1 inline-block ${regulation.status.toLowerCase().includes('действует') ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-100 text-red-700 border-red-200'}`}>
-                                        {regulation.status}
-                                    </span>
-                                </div>
-                            </div>
-                            <div className="p-3 text-xs text-slate-600">
-                                <p className="line-clamp-3 mb-2">{regulation.title}</p>
-                                <button 
-                                    className="text-blue-600 hover:text-blue-800 font-medium hover:underline flex items-center gap-1"
-                                    onClick={() => {
-                                        setFullRegulationDetails(regulation);
-                                        setRegulationPopoverState(null);
-                                    }}
-                                >
-                                    <BookIcon className="w-3 h-3" />
-                                    Открыть биографию
-                                </button>
-                            </div>
-                        </div>
-                    )
-                })()}
-
-                 {fillHandleCoords && selectedCells.size > 0 && (
-                     <div
-                        className="absolute w-2 h-2 bg-blue-600 border border-white cursor-crosshair z-30"
+                 {/* Fill Handle */}
+                 {fillHandleCoords && !editingCell && (
+                    <div
+                        className="absolute w-3 h-3 bg-blue-600 border border-white cursor-crosshair z-20 pointer-events-auto"
                         style={{ top: fillHandleCoords.top, left: fillHandleCoords.left }}
                         onMouseDown={(e) => {
-                            e.stopPropagation();
+                            e.preventDefault();
                             setIsFilling(true);
                         }}
-                     />
+                    />
                 )}
             </div>
-            {selectedRows.size > 0 && (
-                <div className="flex-shrink-0 flex justify-center p-2">
-                    <div className="bg-white shadow-lg rounded-md p-2 flex items-center gap-3 z-40 border border-slate-200 animate-fade-in-up">
-                        <span className="text-sm font-medium text-slate-600 px-2">
-                            Выбрано: {selectedRows.size}
-                        </span>
-                        <button onClick={handleBulkDownload} className="flex items-center gap-2 bg-green-50 text-green-700 px-4 py-1.5 rounded-md hover:bg-green-100 border border-green-200 transition-colors">
-                           <DownloadIcon /> Скачать
-                        </button>
-                        <button onClick={handleBulkDelete} className="flex items-center gap-2 bg-red-50 text-red-700 px-4 py-1.5 rounded-md hover:bg-red-100 border border-red-200 transition-colors">
-                            <DeleteIcon /> Удалить
-                        </button>
+
+            {/* Date Picker Popover */}
+            {datePopoverState && (
+                <DateEditorPopover 
+                    act={datePopoverState.act}
+                    onActChange={(updated) => handleSaveWithTemplateResolution(updated)}
+                    onClose={() => setDatePopoverState(null)}
+                    position={datePopoverState.position}
+                />
+            )}
+            
+            {/* Regulation Info Popover */}
+             {regulationPopoverState && (
+                <div 
+                    ref={regulationPopoverRef}
+                    className="absolute z-50 bg-white border border-slate-200 rounded-lg shadow-xl p-4 w-80 animate-fade-in-up"
+                    style={{ 
+                        top: Math.min(window.innerHeight - 200, regulationPopoverState.target.getBoundingClientRect().bottom + window.scrollY), 
+                        left: Math.min(window.innerWidth - 340, regulationPopoverState.target.getBoundingClientRect().left + window.scrollX) 
+                    }}
+                >
+                    <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-bold text-slate-800">{regulationPopoverState.regulation.designation}</h4>
+                         <button onClick={() => setRegulationPopoverState(null)} className="text-slate-400 hover:text-slate-600"><CloseIcon className="w-4 h-4"/></button>
                     </div>
+                    <p className="text-xs text-slate-500 mb-2">{regulationPopoverState.regulation.status}</p>
+                    <p className="text-sm text-slate-700 mb-3 line-clamp-3">{regulationPopoverState.regulation.title}</p>
+                    
+                    <button 
+                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+                        onClick={() => {
+                            setFullRegulationDetails(regulationPopoverState.regulation);
+                            setRegulationPopoverState(null);
+                        }}
+                    >
+                        <BookIcon className="w-4 h-4"/>
+                        Открыть биографию
+                    </button>
                 </div>
             )}
+             
+            {/* Context Menu */}
             {contextMenu && (
-                <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={handleContextMenuClose}>
-                    <MenuItem
-                        icon={<EditIcon />}
-                        label="Изменить"
-                        onClick={handleContextMenuEdit}
-                        disabled={columns[contextMenu.colIndex]?.key === 'id'}
+                <ContextMenu 
+                    x={contextMenu.x} 
+                    y={contextMenu.y} 
+                    onClose={() => setContextMenu(null)}
+                >
+                    <MenuItem 
+                        icon={<EditIcon className="w-4 h-4" />} 
+                        label="Редактировать" 
+                        onClick={() => {
+                            setEditingCell({ rowIndex: contextMenu.rowIndex, colIndex: contextMenu.colIndex });
+                            setContextMenu(null);
+                        }} 
                     />
                     <MenuSeparator />
                     <MenuItem 
-                        icon={<CopyIcon/>} 
+                        icon={<CopyIcon className="w-4 h-4" />} 
                         label="Копировать" 
-                        shortcut="Ctrl+C" 
-                        onClick={handleContextMenuCopy} 
-                        disabled={selectedCells.size === 0}
+                        shortcut="Ctrl+C"
+                        onClick={() => {
+                            handleCopy();
+                            setContextMenu(null);
+                        }} 
                     />
                     <MenuItem 
-                        icon={<PasteIcon />} 
+                        icon={<PasteIcon className="w-4 h-4" />} 
                         label="Вставить" 
-                        shortcut="Ctrl+V" 
-                        onClick={handleContextMenuPaste}
-                        disabled={columns[contextMenu.colIndex]?.key === 'id'}
+                        shortcut="Ctrl+V"
+                        onClick={() => {
+                            handlePaste();
+                            setContextMenu(null);
+                        }} 
+                    />
+                    <MenuSeparator />
+                     <MenuItem 
+                        icon={<SparklesIcon className="w-4 h-4" />} 
+                        label="Сгенерировать Word" 
+                        onClick={() => {
+                            if (!template) {
+                                alert("Сначала загрузите шаблон");
+                            } else {
+                                generateDocument(template, acts[contextMenu.rowIndex], people);
+                            }
+                            setContextMenu(null);
+                        }} 
+                    />
+                    <MenuSeparator />
+                    <MenuItem 
+                        icon={<RowAboveIcon className="w-4 h-4" />} 
+                        label="Вставить строку выше" 
+                        onClick={() => {
+                            const newAct: Act = { ...acts[0], id: crypto.randomUUID(), number: '', date: new Date().toISOString().split('T')[0], workStartDate: '', workEndDate: '' }; // Simplified new act
+                            onSave(newAct, contextMenu.rowIndex);
+                            setContextMenu(null);
+                        }} 
                     />
                     <MenuItem 
-                        icon={<SparklesIcon />} 
-                        label="Очистить" 
-                        shortcut="Del" 
-                        onClick={handleContextMenuClear}
-                        disabled={selectedCells.size === 0 || columns[contextMenu.colIndex]?.key === 'id'}
+                         icon={<RowBelowIcon className="w-4 h-4" />} 
+                        label="Вставить строку ниже" 
+                        onClick={() => {
+                             const newAct: Act = { ...acts[0], id: crypto.randomUUID(), number: '', date: new Date().toISOString().split('T')[0], workStartDate: '', workEndDate: '' };
+                             onSave(newAct, contextMenu.rowIndex + 1);
+                             setContextMenu(null);
+                        }} 
                     />
                     <MenuSeparator />
-                    <MenuItem
-                        icon={<RowAboveIcon />}
-                        label="Вставить строку выше"
-                        onClick={() => handleContextMenuInsertRow(0)}
-                    />
-                     <MenuItem
-                        icon={<RowBelowIcon />}
-                        label="Вставить строку ниже"
-                        onClick={() => handleContextMenuInsertRow(1)}
-                    />
-                    <MenuSeparator />
-                    <MenuItem
-                        icon={<DeleteIcon />}
-                        label={`Удалить ${affectedRowsFromSelection.size > 1 ? `строки (${affectedRowsFromSelection.size})` : 'строку'}`}
-                        onClick={handleContextMenuDeleteRows}
-                        disabled={affectedRowsFromSelection.size === 0}
-                        className="text-red-600"
-                    />
-                    <MenuItem
-                        icon={<DownloadIcon />}
-                        label={`Скачать ${affectedRowsFromSelection.size > 1 ? `акты (${affectedRowsFromSelection.size})` : 'акт'}`}
-                        onClick={handleContextMenuDownloadRows}
-                        disabled={affectedRowsFromSelection.size === 0}
+                    <MenuItem 
+                        icon={<DeleteIcon className="w-4 h-4 text-red-500" />} 
+                        label="Удалить строку" 
+                        className="text-red-600 hover:bg-red-50"
+                        onClick={() => {
+                            onRequestDelete([acts[contextMenu.rowIndex].id]);
+                            setContextMenu(null);
+                        }} 
                     />
                 </ContextMenu>
             )}
 
-            {regulationsModalOpen && (
-                <RegulationsModal 
-                    isOpen={regulationsModalOpen}
-                    onClose={() => setRegulationsModalOpen(false)}
-                    regulations={regulations}
-                    onSelect={handleRegulationsSelect}
-                />
-            )}
-
+            {/* Modals */}
+             <RegulationsModal
+                isOpen={regulationsModalOpen}
+                onClose={() => {
+                    setRegulationsModalOpen(false);
+                    // Re-focus editor if it was open
+                    if (editingCell) {
+                       // Handled by editor blur/focus logic generally, but simple close is fine
+                    }
+                }}
+                regulations={regulations}
+                onSelect={handleRegulationsSelect}
+            />
+            
             {fullRegulationDetails && (
-                <Modal 
-                    isOpen={!!fullRegulationDetails} 
-                    onClose={() => setFullRegulationDetails(null)} 
-                    title=""
-                >
-                    <RegulationDetails 
-                        regulation={fullRegulationDetails} 
-                        onClose={() => setFullRegulationDetails(null)} 
-                    />
+                <Modal isOpen={!!fullRegulationDetails} onClose={() => setFullRegulationDetails(null)} title="">
+                    <RegulationDetails regulation={fullRegulationDetails} onClose={() => setFullRegulationDetails(null)} />
                 </Modal>
             )}
+            
+            {/* Popover for Next Work Selection */}
+            {nextWorkPopoverState && (
+                <div 
+                    ref={nextWorkPopoverRef}
+                    className="absolute z-50 bg-white border border-slate-200 rounded shadow-lg w-64 max-h-60 overflow-y-auto animate-fade-in-up"
+                    style={{ 
+                        top: nextWorkPopoverState.target.getBoundingClientRect().bottom + window.scrollY, 
+                        left: nextWorkPopoverState.target.getBoundingClientRect().left + window.scrollX 
+                    }}
+                >
+                    <div className="p-2 border-b bg-slate-50 text-xs font-semibold text-slate-500">
+                        Выберите акт скрытых работ
+                    </div>
+                    {acts.map(a => (
+                        <button
+                            key={a.id}
+                            className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm truncate"
+                            onClick={() => {
+                                const targetAct = acts[nextWorkPopoverState.rowIndex];
+                                const updatedAct = { 
+                                    ...targetAct, 
+                                    nextWork: `Акт №${a.number} от ${formatDateForDisplay(a.date)} (${a.workName})`,
+                                    nextWorkActId: a.id 
+                                };
+                                handleSaveWithTemplateResolution(updatedAct);
+                                setNextWorkPopoverState(null);
+                            }}
+                        >
+                            <span className="font-medium">№{a.number}</span> - {a.workName}
+                        </button>
+                    ))}
+                    <div className="border-t p-1">
+                        <button
+                            className="w-full text-center text-xs text-blue-600 hover:underline py-1"
+                            onClick={() => {
+                                setEditingCell({ rowIndex: nextWorkPopoverState.rowIndex, colIndex: nextWorkPopoverState.colIndex });
+                                setNextWorkPopoverState(null);
+                            }}
+                        >
+                            Ввести вручную...
+                        </button>
+                    </div>
+                </div>
+            )}
+            
+             {/* Global click handler for popovers */}
+            {useEffect(() => {
+                const handleClickOutside = (event: MouseEvent) => {
+                     // Next Work Popover
+                    if (nextWorkPopoverState && nextWorkPopoverRef.current && !nextWorkPopoverRef.current.contains(event.target as Node) && !nextWorkPopoverState.target.contains(event.target as Node)) {
+                        setNextWorkPopoverState(null);
+                    }
+                     // Regulation Popover
+                    if (regulationPopoverState && regulationPopoverRef.current && !regulationPopoverRef.current.contains(event.target as Node) && !regulationPopoverState.target.contains(event.target as Node)) {
+                        setRegulationPopoverState(null);
+                    }
+                };
+                document.addEventListener('mousedown', handleClickOutside);
+                return () => document.removeEventListener('mousedown', handleClickOutside);
+            }, [nextWorkPopoverState, regulationPopoverState]) as any}
         </div>
     );
 };
