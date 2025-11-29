@@ -206,6 +206,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; rowIndex: number; colIndex: number } | null>(null);
 
     const tableContainerRef = useRef<HTMLDivElement>(null);
+    // Ref for the specific div that handles scrolling
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    
     const editorRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
     const editorContainerRef = useRef<HTMLDivElement>(null);
     const nextWorkPopoverRef = useRef<HTMLDivElement>(null);
@@ -1144,7 +1147,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
 
     const updateFillHandlePosition = useCallback(() => {
-        if (selectedCells.size > 0 && tableContainerRef.current) {
+        // Use scrollContainerRef instead of tableContainerRef to get correct coordinates including scroll
+        if (selectedCells.size > 0 && scrollContainerRef.current) {
             const coordsList = Array.from(selectedCells).map(id => {
                 const [rowIndex, colIndex] = id.split(':').map(Number);
                 return { rowIndex, colIndex };
@@ -1152,18 +1156,19 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             const maxRow = Math.max(...coordsList.map(c => c.rowIndex));
             const maxCol = Math.max(...coordsList.map(c => c.colIndex));
 
-            // Find the cell element by data attributes
+            // Find the cell element by data attributes inside the container
             const cellSelector = `td[data-row-index="${maxRow}"][data-col-index="${maxCol}"]`;
-            const cell = tableContainerRef.current.querySelector(cellSelector);
+            const cell = scrollContainerRef.current.querySelector(cellSelector);
             
             if (cell) {
                  const rect = (cell as HTMLElement).getBoundingClientRect();
-                 const containerRect = tableContainerRef.current.getBoundingClientRect();
+                 const containerRect = scrollContainerRef.current.getBoundingClientRect();
                  
-                 // Calculate position relative to the container's scroll position
-                 // We add scrollTop/scrollLeft because the absolute position is inside the scrolling container
-                 const top = (rect.bottom - containerRect.top) + tableContainerRef.current.scrollTop - 5;
-                 const left = (rect.right - containerRect.left) + tableContainerRef.current.scrollLeft - 5;
+                 // Calculate position relative to the SCROLLED CONTENT origin.
+                 // We add scrollTop/scrollLeft so the absolute position is correct within the scrollable area.
+                 // This ensures it moves with the table when scrolling.
+                 const top = (rect.bottom - containerRect.top) + scrollContainerRef.current.scrollTop - 5;
+                 const left = (rect.right - containerRect.left) + scrollContainerRef.current.scrollLeft - 5;
 
                  setFillHandleCoords({ top, left });
             } else {
@@ -1172,26 +1177,17 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
          } else {
              setFillHandleCoords(null);
          }
-    }, [selectedCells]);
+    }, [selectedCells, acts, columns]);
 
-    // Update fill handle on selection change
-    useEffect(() => {
+    // Update fill handle on selection change or data change
+    useLayoutEffect(() => {
         updateFillHandlePosition();
-    }, [updateFillHandlePosition, acts, columns]);
-
-    // Update fill handle on scroll
-    useEffect(() => {
-        const container = tableContainerRef.current;
-        if (!container) return;
-
-        const handleScroll = () => {
-             // Use requestAnimationFrame for smoother updates during scroll
-             requestAnimationFrame(updateFillHandlePosition);
-        };
-
-        container.addEventListener('scroll', handleScroll);
-        return () => container.removeEventListener('scroll', handleScroll);
     }, [updateFillHandlePosition]);
+    
+    // NOTE: Removed scroll event listener. 
+    // Since the fill handle is absolutely positioned inside the scrolling container, 
+    // it moves naturally with the content. We only need to calculate its initial position
+    // relative to the content origin when selection changes.
 
 
     const handleColumnHeaderClick = (e: React.MouseEvent, colIndex: number) => {
@@ -1249,7 +1245,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             onKeyDown={handleKeyDown}
             ref={tableContainerRef}
         >
-            <div className="flex-grow overflow-auto relative scroll-shadows p-4">
+            <div 
+                className="flex-grow overflow-auto relative scroll-shadows p-4" 
+                ref={scrollContainerRef}
+            >
                 <table className="w-full border-collapse text-sm min-w-max">
                     <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                         <tr>

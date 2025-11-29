@@ -102,9 +102,9 @@ const RegulationsInput: React.FC<RegulationsInputProps> = ({ value, onChange, re
     };
 
     return (
-        <div ref={containerRef} className="relative w-full h-full bg-white flex flex-col">
+        <div ref={containerRef} className="relative w-full h-full bg-transparent flex flex-col">
             <div 
-                className="flex-grow flex flex-wrap gap-1.5 p-1.5 items-start content-start overflow-y-auto w-full border-2 border-blue-500 rounded-md bg-white no-scrollbar"
+                className="flex-grow flex flex-wrap gap-1.5 p-0 items-start content-start overflow-y-auto w-full border-none bg-transparent no-scrollbar"
                 onClick={(e) => {
                     // Focus input if clicking on the background container
                     if (e.target === e.currentTarget) {
