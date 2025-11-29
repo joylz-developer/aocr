@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { Regulation } from '../types';
 import { PlusIcon, TrashIcon, BookIcon } from '../components/Icons';
 import Modal from '../components/Modal';
@@ -22,6 +22,10 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
     
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isLoading, setIsLoading] = useState(false);
+
+    // Infinite Scroll State
+    const [visibleCount, setVisibleCount] = useState(50);
+    const observerTarget = useRef<HTMLDivElement>(null);
 
     // This useMemo handles Sorting, Grouping, and Filtering
     const displayedRegulations = useMemo(() => {
@@ -96,6 +100,40 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
 
         return processed;
     }, [regulations, searchTerm, groupChanges, showActiveOnly]);
+
+    // Reset visible count when filters change to prevent showing empty rows or jumping
+    useEffect(() => {
+        setVisibleCount(50);
+        // Scroll to top of table container if possible
+        const container = document.getElementById('regulations-table-container');
+        if (container) container.scrollTop = 0;
+    }, [searchTerm, groupChanges, showActiveOnly, regulations]);
+
+    // Intersection Observer for Infinite Scroll
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            entries => {
+                if (entries[0].isIntersecting) {
+                    setVisibleCount(prev => Math.min(prev + 50, displayedRegulations.length));
+                }
+            },
+            { threshold: 0.1, rootMargin: '100px' }
+        );
+
+        if (observerTarget.current) {
+            observer.observe(observerTarget.current);
+        }
+
+        return () => {
+            if (observerTarget.current) {
+                observer.unobserve(observerTarget.current);
+            }
+        };
+    }, [displayedRegulations.length]);
+
+    // Derived slice for rendering
+    const visibleRegulations = displayedRegulations.slice(0, visibleCount);
+
 
     const handleUploadClick = () => {
         fileInputRef.current?.click();
@@ -172,30 +210,41 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
             // Uncheck active filter if the target is inactive, so we can see it
             if (showActiveOnly && !target.status.toLowerCase().includes('действует')) {
                 setShowActiveOnly(false);
-                // We need a slight delay to allow re-render with inactive items shown
+                // Wait for filter update, then locate
                 setTimeout(() => {
-                    setHighlightedRowId(target!.id);
-                    const element = document.getElementById(`reg-row-${target!.id}`);
-                    if (element) {
-                        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
+                   scrollToRegulation(target!.id);
                 }, 100);
             } else {
-                setHighlightedRowId(target.id);
-                // Scroll immediately
-                setTimeout(() => {
-                    const element = document.getElementById(`reg-row-${target!.id}`);
-                    if (element) {
-                        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                }, 100);
+               scrollToRegulation(target.id);
             }
-
-            // Remove highlight after animation duration (2s)
-            setTimeout(() => setHighlightedRowId(null), 2000);
         } else {
             alert(`Документ "${replacementDesignation}" не найден в загруженной базе.`);
         }
+    };
+    
+    const scrollToRegulation = (id: string) => {
+         // Find index in FULL list
+         const index = displayedRegulations.findIndex(r => r.id === id);
+         
+         if (index !== -1) {
+             // Ensure it's rendered by expanding visible count if needed
+             if (index >= visibleCount) {
+                 setVisibleCount(index + 20);
+             }
+             
+             setHighlightedRowId(id);
+             
+             // Allow DOM to update then scroll
+             setTimeout(() => {
+                 const element = document.getElementById(`reg-row-${id}`);
+                 if (element) {
+                     element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                 }
+             }, 100);
+
+             // Remove highlight
+             setTimeout(() => setHighlightedRowId(null), 2000);
+         }
     };
 
     const getStatusColor = (status: string) => {
@@ -259,7 +308,7 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
                 </div>
             </div>
 
-            <div className="flex-grow overflow-auto border border-slate-200 rounded-md relative">
+            <div id="regulations-table-container" className="flex-grow overflow-auto border border-slate-200 rounded-md relative">
                 <table className="min-w-full divide-y divide-slate-200">
                     <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                         <tr>
@@ -271,7 +320,7 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-200">
-                        {displayedRegulations.length > 0 ? displayedRegulations.map(reg => (
+                        {visibleRegulations.length > 0 ? visibleRegulations.map(reg => (
                             <tr 
                                 key={reg.id} 
                                 id={`reg-row-${reg.id}`}
@@ -346,9 +395,11 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
                         )}
                     </tbody>
                 </table>
+                {/* Sentinel element for infinite scroll */}
+                <div ref={observerTarget} className="h-4 w-full"></div>
             </div>
              <div className="mt-2 text-xs text-slate-500 text-right">
-                Отображено записей: {displayedRegulations.length} (Всего: {regulations.length})
+                Отображено записей: {visibleRegulations.length} из {displayedRegulations.length} (Всего в базе: {regulations.length})
             </div>
 
             {viewingRegulation && (
