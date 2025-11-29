@@ -592,6 +592,48 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     };
     
+    const handleRowHeaderMouseDown = (e: React.MouseEvent, rowIndex: number) => {
+        e.preventDefault();
+        tableContainerRef.current?.focus({ preventScroll: true });
+        
+        const newSelectedCells = new Set<string>();
+        for (let c = 0; c < columns.length; c++) {
+            newSelectedCells.add(getCellId(rowIndex, c));
+        }
+        
+        if (e.shiftKey && activeCell) {
+            // Expand selection from active cell row to clicked row
+            const startRow = activeCell.rowIndex;
+            const endRow = rowIndex;
+            const minR = Math.min(startRow, endRow);
+            const maxR = Math.max(startRow, endRow);
+            
+            const expandedSelection = new Set<string>();
+             for (let r = minR; r <= maxR; r++) {
+                for (let c = 0; c < columns.length; c++) {
+                    expandedSelection.add(getCellId(r, c));
+                }
+            }
+            setSelectedCells(expandedSelection);
+        } else if (e.ctrlKey || e.metaKey) {
+             const updatedSelection = new Set(selectedCells);
+             // Toggle row
+             const firstCellId = getCellId(rowIndex, 0);
+             const isRowSelected = selectedCells.has(firstCellId); // Approximation
+             
+             for (let c = 0; c < columns.length; c++) {
+                 const id = getCellId(rowIndex, c);
+                 if (isRowSelected) updatedSelection.delete(id);
+                 else updatedSelection.add(id);
+             }
+             setSelectedCells(updatedSelection);
+             setActiveCell({ rowIndex, colIndex: 0 });
+        } else {
+            setSelectedCells(newSelectedCells);
+            setActiveCell({ rowIndex, colIndex: 0 });
+        }
+    };
+
     const handleCellDoubleClick = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
         if (window.getSelection) {
             window.getSelection()?.removeAllRanges();
@@ -972,6 +1014,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const handleRowDragStart = (e: React.DragEvent<HTMLTableRowElement>, rowIndex: number) => {
         if (editingCell) return e.preventDefault();
         
+        // Ensure dragging is only initiated from the handle
+        if (!(e.target as HTMLElement).closest('.row-drag-handle')) {
+            e.preventDefault();
+            return;
+        }
+
         let indicesToDrag = [rowIndex];
         // If the dragged row is part of a selection, drag all selected rows
         if (selectedRows.has(rowIndex)) {
@@ -1186,6 +1234,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 <table className="w-full border-collapse text-sm min-w-max">
                     <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                         <tr>
+                            <th className="w-10 border border-slate-300 px-2 py-2 font-medium text-slate-500 text-center select-none bg-slate-100">
+                                #
+                            </th>
                             {columns.map((col, index) => (
                                 <th
                                     key={col.key}
@@ -1194,8 +1245,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         ${col.widthClass}
                                         ${selectedColumns.has(index) ? 'bg-blue-100' : ''}
                                         ${draggedColKey === col.key ? 'opacity-50' : ''}
-                                        ${dropTargetColKey === col.key && dropColPosition === 'left' ? 'border-l-4 border-l-blue-500' : ''}
-                                        ${dropTargetColKey === col.key && dropColPosition === 'right' ? 'border-r-4 border-r-blue-500' : ''}
+                                        ${dropTargetColKey === col.key && dropColPosition === 'left' ? 'border-l-[6px] border-l-blue-600' : ''}
+                                        ${dropTargetColKey === col.key && dropColPosition === 'right' ? 'border-r-[6px] border-r-blue-600' : ''}
                                         grabbable
                                     `}
                                     draggable={!editingCell}
@@ -1233,6 +1284,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         onDragOver={(e) => handleRowDragOver(e, rowIndex)}
                                         onDrop={handleRowDrop}
                                     >
+                                        <td 
+                                            className="border border-slate-300 px-1 py-1 text-center text-xs text-slate-400 select-none bg-slate-50 cursor-grab active:cursor-grabbing row-drag-handle"
+                                            onMouseDown={(e) => handleRowHeaderMouseDown(e, rowIndex)}
+                                        >
+                                            {rowIndex + 1}
+                                        </td>
                                         {columns.map((col, colIndex) => {
                                             const cellId = getCellId(rowIndex, colIndex);
                                             const isSelected = selectedCells.has(cellId);
@@ -1364,7 +1421,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                             })
                         ) : (
                              <tr>
-                                <td colSpan={columns.length} className="text-center py-10 text-slate-500">
+                                <td colSpan={columns.length + 1} className="text-center py-10 text-slate-500">
                                     Нет актов. Нажмите "Создать акт", чтобы добавить первый.
                                 </td>
                             </tr>
