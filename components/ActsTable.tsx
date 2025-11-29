@@ -9,6 +9,7 @@ import { ALL_COLUMNS } from './ActsTableConfig';
 import { ContextMenu, MenuItem, MenuSeparator } from './ContextMenu';
 import RegulationsModal from './RegulationsModal';
 import RegulationsInput from './RegulationsInput';
+import RegulationDetails from './RegulationDetails';
 
 // Props for the main table component
 interface ActsTableProps {
@@ -159,7 +160,6 @@ const DateEditorPopover: React.FC<{
     );
 };
 
-
 // Main Table Component
 const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, template, settings, visibleColumns, activeCell, setActiveCell, onSave, onRequestDelete, onReorderActs, setCurrentPage }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
@@ -185,6 +185,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     } | null>(null);
     const [actPickerState, setActPickerState] = useState<{ sourceRowIndex: number } | null>(null);
     const [regulationsModalOpen, setRegulationsModalOpen] = useState(false);
+    
+    // New state for Regulation Popover and Details
+    const [regulationPopoverState, setRegulationPopoverState] = useState<{
+        regulation: Regulation;
+        target: HTMLElement;
+    } | null>(null);
+    const [fullRegulationDetails, setFullRegulationDetails] = useState<Regulation | null>(null);
+    const regulationPopoverRef = useRef<HTMLDivElement>(null);
 
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; rowIndex: number; colIndex: number } | null>(null);
 
@@ -375,7 +383,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (!editingCell) return;
     
         const handleClickOutside = (event: MouseEvent) => {
-            if (datePopoverState || regulationsModalOpen) return;
+            if (datePopoverState || regulationsModalOpen || regulationPopoverState) return;
     
             if (editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
                 handleEditorSave(); // Attempt to save
@@ -391,11 +399,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             clearTimeout(timerId);
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [editingCell, datePopoverState, handleEditorSave, closeEditor, regulationsModalOpen]);
+    }, [editingCell, datePopoverState, handleEditorSave, closeEditor, regulationsModalOpen, regulationPopoverState]);
 
 
     useEffect(() => {
-        if (editingCell && editorRef.current) {
+        if (editingCell) {
             const { rowIndex, colIndex } = editingCell;
             const act = acts[rowIndex];
             const col = columns[colIndex];
@@ -414,20 +422,22 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             }
             
             setEditorValue(String(initialValue));
-            if (col.key !== 'regulations') { // RegulationsInput has its own focus logic
-                 editorRef.current.focus();
-            }
-    
-            if (editorRef.current instanceof HTMLTextAreaElement) {
-                const el = editorRef.current;
-                setTimeout(() => {
+            
+            // Focus logic inside setTimeout to ensure DOM is ready and refs are attached
+            setTimeout(() => {
+                if (col.key !== 'regulations') { // RegulationsInput has its own focus logic
+                     if (editorRef.current) editorRef.current.focus();
+                }
+        
+                if (editorRef.current instanceof HTMLTextAreaElement) {
+                    const el = editorRef.current;
                     el.style.height = 'auto';
                     el.style.height = `${el.scrollHeight}px`;
                     el.selectionStart = el.selectionEnd = el.value.length;
-                }, 0);
-            } else if (editorRef.current instanceof HTMLInputElement) {
-                editorRef.current.select();
-            }
+                } else if (editorRef.current instanceof HTMLInputElement) {
+                    editorRef.current.select();
+                }
+            }, 0);
         }
     }, [editingCell, acts, columns]);
 
@@ -475,6 +485,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     editorRef.current.style.height = `${editorRef.current.scrollHeight}px`;
                  }
              }, 0);
+        }
+    };
+    
+    const handleShowRegulationInfo = (designation: string, target: HTMLElement) => {
+        const regulation = regulations.find(r => r.designation === designation);
+        if (regulation) {
+            setRegulationPopoverState({ regulation, target });
         }
     };
 
@@ -536,7 +553,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         const col = columns[colIndex];
         
         // First, attempt to save and close any currently open editor
-        if (editingCell || datePopoverState || nextWorkPopoverState) {
+        if (editingCell || datePopoverState || nextWorkPopoverState || regulationPopoverState) {
             if (handleEditorSave()) {
                  closeEditor();
             } else {
@@ -1104,6 +1121,25 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
         setActPickerState(null);
     };
+    
+    // Listen for outside clicks to close Regulation Popover
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (regulationPopoverRef.current && !regulationPopoverRef.current.contains(event.target as Node)) {
+                setRegulationPopoverState(null);
+            }
+        };
+
+        if (regulationPopoverState) {
+            document.addEventListener('mousedown', handleClickOutside);
+        } else {
+            document.removeEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [regulationPopoverState]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -1404,6 +1440,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                             onOpenDictionary={() => {
                                                                  setRegulationsModalOpen(true);
                                                             }}
+                                                            onInfoClick={handleShowRegulationInfo}
                                                         />
                                                     </div>
                                                  )
@@ -1443,13 +1480,23 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                         <div className="flex flex-wrap gap-1">
                                                             {items.map((item, idx) => {
                                                                 const isKnown = regulations.some(r => r.designation === item);
-                                                                return isKnown ? (
-                                                                     <span key={idx} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium border bg-blue-50 text-blue-700 border-blue-100 whitespace-nowrap">
+                                                                const chipClass = isKnown 
+                                                                    ? "bg-blue-50 text-blue-700 border-blue-100 cursor-pointer hover:bg-blue-100" 
+                                                                    : "bg-slate-50 text-slate-600 border-slate-200";
+
+                                                                return (
+                                                                     <span 
+                                                                        key={idx} 
+                                                                        className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium border whitespace-nowrap ${chipClass}`}
+                                                                        onClick={(e) => {
+                                                                            if (isKnown) {
+                                                                                e.stopPropagation();
+                                                                                handleShowRegulationInfo(item, e.currentTarget);
+                                                                            }
+                                                                        }}
+                                                                        title={isKnown ? "Нажмите для информации" : ""}
+                                                                    >
                                                                         {item}
-                                                                    </span>
-                                                                ) : (
-                                                                    <span key={idx} className="inline-flex items-center text-sm">
-                                                                        {item}{idx < items.length - 1 ? '; ' : ''}
                                                                     </span>
                                                                 )
                                                             })}
@@ -1595,6 +1642,47 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         position={datePopoverState.position}
                     />
                 )}
+                
+                {/* Regulation Popover */}
+                {regulationPopoverState && (() => {
+                    const { regulation, target } = regulationPopoverState;
+                    const cellRect = target.getBoundingClientRect();
+                    const containerRect = tableContainerRef.current!.getBoundingClientRect();
+                    
+                    // Position calculations to ensure it fits (basic logic)
+                    let top = cellRect.bottom - containerRect.top + 5;
+                    const left = Math.max(0, Math.min(cellRect.left - containerRect.left, containerRect.width - 320));
+
+                    return (
+                        <div 
+                            ref={regulationPopoverRef}
+                            className="absolute z-50 bg-white shadow-xl rounded-lg border border-slate-200 w-80 max-w-[90vw] animate-fade-in-up flex flex-col"
+                            style={{ top: `${top}px`, left: `${left}px` }}
+                        >
+                            <div className="p-3 border-b border-slate-100 bg-slate-50 rounded-t-lg flex justify-between items-start">
+                                <div>
+                                    <h4 className="font-bold text-slate-800 text-sm">{regulation.designation}</h4>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border mt-1 inline-block ${regulation.status.toLowerCase().includes('действует') ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-100 text-red-700 border-red-200'}`}>
+                                        {regulation.status}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="p-3 text-xs text-slate-600">
+                                <p className="line-clamp-3 mb-2">{regulation.title}</p>
+                                <button 
+                                    className="text-blue-600 hover:text-blue-800 font-medium hover:underline flex items-center gap-1"
+                                    onClick={() => {
+                                        setFullRegulationDetails(regulation);
+                                        setRegulationPopoverState(null);
+                                    }}
+                                >
+                                    <BookIcon className="w-3 h-3" />
+                                    Открыть биографию
+                                </button>
+                            </div>
+                        </div>
+                    )
+                })()}
 
                  {fillHandleCoords && selectedCells.size > 0 && (
                      <div
@@ -1687,6 +1775,19 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     regulations={regulations}
                     onSelect={handleRegulationsSelect}
                 />
+            )}
+
+            {fullRegulationDetails && (
+                <Modal 
+                    isOpen={!!fullRegulationDetails} 
+                    onClose={() => setFullRegulationDetails(null)} 
+                    title=""
+                >
+                    <RegulationDetails 
+                        regulation={fullRegulationDetails} 
+                        onClose={() => setFullRegulationDetails(null)} 
+                    />
+                </Modal>
             )}
         </div>
     );

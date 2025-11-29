@@ -1,16 +1,17 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Regulation } from '../types';
-import { CloseIcon, PlusIcon, BookIcon } from './Icons';
+import { CloseIcon, BookIcon } from './Icons';
 
 interface RegulationsInputProps {
     value: string;
     onChange: (value: string) => void;
     regulations: Regulation[];
     onOpenDictionary: () => void;
+    onInfoClick?: (designation: string, target: HTMLElement) => void;
 }
 
-const RegulationsInput: React.FC<RegulationsInputProps> = ({ value, onChange, regulations, onOpenDictionary }) => {
+const RegulationsInput: React.FC<RegulationsInputProps> = ({ value, onChange, regulations, onOpenDictionary, onInfoClick }) => {
     const [inputValue, setInputValue] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -104,30 +105,46 @@ const RegulationsInput: React.FC<RegulationsInputProps> = ({ value, onChange, re
         <div ref={containerRef} className="relative w-full h-full bg-white flex flex-col">
             <div 
                 className="flex-grow flex flex-wrap gap-1.5 p-1.5 items-start content-start overflow-y-auto w-full border-2 border-blue-500 rounded-md bg-white no-scrollbar"
-                onClick={() => inputRef.current?.focus()}
+                onClick={(e) => {
+                    // Focus input if clicking on the background container
+                    if (e.target === e.currentTarget) {
+                        inputRef.current?.focus();
+                    }
+                }}
             >
                 {selectedItems.map((item, index) => {
                     const status = getRegulationStatus(item);
                     const isKnown = !!status;
                     // Styling based on status if known
-                    let chipClass = "bg-slate-100 text-slate-800 border-slate-300"; // Default/Raw text
+                    let chipBaseClass = "bg-slate-100 text-slate-800 border-slate-300"; // Default/Raw text
                     if (isKnown) {
-                         if (status?.toLowerCase().includes('действует')) chipClass = "bg-green-100 text-green-800 border-green-200";
-                         else if (status?.toLowerCase().includes('заменен') || status?.toLowerCase().includes('отменен')) chipClass = "bg-red-100 text-red-800 border-red-200";
-                         else chipClass = "bg-blue-100 text-blue-800 border-blue-200";
+                         if (status?.toLowerCase().includes('действует')) chipBaseClass = "bg-green-100 text-green-800 border-green-200";
+                         else if (status?.toLowerCase().includes('заменен') || status?.toLowerCase().includes('отменен')) chipBaseClass = "bg-red-100 text-red-800 border-red-200";
+                         else chipBaseClass = "bg-blue-100 text-blue-800 border-blue-200";
                     }
 
                     return (
-                        <span key={index} className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${chipClass} select-none`}>
-                            {item}
+                        <div key={index} className={`inline-flex items-center rounded text-xs font-medium border ${chipBaseClass} select-none`}>
+                            <span 
+                                className={`px-2 py-0.5 cursor-pointer hover:underline`}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (onInfoClick && isKnown) {
+                                        onInfoClick(item, e.currentTarget);
+                                    }
+                                }}
+                                title={isKnown ? "Нажмите для информации" : ""}
+                            >
+                                {item}
+                            </span>
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); handleRemoveItem(index); }}
-                                className="ml-1.5 text-current opacity-60 hover:opacity-100 focus:outline-none"
+                                className="pr-1 pl-0.5 text-current opacity-60 hover:opacity-100 focus:outline-none border-l border-current/20 hover:bg-black/5 h-full rounded-r"
                             >
                                 <CloseIcon className="w-3 h-3" />
                             </button>
-                        </span>
+                        </div>
                     );
                 })}
                 <input

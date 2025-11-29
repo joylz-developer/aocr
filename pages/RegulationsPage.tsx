@@ -1,66 +1,14 @@
 
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { Regulation } from '../types';
-import { PlusIcon, TrashIcon, BookIcon, CloseIcon } from '../components/Icons';
+import { PlusIcon, TrashIcon, BookIcon } from '../components/Icons';
 import Modal from '../components/Modal';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import RegulationDetails from '../components/RegulationDetails';
 
 interface RegulationsPageProps {
     regulations: Regulation[];
     onSaveRegulations: (newRegulations: Regulation[]) => void;
-}
-
-const RegulationDetails: React.FC<{ regulation: Regulation; onClose: () => void }> = ({ regulation, onClose }) => {
-    // If fullJson exists, render key fields from it, otherwise use the Regulation interface fields
-    const details = regulation.fullJson || {
-        "Обозначение": regulation.designation,
-        "Полное название": regulation.fullName,
-        "Статус": regulation.status,
-        "Заглавие": regulation.title,
-        "Дата утверждения": regulation.approvalDate,
-        "Дата регистрации": regulation.registrationDate,
-        "Дата введения": regulation.activeDate,
-        "Утвержден": regulation.orgApprover,
-        "Заменен на": regulation.replacement
-    };
-
-    return (
-        <div className="flex flex-col h-full">
-            <div className="flex justify-between items-start mb-4 border-b pb-2">
-                <div>
-                    <h3 className="text-xl font-bold text-slate-800">{regulation.designation}</h3>
-                    <p className="text-sm text-slate-500">{regulation.status}</p>
-                </div>
-                <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-                    <CloseIcon className="w-6 h-6" />
-                </button>
-            </div>
-            <div className="overflow-y-auto flex-grow pr-2">
-                <table className="w-full text-sm text-left">
-                    <tbody>
-                        {Object.entries(details).map(([key, value]) => {
-                            if (!value || typeof value === 'object') return null;
-                            // Filter out internal technical keys if needed, though most from JSON are valid
-                            return (
-                                <tr key={key} className="border-b border-slate-100 last:border-0">
-                                    <td className="py-2 pr-4 font-medium text-slate-600 align-top w-1/3">{key}</td>
-                                    <td className="py-2 text-slate-800 align-top whitespace-pre-wrap">{String(value)}</td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-            </div>
-             <div className="mt-4 pt-4 border-t flex justify-end">
-                <button 
-                    onClick={onClose} 
-                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-                >
-                    Закрыть
-                </button>
-            </div>
-        </div>
-    );
 }
 
 const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRegulations }) => {
@@ -407,7 +355,7 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
                 <Modal 
                     isOpen={!!viewingRegulation} 
                     onClose={() => setViewingRegulation(null)} 
-                    title="Карточка нормативного документа"
+                    title=""
                 >
                     <RegulationDetails 
                         regulation={viewingRegulation} 
