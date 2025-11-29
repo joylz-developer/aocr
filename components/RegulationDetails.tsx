@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Regulation } from '../types';
 import { CloseIcon } from './Icons';
@@ -29,7 +30,7 @@ const RegulationDetails: React.FC<RegulationDetailsProps> = ({ regulation, onClo
     };
 
     return (
-        <div className="flex flex-col h-full max-h-[80vh] overflow-hidden rounded-lg bg-white">
+        <div className="flex flex-col h-full max-h-[80vh] overflow-hidden rounded-lg bg-white w-full">
             {/* Sticky Header */}
             <div className="flex justify-between items-start p-6 border-b border-slate-200 bg-white sticky top-0 z-10 flex-shrink-0 shadow-sm">
                 <div className="pr-8">
@@ -56,19 +57,16 @@ const RegulationDetails: React.FC<RegulationDetailsProps> = ({ regulation, onClo
                     <tbody>
                         {Object.entries(details).map(([key, value]) => {
                             if (!value || typeof value === 'object') return null;
-                            // Skip showing Designation/Status/Title again if needed, or keep for completeness
                             return (
                                 <tr key={key} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                                     <td className="py-3 pr-4 font-medium text-slate-500 align-top w-1/3 min-w-[150px]">{key}</td>
                                     <td className="py-3 text-slate-800 align-top whitespace-pre-wrap leading-relaxed">{String(value)}</td>
-                                </li>
+                                </tr>
                             );
                         })}
                     </tbody>
                 </table>
             </div>
-            
-            {/* Footer removed as requested (only top close button) */}
         </div>
     );
 };

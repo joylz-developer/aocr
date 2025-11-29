@@ -416,6 +416,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             } else if (col.type === 'date') {
                 const columnKey = col.key as keyof Act;
                 initialValue = formatDateForDisplay(act[columnKey] as string || '');
+            } else if (col.key === 'regulations') {
+                initialValue = act.regulations || '';
             } else {
                 const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                 initialValue = act[columnKey] || '';
