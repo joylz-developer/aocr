@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation } from '../types';
 import Modal from './Modal';
-import { DeleteIcon, DownloadIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon, CloseIcon } from './Icons';
+import { DeleteIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon, CloseIcon } from './Icons';
 import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
 import { ALL_COLUMNS } from './ActsTableConfig';
@@ -74,16 +74,12 @@ const DateEditorPopover: React.FC<{
 
         const handleClickOutside = (event: MouseEvent) => {
             if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-                onClose();
+                // onClose(); // Handle via generic mousedown in parent
             }
         };
         
-        const timerId = setTimeout(() => document.addEventListener('mousedown', handleClickOutside), 0);
         document.addEventListener('keydown', handleKeyDown);
-        
         return () => {
-            clearTimeout(timerId);
-            document.removeEventListener('mousedown', handleClickOutside);
             document.removeEventListener('keydown', handleKeyDown);
         };
     }, [onClose]);
@@ -131,8 +127,8 @@ const DateEditorPopover: React.FC<{
         <div 
             ref={containerRef} 
             className="absolute bg-white p-3 border-2 border-blue-500 rounded-md z-40 flex flex-col gap-3 shadow-lg animate-fade-in-up" 
-            style={{ top: position.top, left: position.left, minWidth: position.width }}
-            onClick={e => e.stopPropagation()}
+            style={{ top: position.top, left: position.left, minWidth: '220px' }}
+            onMouseDown={e => e.stopPropagation()} 
         >
             <div>
                 <label className="text-xs font-medium text-slate-600">Начало</label>
@@ -161,6 +157,38 @@ const DateEditorPopover: React.FC<{
         </div>
     );
 };
+
+const RegulationPopover: React.FC<{
+    regulation: Regulation;
+    position: { top: number, left: number };
+    onClose: () => void;
+    onOpenDetails: () => void;
+}> = ({ regulation, position, onClose, onOpenDetails }) => {
+    return (
+        <div 
+            className="absolute z-50 bg-white border border-slate-200 shadow-xl rounded-lg p-3 w-72 animate-fade-in-up"
+            style={{ top: position.top, left: position.left }}
+            onMouseDown={e => e.stopPropagation()} 
+        >
+            <div className="flex justify-between items-start mb-2">
+                <h4 className="font-bold text-slate-800 text-sm">{regulation.designation}</h4>
+                 <span className={`text-[10px] px-1.5 py-0.5 rounded border ${regulation.status.includes('Действует') ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                    {regulation.status}
+                </span>
+            </div>
+            <p className="text-xs text-slate-600 mb-3 line-clamp-3">{regulation.title}</p>
+            <div className="flex justify-between items-center">
+                <button 
+                    onClick={onOpenDetails} 
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium hover:underline flex items-center gap-1"
+                >
+                    <BookIcon className="w-3 h-3"/> Биография
+                </button>
+            </div>
+        </div>
+    );
+};
+
 
 // Main Table Component
 const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, template, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, onSave, onRequestDelete, onReorderActs, setCurrentPage }) => {
@@ -198,10 +226,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     // New state for Regulation Popover and Details
     const [regulationPopoverState, setRegulationPopoverState] = useState<{
         regulation: Regulation;
-        target: HTMLElement;
+        position: { top: number; left: number };
     } | null>(null);
+    
     const [fullRegulationDetails, setFullRegulationDetails] = useState<Regulation | null>(null);
-    const regulationPopoverRef = useRef<HTMLDivElement>(null);
 
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; rowIndex: number; colIndex: number } | null>(null);
 
@@ -211,7 +239,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     
     const editorRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
     const editorContainerRef = useRef<HTMLDivElement>(null);
-    const nextWorkPopoverRef = useRef<HTMLDivElement>(null);
 
     const actsById = useMemo(() => {
         return new Map(acts.map(a => [a.id, a]));
@@ -242,6 +269,19 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     }, [settings, visibleColumns, columnOrder]);
 
     const getCellId = (rowIndex: number, colIndex: number) => `${rowIndex}:${colIndex}`;
+    
+    // Helper to get relative coordinates for popovers inside the container
+    // Calculates position relative to tableContainerRef (which wraps everything)
+    const getRelativeCoords = (target: HTMLElement) => {
+        if (!tableContainerRef.current) return { top: 0, left: 0 };
+        const containerRect = tableContainerRef.current.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        return {
+            top: targetRect.bottom - containerRect.top,
+            left: targetRect.left - containerRect.left,
+            width: targetRect.width
+        };
+    };
 
     const selectedRows = useMemo(() => {
         const rowsFullySelected = new Set<number>();
@@ -365,9 +405,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const closeEditor = useCallback(() => {
         setEditingCell(null);
-        setDatePopoverState(null);
         setDateError(null);
-        setNextWorkPopoverState(null);
+        // Do not verify popovers here, they are handled separately or auto-closed on selection change
     }, []);
     
     const handleEditorSave = useCallback(() => {
@@ -429,6 +468,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (!editingCell) return;
     
         const handleClickOutside = (event: MouseEvent) => {
+            // Prevent editor closing if clicking inside a popover that belongs to the editor context
             if (datePopoverState || regulationsModalOpen || regulationPopoverState) return;
     
             if (editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
@@ -539,7 +579,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const handleShowRegulationInfo = (designation: string, target: HTMLElement) => {
         const regulation = regulations.find(r => r.designation === designation);
         if (regulation) {
-            setRegulationPopoverState({ regulation, target });
+            const coords = getRelativeCoords(target);
+            setRegulationPopoverState({ regulation, position: { top: coords.top, left: coords.left } });
         }
     };
 
@@ -566,6 +607,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         
         if (e.detail > 1) e.preventDefault();
         setCopiedCells(null);
+        
+        // Auto-close popovers when clicking a cell
+        setDatePopoverState(null);
+        setRegulationPopoverState(null);
+        setNextWorkPopoverState(null);
     
         // Regular cell selection logic
         const cellId = getCellId(rowIndex, colIndex);
@@ -635,15 +681,24 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             setActiveCell({ rowIndex, colIndex: 0 });
         }
     };
+    
+    const handleDateClick = (act: Act, target: HTMLElement) => {
+        const coords = getRelativeCoords(target);
+        setDatePopoverState({
+            act,
+            position: { top: coords.top, left: coords.left, width: coords.width }
+        });
+    };
 
     const handleCellDoubleClick = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
         if (window.getSelection) {
             window.getSelection()?.removeAllRanges();
         }
         const col = columns[colIndex];
+        const act = acts[rowIndex];
         
         // First, attempt to save and close any currently open editor
-        if (editingCell || datePopoverState || nextWorkPopoverState || regulationPopoverState) {
+        if (editingCell) {
             if (handleEditorSave()) {
                  closeEditor();
             } else {
@@ -651,8 +706,20 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             }
         }
         
+        // Close popovers if editing a new cell
+        setDatePopoverState(null);
+        setRegulationPopoverState(null);
+        setNextWorkPopoverState(null);
+
+        
         // Сбросить выделение ячеек, чтобы убрать маркер автозаполнения
         setSelectedCells(new Set());
+        
+        // Special handling: Custom date column uses popover in edit mode too?
+        // Current implementation: Double click triggers textarea editing for 'workDates', 
+        // but single click on calendar icon triggers popover.
+        // If it's a 'date' type column, maybe just edit text or use browser picker?
+        // 'workDates' is custom_date.
 
         // Special handling for the "Next Work" column to show a popover
         if (col?.key === 'nextWork') {
@@ -664,6 +731,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (col?.key === 'id') {
             return;
         }
+        
+        // Open Date Popover immediately for workDates if clicked on icon? No, this is double click.
+        // Double click just opens text editor.
         
         setEditingCell({ rowIndex, colIndex });
     };
@@ -833,6 +903,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             setActiveCell(null);
             setCopiedCells(null);
             e.currentTarget.blur();
+            // Also close any popovers
+            setDatePopoverState(null);
+            setRegulationPopoverState(null);
+            setNextWorkPopoverState(null);
             return;
         }
 
@@ -1122,14 +1196,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
         // Update the full order preference list, preserving invisible columns order
         const fullOrder = [...columnOrder];
-        // We only reordered visible columns relative to each other.
-        // A simple robust way is to filter fullOrder to remove moved item, then insert it.
-        // But we must respect the relative position to the *target* column in the full list.
-        
         const fullFromIndex = fullOrder.indexOf(draggedColKey);
-        const fullTargetIndex = fullOrder.indexOf(dropTargetColKey);
         
-        if (fullFromIndex !== -1 && fullTargetIndex !== -1) {
+        if (fullFromIndex !== -1) {
             const newFullOrder = [...fullOrder];
             newFullOrder.splice(fullFromIndex, 1);
             
@@ -1147,7 +1216,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
 
     const updateFillHandlePosition = useCallback(() => {
-        // Use scrollContainerRef instead of tableContainerRef to get correct coordinates including scroll
+        // Use scrollContainerRef to find the cell relative to scrollable area
         if (selectedCells.size > 0 && scrollContainerRef.current) {
             const coordsList = Array.from(selectedCells).map(id => {
                 const [rowIndex, colIndex] = id.split(':').map(Number);
@@ -1158,19 +1227,23 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
             // Find the cell element by data attributes inside the container
             const cellSelector = `td[data-row-index="${maxRow}"][data-col-index="${maxCol}"]`;
-            const cell = scrollContainerRef.current.querySelector(cellSelector);
+            const cell = scrollContainerRef.current.querySelector(cellSelector) as HTMLElement;
             
             if (cell) {
-                 const rect = (cell as HTMLElement).getBoundingClientRect();
-                 const containerRect = scrollContainerRef.current.getBoundingClientRect();
+                 // The fill handle is absolutely positioned inside scrollContainerRef (which should be relative)
+                 // or tableContainerRef.
+                 // If we place the fill handle inside scrollContainerRef, we can use offsetTop/Left.
+                 // But scrollContainerRef has overflow:auto. If we place handle inside, it will be clipped if at edge.
+                 // We place it in tableContainerRef (outer wrapper).
                  
-                 // Calculate position relative to the SCROLLED CONTENT origin.
-                 // We add scrollTop/scrollLeft so the absolute position is correct within the scrollable area.
-                 // This ensures it moves with the table when scrolling.
-                 const top = (rect.bottom - containerRect.top) + scrollContainerRef.current.scrollTop - 5;
-                 const left = (rect.right - containerRect.left) + scrollContainerRef.current.scrollLeft - 5;
-
-                 setFillHandleCoords({ top, left });
+                 const cellRect = cell.getBoundingClientRect();
+                 const containerRect = tableContainerRef.current?.getBoundingClientRect();
+                 
+                 if (containerRect) {
+                     const top = cellRect.bottom - containerRect.top - 5;
+                     const left = cellRect.right - containerRect.left - 5;
+                     setFillHandleCoords({ top, left });
+                 }
             } else {
                  setFillHandleCoords(null);
             }
@@ -1183,19 +1256,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     useLayoutEffect(() => {
         updateFillHandlePosition();
     }, [updateFillHandlePosition]);
-    
-    // NOTE: Removed scroll event listener. 
-    // Since the fill handle is absolutely positioned inside the scrolling container, 
-    // it moves naturally with the content. We only need to calculate its initial position
-    // relative to the content origin when selection changes.
 
 
     const handleColumnHeaderClick = (e: React.MouseEvent, colIndex: number) => {
-        // If clicking sort or drag handle, don't select?
-        // For now, simple click selects column
         if (e.ctrlKey || e.metaKey) {
              const newSelectedCells = new Set(selectedCells);
-             // Add/remove column cells
              const isSelected = selectedColumns.has(colIndex);
              if (isSelected) {
                  for(let r=0; r<acts.length; r++) newSelectedCells.delete(getCellId(r, colIndex));
@@ -1228,12 +1293,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     // Scroll to active cell logic
     useEffect(() => {
         if (activeCell && tableContainerRef.current) {
-            const { rowIndex, colIndex } = activeCell;
-            const cell = tableContainerRef.current.querySelector(`td[data-row-index="${rowIndex}"][data-col-index="${colIndex}"]`);
-            if (cell) {
-                // Basic scroll into view logic if needed, but browser default focus handling usually does this
-                // cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-            }
+            // Optional: Ensure active cell is in view
         }
     }, [activeCell]);
 
@@ -1274,7 +1334,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                     onClick={(e) => handleColumnHeaderClick(e, index)}
                                 >
                                     {col.label}
-                                    {/* Resizer could go here */}
                                 </th>
                             ))}
                         </tr>
@@ -1364,71 +1423,84 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                                     value={editorValue}
                                                                     onChange={handleEditorChange}
                                                                     onKeyDown={handleEditorKeyDown}
-                                                                    className="w-full h-full min-h-[60px] resize-none outline-none bg-transparent p-0 m-0 border-none focus:ring-0 leading-normal"
+                                                                    className="w-full h-full resize-none bg-transparent outline-none overflow-hidden"
+                                                                    rows={1}
+                                                                    placeholder={col.key === 'workDates' ? 'ДД.ММ.ГГГГ - ДД.ММ.ГГГГ' : ''}
                                                                 />
+                                                            )}
+                                                            {dateError && col.key === 'workDates' && (
+                                                                <div className="absolute top-full left-0 z-50 bg-red-100 text-red-700 text-xs px-2 py-1 rounded shadow-md mt-1 border border-red-200">
+                                                                    {dateError}
+                                                                </div>
                                                             )}
                                                         </div>
                                                     ) : (
-                                                        <div className="w-full h-full min-h-[1.5em] whitespace-pre-wrap break-words leading-normal">
-                                                            {col.key === 'workDates' ? (
-                                                                <div className="flex justify-between items-center group/date">
-                                                                     <span>
-                                                                        {act.workStartDate ? formatDateForDisplay(act.workStartDate) : <span className="text-slate-300 italic">Начало</span>}
-                                                                        {' - '}
-                                                                        {act.workEndDate ? formatDateForDisplay(act.workEndDate) : <span className="text-slate-300 italic">Конец</span>}
+                                                        <div className="w-full h-full min-h-[1.5em] whitespace-pre-wrap flex items-center justify-between group/cell">
+                                                            <span className="flex-grow">
+                                                                {col.key === 'workDates' ? (
+                                                                    <span className={!act.workStartDate || !act.workEndDate ? 'text-slate-400' : ''}>
+                                                                        {act.workStartDate && act.workEndDate 
+                                                                            ? `${formatDateForDisplay(act.workStartDate)} - ${formatDateForDisplay(act.workEndDate)}`
+                                                                            : 'Укажите даты'}
                                                                     </span>
-                                                                    <button 
-                                                                        className="opacity-0 group-hover/date:opacity-100 text-slate-400 hover:text-blue-600 p-1"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            const rect = e.currentTarget.getBoundingClientRect();
-                                                                            setDatePopoverState({ 
-                                                                                act, 
-                                                                                position: { top: rect.bottom + window.scrollY, left: rect.left + window.scrollX, width: 200 } 
-                                                                            });
-                                                                        }}
-                                                                    >
-                                                                        <CalendarIcon className="w-4 h-4" />
-                                                                    </button>
-                                                                </div>
-                                                            ) : col.key === 'commissionGroup' ? (
-                                                                groups.find(g => g.id === act.commissionGroupId)?.name || ''
-                                                            ) : col.type === 'date' ? (
-                                                                formatDateForDisplay(act[col.key as keyof Act] as string)
-                                                            ) : col.key === 'regulations' ? (
-                                                                // Render view-mode regulations with chips if possible
-                                                                act.regulations ? (
+                                                                ) : col.key === 'commissionGroup' ? (
+                                                                    groups.find(g => g.id === act.commissionGroupId)?.name || <span className="text-slate-300 italic">Не выбрано</span>
+                                                                ) : col.type === 'date' ? (
+                                                                     formatDateForDisplay(act[col.key as keyof Act] as string)
+                                                                ) : col.key === 'regulations' ? (
+                                                                    /* Using RegulationsInput in readonly mode (ish) to show chips logic or just text? 
+                                                                       User asked for "Chip + Cross" on input. For viewing, simple text is lighter, 
+                                                                       but let's replicate the chips look for consistency if possible or just use text.
+                                                                       However, RegulationsInput handles the chips logic. 
+                                                                       Re-using it in "read-only" mode or just simulating chips.
+                                                                       Let's stick to simulating chips for view mode to support the click-for-info requirement.
+                                                                    */
                                                                     <div className="flex flex-wrap gap-1">
-                                                                        {act.regulations.split(';').map(s => s.trim()).filter(Boolean).map((regName, idx) => {
-                                                                            const reg = regulations.find(r => r.designation === regName);
-                                                                             // Styling based on status if known
-                                                                            let chipClass = "bg-slate-100 text-slate-800 border-slate-300"; 
+                                                                        {(act.regulations || '').split(';').map(s => s.trim()).filter(Boolean).map((item, idx) => {
+                                                                            const reg = regulations.find(r => r.designation === item);
+                                                                            let chipClass = "bg-slate-100 text-slate-800 border-slate-300";
                                                                             if (reg) {
-                                                                                 if (reg.status?.toLowerCase().includes('действует')) chipClass = "bg-green-100 text-green-800 border-green-200";
-                                                                                 else if (reg.status?.toLowerCase().includes('заменен') || reg.status?.toLowerCase().includes('отменен')) chipClass = "bg-red-100 text-red-800 border-red-200";
+                                                                                 if (reg.status.toLowerCase().includes('действует')) chipClass = "bg-green-100 text-green-800 border-green-200";
+                                                                                 else if (reg.status.toLowerCase().includes('заменен')) chipClass = "bg-red-100 text-red-800 border-red-200";
                                                                                  else chipClass = "bg-blue-100 text-blue-800 border-blue-200";
                                                                             }
-                                                                            
                                                                             return (
                                                                                 <span 
                                                                                     key={idx} 
-                                                                                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs border ${chipClass} ${reg ? 'cursor-pointer hover:underline' : ''}`}
+                                                                                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs border ${chipClass} cursor-pointer hover:underline`}
                                                                                     onClick={(e) => {
-                                                                                        if (reg) {
-                                                                                            e.stopPropagation();
-                                                                                            handleShowRegulationInfo(regName, e.currentTarget);
-                                                                                        }
+                                                                                        e.stopPropagation();
+                                                                                        handleShowRegulationInfo(item, e.currentTarget);
                                                                                     }}
                                                                                 >
-                                                                                    {regName}
+                                                                                    {item}
                                                                                 </span>
                                                                             );
                                                                         })}
                                                                     </div>
-                                                                ) : ''
-                                                            ) : (
-                                                                String(act[col.key as keyof Act] || '')
+                                                                ) : (
+                                                                    String(act[col.key as keyof Act] || '')
+                                                                )}
+                                                            </span>
+                                                            
+                                                            {col.key === 'workDates' && (
+                                                                <button
+                                                                    className="opacity-0 group-hover/cell:opacity-100 text-slate-400 hover:text-blue-600 ml-2 transition-opacity"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleDateClick(act, e.currentTarget);
+                                                                    }}
+                                                                >
+                                                                    <CalendarIcon className="w-4 h-4" />
+                                                                </button>
                                                             )}
+                                                            
+                                                             {/* Show next work button/icon? */}
+                                                             {col.key === 'nextWork' && act.nextWorkActId && (
+                                                                <div className="ml-2 text-blue-600" title="Связано с другим актом">
+                                                                    <LinkIcon className="w-4 h-4" />
+                                                                </div>
+                                                             )}
                                                         </div>
                                                     )}
                                                 </td>
@@ -1438,227 +1510,128 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                 );
                             })
                         ) : (
-                             <tr>
+                            <tr>
                                 <td colSpan={columns.length + 1} className="text-center py-10 text-slate-500">
-                                    Нет актов. Нажмите "Создать акт", чтобы добавить первый.
+                                    Нет актов. Нажмите "Создать акт", чтобы добавить новую запись.
                                 </td>
                             </tr>
                         )}
                     </tbody>
                 </table>
-
-                 {/* Fill Handle */}
-                 {fillHandleCoords && !editingCell && (
+                
+                {/* Fill Handle - Rendered relative to table container via absolute positioning */}
+                {fillHandleCoords && !editingCell && (
                     <div
-                        className="absolute w-2.5 h-2.5 bg-blue-600 border border-white cursor-crosshair z-20 pointer-events-auto shadow-sm"
-                        style={{ top: fillHandleCoords.top, left: fillHandleCoords.left }}
-                        onMouseDown={(e) => {
-                            e.preventDefault();
-                            setIsFilling(true);
+                        className="absolute w-2.5 h-2.5 bg-blue-600 border border-white cursor-crosshair z-20"
+                        style={{
+                            top: fillHandleCoords.top,
+                            left: fillHandleCoords.left,
                         }}
                     />
                 )}
             </div>
 
-            {/* Date Picker Popover */}
+            {/* Absolute Positioned Popovers (rendered outside scroll container to float) */}
             {datePopoverState && (
-                <DateEditorPopover 
+                <DateEditorPopover
                     act={datePopoverState.act}
-                    onActChange={(updated) => handleSaveWithTemplateResolution(updated)}
+                    onActChange={(updatedAct) => {
+                        handleSaveWithTemplateResolution(updatedAct);
+                        setDatePopoverState(prev => prev ? { ...prev, act: updatedAct } : null);
+                    }}
                     onClose={() => setDatePopoverState(null)}
                     position={datePopoverState.position}
                 />
             )}
             
-            {/* Regulation Info Popover */}
-             {regulationPopoverState && (
-                <div 
-                    ref={regulationPopoverRef}
-                    className="absolute z-50 bg-white border border-slate-200 rounded-lg shadow-xl p-4 w-80 animate-fade-in-up"
-                    style={{ 
-                        top: Math.min(window.innerHeight - 200, regulationPopoverState.target.getBoundingClientRect().bottom + window.scrollY), 
-                        left: Math.min(window.innerWidth - 340, regulationPopoverState.target.getBoundingClientRect().left + window.scrollX) 
+            {regulationPopoverState && (
+                <RegulationPopover
+                    regulation={regulationPopoverState.regulation}
+                    position={regulationPopoverState.position}
+                    onClose={() => setRegulationPopoverState(null)}
+                    onOpenDetails={() => {
+                        setFullRegulationDetails(regulationPopoverState.regulation);
+                        setRegulationPopoverState(null);
                     }}
-                >
-                    <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-bold text-slate-800">{regulationPopoverState.regulation.designation}</h4>
-                         <button onClick={() => setRegulationPopoverState(null)} className="text-slate-400 hover:text-slate-600"><CloseIcon className="w-4 h-4"/></button>
-                    </div>
-                    <p className="text-xs text-slate-500 mb-2">{regulationPopoverState.regulation.status}</p>
-                    <p className="text-sm text-slate-700 mb-3 line-clamp-3">{regulationPopoverState.regulation.title}</p>
-                    
-                    <button 
-                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
-                        onClick={() => {
-                            setFullRegulationDetails(regulationPopoverState.regulation);
-                            setRegulationPopoverState(null);
-                        }}
-                    >
-                        <BookIcon className="w-4 h-4"/>
-                        Открыть биографию
-                    </button>
-                </div>
+                />
             )}
-             
-            {/* Context Menu */}
+
             {contextMenu && (
-                <ContextMenu 
-                    x={contextMenu.x} 
-                    y={contextMenu.y} 
+                <ContextMenu
+                    x={contextMenu.x}
+                    y={contextMenu.y}
                     onClose={() => setContextMenu(null)}
                 >
                     <MenuItem 
-                        icon={<EditIcon className="w-4 h-4" />} 
-                        label="Редактировать" 
-                        onClick={() => {
-                            setEditingCell({ rowIndex: contextMenu.rowIndex, colIndex: contextMenu.colIndex });
-                            setContextMenu(null);
-                        }} 
-                    />
-                    <MenuSeparator />
-                    <MenuItem 
-                        icon={<CopyIcon className="w-4 h-4" />} 
                         label="Копировать" 
-                        shortcut="Ctrl+C"
-                        onClick={() => {
-                            handleCopy();
-                            setContextMenu(null);
-                        }} 
+                        shortcut="Ctrl+C" 
+                        icon={<CopyIcon className="w-4 h-4" />}
+                        onClick={() => { handleCopy(); setContextMenu(null); }} 
+                        disabled={selectedCells.size === 0}
                     />
                     <MenuItem 
-                        icon={<PasteIcon className="w-4 h-4" />} 
                         label="Вставить" 
-                        shortcut="Ctrl+V"
-                        onClick={() => {
-                            handlePaste();
-                            setContextMenu(null);
-                        }} 
+                        shortcut="Ctrl+V" 
+                        icon={<PasteIcon className="w-4 h-4" />}
+                        onClick={() => { handlePaste(); setContextMenu(null); }} 
                     />
                     <MenuSeparator />
                      <MenuItem 
-                        icon={<SparklesIcon className="w-4 h-4" />} 
-                        label="Сгенерировать Word" 
-                        onClick={() => {
-                            if (!template) {
-                                alert("Сначала загрузите шаблон");
-                            } else {
-                                generateDocument(template, acts[contextMenu.rowIndex], people);
-                            }
-                            setContextMenu(null);
-                        }} 
+                        label="Очистить ячейки" 
+                        shortcut="Del" 
+                        onClick={() => { handleClearCells(); setContextMenu(null); }}
+                         disabled={selectedCells.size === 0}
                     />
                     <MenuSeparator />
-                    <MenuItem 
-                        icon={<RowAboveIcon className="w-4 h-4" />} 
+                     <MenuItem 
                         label="Вставить строку выше" 
-                        onClick={() => {
-                            const newAct: Act = { ...acts[0], id: crypto.randomUUID(), number: '', date: new Date().toISOString().split('T')[0], workStartDate: '', workEndDate: '' }; // Simplified new act
-                            onSave(newAct, contextMenu.rowIndex);
-                            setContextMenu(null);
+                        icon={<RowAboveIcon className="w-4 h-4" />}
+                        onClick={() => { 
+                             const act = acts[contextMenu.rowIndex];
+                             if (act) onSave(act, contextMenu.rowIndex);
+                             setContextMenu(null);
                         }} 
                     />
-                    <MenuItem 
-                         icon={<RowBelowIcon className="w-4 h-4" />} 
+                     <MenuItem 
                         label="Вставить строку ниже" 
-                        onClick={() => {
-                             const newAct: Act = { ...acts[0], id: crypto.randomUUID(), number: '', date: new Date().toISOString().split('T')[0], workStartDate: '', workEndDate: '' };
-                             onSave(newAct, contextMenu.rowIndex + 1);
+                        icon={<RowBelowIcon className="w-4 h-4" />}
+                        onClick={() => { 
+                             const act = acts[contextMenu.rowIndex];
+                             if (act) onSave(act, contextMenu.rowIndex + 1);
                              setContextMenu(null);
                         }} 
                     />
                     <MenuSeparator />
                     <MenuItem 
-                        icon={<DeleteIcon className="w-4 h-4 text-red-500" />} 
-                        label="Удалить строку" 
+                        label="Удалить акт(ы)" 
+                        icon={<DeleteIcon className="w-4 h-4 text-red-600" />}
                         className="text-red-600 hover:bg-red-50"
                         onClick={() => {
-                            onRequestDelete([acts[contextMenu.rowIndex].id]);
+                            const rowIndices = Array.from(selectedRows);
+                            // If row clicked wasn't selected, just delete that one
+                            const indicesToDelete = rowIndices.includes(contextMenu.rowIndex) ? rowIndices : [contextMenu.rowIndex];
+                            const idsToDelete = indicesToDelete.map(idx => acts[idx].id);
+                            onRequestDelete(idsToDelete);
                             setContextMenu(null);
-                        }} 
+                        }}
                     />
                 </ContextMenu>
             )}
 
-            {/* Modals */}
-             <RegulationsModal
-                isOpen={regulationsModalOpen}
-                onClose={() => {
-                    setRegulationsModalOpen(false);
-                    // Re-focus editor if it was open
-                    if (editingCell) {
-                       // Handled by editor blur/focus logic generally, but simple close is fine
-                    }
-                }}
-                regulations={regulations}
-                onSelect={handleRegulationsSelect}
-            />
+            {regulationsModalOpen && (
+                <RegulationsModal
+                    isOpen={regulationsModalOpen}
+                    onClose={() => setRegulationsModalOpen(false)}
+                    regulations={regulations}
+                    onSelect={handleRegulationsSelect}
+                />
+            )}
             
             {fullRegulationDetails && (
                 <Modal isOpen={!!fullRegulationDetails} onClose={() => setFullRegulationDetails(null)} title="">
                     <RegulationDetails regulation={fullRegulationDetails} onClose={() => setFullRegulationDetails(null)} />
                 </Modal>
             )}
-            
-            {/* Popover for Next Work Selection */}
-            {nextWorkPopoverState && (
-                <div 
-                    ref={nextWorkPopoverRef}
-                    className="absolute z-50 bg-white border border-slate-200 rounded shadow-lg w-64 max-h-60 overflow-y-auto animate-fade-in-up"
-                    style={{ 
-                        top: nextWorkPopoverState.target.getBoundingClientRect().bottom + window.scrollY, 
-                        left: nextWorkPopoverState.target.getBoundingClientRect().left + window.scrollX 
-                    }}
-                >
-                    <div className="p-2 border-b bg-slate-50 text-xs font-semibold text-slate-500">
-                        Выберите акт скрытых работ
-                    </div>
-                    {acts.map(a => (
-                        <button
-                            key={a.id}
-                            className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm truncate"
-                            onClick={() => {
-                                const targetAct = acts[nextWorkPopoverState.rowIndex];
-                                const updatedAct = { 
-                                    ...targetAct, 
-                                    nextWork: `Акт №${a.number} от ${formatDateForDisplay(a.date)} (${a.workName})`,
-                                    nextWorkActId: a.id 
-                                };
-                                handleSaveWithTemplateResolution(updatedAct);
-                                setNextWorkPopoverState(null);
-                            }}
-                        >
-                            <span className="font-medium">№{a.number}</span> - {a.workName}
-                        </button>
-                    ))}
-                    <div className="border-t p-1">
-                        <button
-                            className="w-full text-center text-xs text-blue-600 hover:underline py-1"
-                            onClick={() => {
-                                setEditingCell({ rowIndex: nextWorkPopoverState.rowIndex, colIndex: nextWorkPopoverState.colIndex });
-                                setNextWorkPopoverState(null);
-                            }}
-                        >
-                            Ввести вручную...
-                        </button>
-                    </div>
-                </div>
-            )}
-            
-             {/* Global click handler for popovers */}
-            {useEffect(() => {
-                const handleClickOutside = (event: MouseEvent) => {
-                     // Next Work Popover
-                    if (nextWorkPopoverState && nextWorkPopoverRef.current && !nextWorkPopoverRef.current.contains(event.target as Node) && !nextWorkPopoverState.target.contains(event.target as Node)) {
-                        setNextWorkPopoverState(null);
-                    }
-                     // Regulation Popover
-                    if (regulationPopoverState && regulationPopoverRef.current && !regulationPopoverRef.current.contains(event.target as Node) && !regulationPopoverState.target.contains(event.target as Node)) {
-                        setRegulationPopoverState(null);
-                    }
-                };
-                document.addEventListener('mousedown', handleClickOutside);
-                return () => document.removeEventListener('mousedown', handleClickOutside);
-            }, [nextWorkPopoverState, regulationPopoverState]) as any}
         </div>
     );
 };
