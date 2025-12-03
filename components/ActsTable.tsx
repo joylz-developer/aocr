@@ -1091,7 +1091,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (editingCell) return e.preventDefault();
         
         // Ensure dragging is only initiated from the handle
-        if (!(e.target as HTMLElement).closest('.row-drag-handle')) {
+        // We check if the target element or its ancestors have the 'row-drag-handle' class.
+        // We use a safe check for 'closest' since text nodes (e.g. clicking the number itself) don't have it.
+        const target = e.target as HTMLElement;
+        const element = target.nodeType === 3 ? target.parentElement : target;
+        
+        if (!element || !element.closest || !element.closest('.row-drag-handle')) {
             e.preventDefault();
             return;
         }
@@ -1216,7 +1221,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
 
     const updateFillHandlePosition = useCallback(() => {
-        // Use scrollContainerRef to find the cell relative to scrollable area
+        // Find the cell relative to scrollable area (scrollContainerRef)
+        // We calculate Top/Left relative to the content flow, independent of scroll position, 
+        // because the fill handle is rendered inside the scrollable container.
+        
         if (selectedCells.size > 0 && scrollContainerRef.current) {
             const coordsList = Array.from(selectedCells).map(id => {
                 const [rowIndex, colIndex] = id.split(':').map(Number);
@@ -1230,20 +1238,22 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             const cell = scrollContainerRef.current.querySelector(cellSelector) as HTMLElement;
             
             if (cell) {
-                 // The fill handle is absolutely positioned inside scrollContainerRef (which should be relative)
-                 // or tableContainerRef.
-                 // If we place the fill handle inside scrollContainerRef, we can use offsetTop/Left.
-                 // But scrollContainerRef has overflow:auto. If we place handle inside, it will be clipped if at edge.
-                 // We place it in tableContainerRef (outer wrapper).
+                 // Calculate cumulative offset relative to the scrollContainerRef
+                 // Note: scrollContainerRef is the positioned parent (relative)
                  
-                 const cellRect = cell.getBoundingClientRect();
-                 const containerRect = tableContainerRef.current?.getBoundingClientRect();
-                 
-                 if (containerRect) {
-                     const top = cellRect.bottom - containerRect.top - 5;
-                     const left = cellRect.right - containerRect.left - 5;
-                     setFillHandleCoords({ top, left });
+                 let top = cell.offsetHeight; 
+                 let left = cell.offsetWidth;
+                 let el: HTMLElement | null = cell;
+
+                 // Traverse up to find offset relative to container
+                 while(el && el !== scrollContainerRef.current) {
+                     top += el.offsetTop;
+                     left += el.offsetLeft;
+                     el = el.offsetParent as HTMLElement;
                  }
+                 
+                 // Center the 10x10 handle on the bottom-right corner
+                 setFillHandleCoords({ top: top - 5, left: left - 5 });
             } else {
                  setFillHandleCoords(null);
             }
@@ -1448,13 +1458,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                                 ) : col.type === 'date' ? (
                                                                      formatDateForDisplay(act[col.key as keyof Act] as string)
                                                                 ) : col.key === 'regulations' ? (
-                                                                    /* Using RegulationsInput in readonly mode (ish) to show chips logic or just text? 
-                                                                       User asked for "Chip + Cross" on input. For viewing, simple text is lighter, 
-                                                                       but let's replicate the chips look for consistency if possible or just use text.
-                                                                       However, RegulationsInput handles the chips logic. 
-                                                                       Re-using it in "read-only" mode or just simulating chips.
-                                                                       Let's stick to simulating chips for view mode to support the click-for-info requirement.
-                                                                    */
                                                                     <div className="flex flex-wrap gap-1">
                                                                         {(act.regulations || '').split(';').map(s => s.trim()).filter(Boolean).map((item, idx) => {
                                                                             const reg = regulations.find(r => r.designation === item);
@@ -1519,13 +1522,17 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     </tbody>
                 </table>
                 
-                {/* Fill Handle - Rendered relative to table container via absolute positioning */}
+                {/* Fill Handle - Rendered inside scroll container to track content position naturally */}
                 {fillHandleCoords && !editingCell && (
                     <div
                         className="absolute w-2.5 h-2.5 bg-blue-600 border border-white cursor-crosshair z-20"
                         style={{
                             top: fillHandleCoords.top,
                             left: fillHandleCoords.left,
+                        }}
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            setIsFilling(true);
                         }}
                     />
                 )}
