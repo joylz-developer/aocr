@@ -612,6 +612,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setDatePopoverState(null);
         setRegulationPopoverState(null);
         setNextWorkPopoverState(null);
+
+        // Right-Click Fix: If Right-Click (button 2) and cell is already selected, don't change selection
+        if (e.button === 2) {
+             const cellId = getCellId(rowIndex, colIndex);
+             if (selectedCells.has(cellId)) return;
+        }
     
         // Regular cell selection logic
         const cellId = getCellId(rowIndex, colIndex);
@@ -644,6 +650,20 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         // NOTE: preventDefault() removed here to allow drag-and-drop to initiate
         tableContainerRef.current?.focus({ preventScroll: true });
         
+        // Right-Click Fix: If Right-Click and row is already selected, don't change selection
+        const isRowSelected = selectedRows.has(rowIndex);
+        if (e.button === 2) {
+             if (isRowSelected) return;
+        }
+
+        // Drag Fix: If Left-Click on an already selected row (without modifiers), 
+        // don't reset selection immediately. This allows dragging the group.
+        // We rely on simple click (without drag) to reset selection if needed, 
+        // but typically standard behavior is "mousedown doesn't deselect if dragging group".
+        if (e.button === 0 && isRowSelected && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+             return;
+        }
+
         const newSelectedCells = new Set<string>();
         for (let c = 0; c < columns.length; c++) {
             newSelectedCells.add(getCellId(rowIndex, c));
@@ -667,11 +687,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
              const updatedSelection = new Set(selectedCells);
              // Toggle row
              const firstCellId = getCellId(rowIndex, 0);
-             const isRowSelected = selectedCells.has(firstCellId); // Approximation
+             const isThisRowSelected = selectedCells.has(firstCellId); // Approximation
              
              for (let c = 0; c < columns.length; c++) {
                  const id = getCellId(rowIndex, c);
-                 if (isRowSelected) updatedSelection.delete(id);
+                 if (isThisRowSelected) updatedSelection.delete(id);
                  else updatedSelection.add(id);
              }
              setSelectedCells(updatedSelection);
@@ -921,7 +941,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
         const isCtrlKey = isMac ? e.metaKey : e.ctrlKey;
 
-        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedCells.size > 0 && selectedRows.size === 0) {
+        // FIX: Removed condition && selectedRows.size === 0 so Delete works for full rows too.
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedCells.size > 0) {
             e.preventDefault();
             handleClearCells();
         }
@@ -1158,7 +1179,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setDraggedRowIndices(null);
         setDropTargetRowIndex(null);
         setDropPosition(null);
-        setSelectedCells(new Set()); // Clear selection after move to avoid confusion
+        // NOTE: We do NOT clear selection here to allow the user to see what they moved.
+        // setSelectedCells(new Set()); 
     };
     
     // COLUMN DRAG & DROP LOGIC
