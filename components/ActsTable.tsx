@@ -71,12 +71,6 @@ const DateEditorPopover: React.FC<{
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') onClose();
         };
-
-        const handleClickOutside = (event: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-                // onClose(); // Handle via generic mousedown in parent
-            }
-        };
         
         document.addEventListener('keydown', handleKeyDown);
         return () => {
@@ -189,6 +183,63 @@ const RegulationPopover: React.FC<{
     );
 };
 
+const NextWorkPopover: React.FC<{
+    acts: Act[];
+    currentActId: string;
+    onSelect: (act: Act | null) => void;
+    onClose: () => void;
+    position: { top: number, left: number, width: number };
+}> = ({ acts, currentActId, onSelect, onClose, position }) => {
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredActs = acts.filter(a => 
+        a.id !== currentActId && 
+        (
+            (a.number && a.number.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (a.workName && a.workName.toLowerCase().includes(searchTerm.toLowerCase()))
+        )
+    );
+
+    return (
+        <div 
+            className="absolute z-50 bg-white border border-slate-200 shadow-xl rounded-lg flex flex-col max-h-60 w-80 animate-fade-in-up"
+            style={{ top: position.top, left: position.left }}
+            onMouseDown={e => e.stopPropagation()}
+        >
+            <div className="p-2 border-b border-slate-100">
+                <input 
+                    type="text" 
+                    placeholder="Поиск акта..." 
+                    className="w-full text-sm border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    autoFocus
+                />
+            </div>
+            <div className="overflow-y-auto flex-1">
+                 <button 
+                    className="w-full text-left px-3 py-2 text-sm text-slate-500 hover:bg-slate-50 border-b border-slate-100 italic"
+                    onClick={() => onSelect(null)}
+                >
+                    -- Очистить / Нет связи --
+                </button>
+                {filteredActs.length > 0 ? filteredActs.map(act => (
+                    <button
+                        key={act.id}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 border-b border-slate-50 last:border-0"
+                        onClick={() => onSelect(act)}
+                    >
+                        <div className="font-medium text-slate-800">Акт №{act.number || 'б/н'}</div>
+                        <div className="text-xs text-slate-500 truncate">{act.workName || 'Без названия'}</div>
+                    </button>
+                )) : (
+                     <div className="px-3 py-4 text-center text-xs text-slate-400">Нет подходящих актов</div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 
 // Main Table Component
 const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, template, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, onSave, onRequestDelete, onReorderActs, setCurrentPage }) => {
@@ -218,8 +269,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [nextWorkPopoverState, setNextWorkPopoverState] = useState<{
         rowIndex: number;
         colIndex: number;
-        target: HTMLElement;
+        position: { top: number, left: number, width: number };
     } | null>(null);
+    
     const [actPickerState, setActPickerState] = useState<{ sourceRowIndex: number } | null>(null);
     const [regulationsModalOpen, setRegulationsModalOpen] = useState(false);
     
@@ -273,7 +325,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     // Helper to get relative coordinates for popovers inside the container
     // Calculates position relative to tableContainerRef (which wraps everything)
     const getRelativeCoords = (target: HTMLElement) => {
-        if (!tableContainerRef.current) return { top: 0, left: 0 };
+        if (!tableContainerRef.current) return { top: 0, left: 0, width: 0 };
         const containerRect = tableContainerRef.current.getBoundingClientRect();
         const targetRect = target.getBoundingClientRect();
         return {
@@ -452,7 +504,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             (updatedAct as any)[columnKey] = editorValue;
             if (col.key === 'nextWork') {
                 updatedAct.nextWork = editorValue;
-                updatedAct.nextWorkActId = undefined;
+                updatedAct.nextWorkActId = undefined; // Clear link if manually edited
             }
         }
 
@@ -735,15 +787,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         // Сбросить выделение ячеек, чтобы убрать маркер автозаполнения
         setSelectedCells(new Set());
         
-        // Special handling: Custom date column uses popover in edit mode too?
-        // Current implementation: Double click triggers textarea editing for 'workDates', 
-        // but single click on calendar icon triggers popover.
-        // If it's a 'date' type column, maybe just edit text or use browser picker?
-        // 'workDates' is custom_date.
-
         // Special handling for the "Next Work" column to show a popover
         if (col?.key === 'nextWork') {
-            setNextWorkPopoverState({ rowIndex, colIndex, target: e.currentTarget });
+            const coords = getRelativeCoords(e.currentTarget);
+            setNextWorkPopoverState({ rowIndex, colIndex, position: coords });
             return; 
         }
     
@@ -751,9 +798,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (col?.key === 'id') {
             return;
         }
-        
-        // Open Date Popover immediately for workDates if clicked on icon? No, this is double click.
-        // Double click just opens text editor.
         
         setEditingCell({ rowIndex, colIndex });
     };
@@ -1581,6 +1625,30 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     onOpenDetails={() => {
                         setFullRegulationDetails(regulationPopoverState.regulation);
                         setRegulationPopoverState(null);
+                    }}
+                />
+            )}
+            
+            {nextWorkPopoverState && (
+                <NextWorkPopover
+                    acts={acts}
+                    currentActId={acts[nextWorkPopoverState.rowIndex].id}
+                    position={nextWorkPopoverState.position}
+                    onClose={() => setNextWorkPopoverState(null)}
+                    onSelect={(selectedAct) => {
+                         const sourceAct = acts[nextWorkPopoverState.rowIndex];
+                         if (sourceAct) {
+                            const updatedAct = { ...sourceAct };
+                            if (selectedAct) {
+                                updatedAct.nextWork = `Работы по акту №${selectedAct.number || '...'} (${selectedAct.workName || '...'})`;
+                                updatedAct.nextWorkActId = selectedAct.id;
+                            } else {
+                                updatedAct.nextWork = '';
+                                updatedAct.nextWorkActId = undefined;
+                            }
+                            handleSaveWithTemplateResolution(updatedAct);
+                         }
+                         setNextWorkPopoverState(null);
                     }}
                 />
             )}
