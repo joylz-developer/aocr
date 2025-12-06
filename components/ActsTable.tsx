@@ -1383,7 +1383,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 <table className="w-full border-collapse text-sm min-w-max">
                     <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                         <tr>
-                            <th className="w-10 border border-slate-300 px-2 py-2 font-medium text-slate-500 text-center select-none bg-slate-100">
+                            <th className="w-12 border border-slate-300 px-2 py-2 font-medium text-slate-500 text-center select-none bg-slate-100">
                                 #
                             </th>
                             {columns.map((col, index) => (
@@ -1433,15 +1433,18 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         onDrop={handleRowDrop}
                                     >
                                         <td 
-                                            className="border border-slate-300 px-1 py-1 text-center text-xs text-slate-400 select-none bg-slate-50 row-drag-handle relative group/handle"
+                                            className="border border-slate-300 px-1 py-1 text-center text-xs text-slate-400 select-none bg-slate-50 relative group/handle"
                                             onMouseDown={(e) => handleRowHeaderMouseDown(e, rowIndex)}
                                         >
-                                            <div className="absolute left-0 top-0 bottom-0 w-4 flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover/handle:opacity-100 transition-opacity hover:bg-slate-200"
-                                                 title="Потяните, чтобы переместить строку"
-                                            >
-                                                <GripVerticalIcon className="w-3 h-3 text-slate-500" />
-                                            </div>
-                                            <span className="group-hover/handle:opacity-30 transition-opacity">{rowIndex + 1}</span>
+                                           <div className="flex items-center justify-between h-full w-full pl-1">
+                                                <div 
+                                                    className="row-drag-handle cursor-grab active:cursor-grabbing p-0.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600 flex-shrink-0"
+                                                    title="Потяните для перемещения"
+                                                >
+                                                    <GripVerticalIcon className="w-4 h-4" />
+                                                </div>
+                                                <span className="flex-grow text-center">{rowIndex + 1}</span>
+                                           </div>
                                         </td>
                                         {columns.map((col, colIndex) => {
                                             const cellId = getCellId(rowIndex, colIndex);
