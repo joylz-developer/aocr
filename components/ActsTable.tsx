@@ -255,6 +255,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [datePopoverState, setDatePopoverState] = useState<{ act: Act; position: { top: number, left: number, width: number } } | null>(null);
     const [fillHandleCoords, setFillHandleCoords] = useState<{top: number, left: number} | null>(null);
 
+    // Drag Indicator State (for visual feedback)
+    const [dragIndicator, setDragIndicator] = useState<{
+        type: 'row' | 'col';
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    } | null>(null);
+
     // Row Drag States
     const [draggedRowIndices, setDraggedRowIndices] = useState<number[] | null>(null);
     const [dropTargetRowIndex, setDropTargetRowIndex] = useState<number | null>(null);
@@ -1173,37 +1182,47 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setDraggedRowIndices(indicesToDrag);
         
         e.dataTransfer.effectAllowed = 'move';
+        // Need to set data for Firefox
         e.dataTransfer.setData('text/plain', JSON.stringify(indicesToDrag));
         
-        // Optional: Set custom drag image if needed, but default row ghost is usually fine
+        // Hide the ghost if possible or let default behavior
     };
 
     const handleRowDragOver = (e: React.DragEvent<HTMLTableRowElement>, rowIndex: number) => {
         e.preventDefault(); // Necessary to allow dropping
         if (!draggedRowIndices) return;
 
-        // Determine drop position (top or bottom of the row)
         const rect = e.currentTarget.getBoundingClientRect();
+        // Decide top or bottom
         const midY = rect.top + rect.height / 2;
-        const pos = e.clientY < midY ? 'top' : 'bottom';
+        const isTop = e.clientY < midY;
         
+        // Update logic state
         setDropTargetRowIndex(rowIndex);
-        setDropPosition(pos);
+        setDropPosition(isTop ? 'top' : 'bottom');
+
+        // Visual Indicator: Horizontal line spanning the table width
+        // We get width from the scroll container or table container
+        const scrollRect = scrollContainerRef.current?.getBoundingClientRect();
+        if (!scrollRect) return;
+
+        setDragIndicator({
+            type: 'row',
+            x: scrollRect.left,
+            y: isTop ? rect.top : rect.bottom,
+            width: scrollRect.width,
+            height: 2
+        });
     };
 
     const handleRowDrop = (e: React.DragEvent<HTMLTableRowElement>) => {
         e.preventDefault();
         
-        // Ensure reset happens even if logic returns early
-        const finishDrop = () => {
-            setDraggedRowIndices(null);
-            setDropTargetRowIndex(null);
-            setDropPosition(null);
-            dragHandlePressedRef.current = false;
-        };
-
+        // Reset Logic handled in handleDragEnd below via final cleanup or explicit call
+        // But for calculation we need states
+        
         if (!draggedRowIndices || dropTargetRowIndex === null || !dropPosition) {
-            finishDrop();
+            handleDragEnd();
             return;
         }
         
@@ -1225,7 +1244,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         ];
         
         onReorderActs(newActs);
-        finishDrop();
+        handleDragEnd();
     };
     
     // COLUMN DRAG & DROP LOGIC
@@ -1241,20 +1260,38 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
         const rect = e.currentTarget.getBoundingClientRect();
         const midX = rect.left + rect.width / 2;
-        const pos = e.clientX < midX ? 'left' : 'right';
+        const isLeft = e.clientX < midX;
 
         setDropTargetColKey(colKey);
-        setDropColPosition(pos);
+        setDropColPosition(isLeft ? 'left' : 'right');
+        
+        // Visual Indicator: Vertical line spanning the visible table height
+        const scrollRect = scrollContainerRef.current?.getBoundingClientRect();
+        if (!scrollRect) return;
+
+        setDragIndicator({
+            type: 'col',
+            x: isLeft ? rect.left : rect.right,
+            y: scrollRect.top,
+            width: 2,
+            height: scrollRect.height
+        });
     };
 
     const handleColumnDrop = () => {
-        if (!draggedColKey || !dropTargetColKey || !dropColPosition) return;
+        if (!draggedColKey || !dropTargetColKey || !dropColPosition) {
+             handleDragEnd();
+             return;
+        }
 
         const currentOrder = columns.map(c => c.key);
         const fromIndex = currentOrder.indexOf(draggedColKey as any);
         const toIndex = currentOrder.indexOf(dropTargetColKey as any);
 
-        if (fromIndex === -1 || toIndex === -1) return;
+        if (fromIndex === -1 || toIndex === -1) {
+            handleDragEnd();
+            return;
+        }
 
         const newOrder = [...currentOrder];
         newOrder.splice(fromIndex, 1); // Remove from old pos
@@ -1282,9 +1319,19 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             onColumnOrderChange(newFullOrder);
         }
 
+        handleDragEnd();
+    };
+    
+    // Cleanup state for any drag operation
+    const handleDragEnd = () => {
+        setDragIndicator(null);
+        setDraggedRowIndices(null);
+        setDropTargetRowIndex(null);
+        setDropPosition(null);
         setDraggedColKey(null);
         setDropTargetColKey(null);
         setDropColPosition(null);
+        dragHandlePressedRef.current = false;
     };
 
     const updateFillHandlePosition = useCallback(() => {
@@ -1382,6 +1429,23 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             onKeyDown={handleKeyDown}
             ref={tableContainerRef}
         >
+            {/* Global Drag Indicator Overlay - Fixed Position relative to viewport works best for overlays */}
+            {dragIndicator && (
+                <div 
+                    style={{
+                        position: 'fixed',
+                        top: dragIndicator.y,
+                        left: dragIndicator.x,
+                        width: dragIndicator.width,
+                        height: dragIndicator.height,
+                        backgroundColor: '#2563eb', // blue-600
+                        zIndex: 100,
+                        pointerEvents: 'none',
+                        boxShadow: '0 0 4px rgba(37, 99, 235, 0.5)'
+                    }} 
+                />
+            )}
+
             <div 
                 className="flex-grow overflow-auto relative scroll-shadows p-4" 
                 ref={scrollContainerRef}
@@ -1400,14 +1464,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         ${col.widthClass}
                                         ${selectedColumns.has(index) ? 'bg-blue-100' : ''}
                                         ${draggedColKey === col.key ? 'opacity-50' : ''}
-                                        ${dropTargetColKey === col.key && dropColPosition === 'left' ? 'border-l-[6px] border-l-blue-600' : ''}
-                                        ${dropTargetColKey === col.key && dropColPosition === 'right' ? 'border-r-[6px] border-r-blue-600' : ''}
                                         grabbable
                                     `}
                                     draggable={!editingCell}
                                     onDragStart={(e) => handleColumnDragStart(e, col.key)}
                                     onDragOver={(e) => handleColumnDragOver(e, col.key)}
                                     onDrop={handleColumnDrop}
+                                    onDragEnd={handleDragEnd}
                                     onClick={(e) => handleColumnHeaderClick(e, index)}
                                 >
                                     {col.label}
@@ -1429,14 +1492,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                             group
                                             ${isRowSelected ? 'bg-blue-50' : 'hover:bg-slate-50'}
                                             ${isRowDragged ? 'opacity-40' : ''}
-                                            ${isDropTarget && dropPosition === 'top' ? 'drop-target-row-top' : ''}
-                                            ${isDropTarget && dropPosition === 'bottom' ? 'drop-target-row-bottom' : ''}
                                             ${actPickerState?.sourceRowIndex === rowIndex ? 'act-picker-source-row' : ''}
                                         `}
                                         draggable={!editingCell}
                                         onDragStart={(e) => handleRowDragStart(e, rowIndex)}
                                         onDragOver={(e) => handleRowDragOver(e, rowIndex)}
                                         onDrop={handleRowDrop}
+                                        onDragEnd={handleDragEnd}
                                     >
                                         <td 
                                             className="row-drag-handle border border-slate-300 px-1 py-1 text-center text-xs text-slate-400 select-none bg-slate-50 relative group/handle cursor-grab active:cursor-grabbing"
