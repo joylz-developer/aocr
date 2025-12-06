@@ -259,6 +259,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [draggedRowIndices, setDraggedRowIndices] = useState<number[] | null>(null);
     const [dropTargetRowIndex, setDropTargetRowIndex] = useState<number | null>(null);
     const [dropPosition, setDropPosition] = useState<'top' | 'bottom' | null>(null);
+    const dragHandlePressedRef = useRef(false);
 
     // Column Drag States
     const [draggedColKey, setDraggedColKey] = useState<string | null>(null);
@@ -699,7 +700,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
     
     const handleRowHeaderMouseDown = (e: React.MouseEvent, rowIndex: number) => {
-        // NOTE: preventDefault() removed here to allow drag-and-drop to initiate
+        // Track that we pressed on the handle to authorize dragging
+        dragHandlePressedRef.current = true;
+        
         tableContainerRef.current?.focus({ preventScroll: true });
         
         // Right-Click Fix: If Right-Click and row is already selected, don't change selection
@@ -750,6 +753,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             setSelectedCells(newSelectedCells);
             setActiveCell({ rowIndex, colIndex: 0 });
         }
+    };
+
+    const handleRowHeaderMouseUp = () => {
+        // Reset in case drag didn't start but click finished
+        dragHandlePressedRef.current = false;
     };
     
     const handleDateClick = (act: Act, target: HTMLElement) => {
@@ -1150,12 +1158,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             e.preventDefault();
             return;
         }
-        
-        const target = e.target as HTMLElement;
-        const cell = target.closest('td');
-        
-        // Ensure we are dragging from the handle cell
-        if (!cell || !cell.classList.contains('row-drag-handle')) {
+
+        // --- NEW DRAG LOGIC USING REF ---
+        // If the user didn't press down on the handle first, cancel the drag.
+        if (!dragHandlePressedRef.current) {
             e.preventDefault();
             return;
         }
@@ -1166,7 +1172,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
         setDraggedRowIndices(indicesToDrag);
         
-        // IMPORTANT: Must set data for Firefox
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', JSON.stringify(indicesToDrag));
         
@@ -1188,21 +1193,28 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const handleRowDrop = (e: React.DragEvent<HTMLTableRowElement>) => {
         e.preventDefault();
-        if (!draggedRowIndices || dropTargetRowIndex === null || !dropPosition) return;
+        
+        // Ensure reset happens even if logic returns early
+        const finishDrop = () => {
+            setDraggedRowIndices(null);
+            setDropTargetRowIndex(null);
+            setDropPosition(null);
+            dragHandlePressedRef.current = false;
+        };
+
+        if (!draggedRowIndices || dropTargetRowIndex === null || !dropPosition) {
+            finishDrop();
+            return;
+        }
         
         // Calculate new index
         let insertIndex = dropTargetRowIndex;
         if (dropPosition === 'bottom') insertIndex++;
         
-        // Adjust insert index if dragging downwards and index is after source
-        // This logic can be complex with multiple items. Simplest strategy:
-        // Remove all items, then insert at adjusted target.
-        
         const draggedActs = draggedRowIndices.map(i => acts[i]);
         const remainingActs = acts.filter((_, i) => !draggedRowIndices.includes(i));
         
         // Recalculate insert index for the remaining array
-        // We need to know how many items *before* the target were removed
         const numRemovedBeforeTarget = draggedRowIndices.filter(i => i < insertIndex).length;
         const adjustedInsertIndex = Math.max(0, insertIndex - numRemovedBeforeTarget);
         
@@ -1213,13 +1225,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         ];
         
         onReorderActs(newActs);
-        
-        // Reset state
-        setDraggedRowIndices(null);
-        setDropTargetRowIndex(null);
-        setDropPosition(null);
-        // NOTE: We do NOT clear selection here to allow the user to see what they moved.
-        // setSelectedCells(new Set()); 
+        finishDrop();
     };
     
     // COLUMN DRAG & DROP LOGIC
@@ -1435,6 +1441,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         <td 
                                             className="row-drag-handle border border-slate-300 px-1 py-1 text-center text-xs text-slate-400 select-none bg-slate-50 relative group/handle cursor-grab active:cursor-grabbing"
                                             onMouseDown={(e) => handleRowHeaderMouseDown(e, rowIndex)}
+                                            onMouseUp={handleRowHeaderMouseUp}
                                         >
                                            <div className="pointer-events-none flex items-center justify-between h-full w-full pl-1">
                                                 <div 
