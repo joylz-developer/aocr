@@ -1148,15 +1148,17 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     // ROW DRAG & DROP LOGIC
     const handleRowDragStart = (e: React.DragEvent<HTMLTableRowElement>, rowIndex: number) => {
-        if (editingCell) return e.preventDefault();
+        if (editingCell) {
+            e.preventDefault();
+            return;
+        }
         
-        // Ensure dragging is only initiated from the handle
-        // We check if the target element or its ancestors have the 'row-drag-handle' class.
-        // We use a safe check for 'closest' since text nodes (e.g. clicking the number itself) don't have it.
+        // Ensure dragging is only initiated from the row header (first cell)
         const target = e.target as HTMLElement;
-        const element = target.nodeType === 3 ? target.parentElement : target;
+        const cell = target.closest('td');
         
-        if (!element || !element.closest || !element.closest('.row-drag-handle')) {
+        // Check if the cell exists and is the first child of the row
+        if (!cell || cell !== e.currentTarget.firstElementChild) {
             e.preventDefault();
             return;
         }
@@ -1433,12 +1435,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         onDrop={handleRowDrop}
                                     >
                                         <td 
-                                            className="border border-slate-300 px-1 py-1 text-center text-xs text-slate-400 select-none bg-slate-50 relative group/handle"
+                                            className="border border-slate-300 px-1 py-1 text-center text-xs text-slate-400 select-none bg-slate-50 relative group/handle cursor-grab active:cursor-grabbing"
                                             onMouseDown={(e) => handleRowHeaderMouseDown(e, rowIndex)}
                                         >
                                            <div className="flex items-center justify-between h-full w-full pl-1">
                                                 <div 
-                                                    className="row-drag-handle cursor-grab active:cursor-grabbing p-0.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600 flex-shrink-0"
+                                                    className="p-0.5 rounded text-slate-300 group-hover:text-slate-500 flex-shrink-0"
                                                     title="Потяните для перемещения"
                                                 >
                                                     <GripVerticalIcon className="w-4 h-4" />
