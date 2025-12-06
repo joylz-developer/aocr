@@ -302,6 +302,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const editorRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
     const editorContainerRef = useRef<HTMLDivElement>(null);
 
+    // Auto-scroll refs
+    const mousePosRef = useRef<{x: number, y: number} | null>(null);
+    const autoScrollRaf = useRef<number | null>(null);
+
     const actsById = useMemo(() => {
         return new Map(acts.map(a => [a.id, a]));
     }, [acts]);
@@ -1012,9 +1016,67 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     }, [editingCell, selectedCells, handleClearCells, handleCopy, handlePaste, selectedRows, activeCell, setActiveCell]);
 
+    // Auto-scroll logic inside useEffect dependent on dragging state
+    useEffect(() => {
+        const scrollContainer = scrollContainerRef.current;
+        if (!isDraggingSelection || !scrollContainer) return;
+
+        let lastTime = 0;
+        const autoScroll = (timestamp: number) => {
+            if (!mousePosRef.current) {
+                autoScrollRaf.current = requestAnimationFrame(autoScroll);
+                return;
+            }
+
+            if (!lastTime) lastTime = timestamp;
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            const { x, y } = mousePosRef.current;
+            const { left, right, top, bottom } = scrollContainer.getBoundingClientRect();
+
+            const edgeThreshold = 50; // pixels from edge to trigger scroll
+            const maxSpeed = 30; // pixels per frame
+
+            let scrollX = 0;
+            let scrollY = 0;
+
+            // Horizontal scrolling
+            if (x < left + edgeThreshold) {
+                scrollX = -maxSpeed * ((left + edgeThreshold - x) / edgeThreshold);
+            } else if (x > right - edgeThreshold) {
+                scrollX = maxSpeed * ((x - (right - edgeThreshold)) / edgeThreshold);
+            }
+
+            // Vertical scrolling
+            if (y < top + edgeThreshold) {
+                scrollY = -maxSpeed * ((top + edgeThreshold - y) / edgeThreshold);
+            } else if (y > bottom - edgeThreshold) {
+                scrollY = maxSpeed * ((y - (bottom - edgeThreshold)) / edgeThreshold);
+            }
+
+            if (scrollX !== 0 || scrollY !== 0) {
+                scrollContainer.scrollLeft += scrollX;
+                scrollContainer.scrollTop += scrollY;
+            }
+
+            autoScrollRaf.current = requestAnimationFrame(autoScroll);
+        };
+
+        autoScrollRaf.current = requestAnimationFrame(autoScroll);
+
+        return () => {
+            if (autoScrollRaf.current) {
+                cancelAnimationFrame(autoScrollRaf.current);
+            }
+        };
+    }, [isDraggingSelection]);
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
+            // Update ref for auto-scrolling
+            mousePosRef.current = { x: e.clientX, y: e.clientY };
+
             if (!isDraggingSelection || !activeCell) return;
             const coords = getCellCoordsFromEvent(e);
             if (coords) {
@@ -1031,6 +1093,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
         const handleMouseUp = () => {
             setIsDraggingSelection(false);
+            // Clear auto-scroll ref
+            mousePosRef.current = null;
         };
 
         if (isDraggingSelection) {
@@ -1202,15 +1266,16 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setDropPosition(isTop ? 'top' : 'bottom');
 
         // Visual Indicator: Horizontal line spanning the table width
-        // We get width from the scroll container or table container
-        const scrollRect = scrollContainerRef.current?.getBoundingClientRect();
-        if (!scrollRect) return;
+        // We now get the TABLE element dimensions to constrain the line
+        const tableEl = scrollContainerRef.current?.querySelector('table');
+        if (!tableEl) return;
+        const tableRect = tableEl.getBoundingClientRect();
 
         setDragIndicator({
             type: 'row',
-            x: scrollRect.left,
+            x: tableRect.left,
             y: isTop ? rect.top : rect.bottom,
-            width: scrollRect.width,
+            width: tableRect.width,
             height: 2
         });
     };
@@ -1266,15 +1331,17 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setDropColPosition(isLeft ? 'left' : 'right');
         
         // Visual Indicator: Vertical line spanning the visible table height
-        const scrollRect = scrollContainerRef.current?.getBoundingClientRect();
-        if (!scrollRect) return;
+        // Get table dimensions to constrain vertical line
+        const tableEl = scrollContainerRef.current?.querySelector('table');
+        if (!tableEl) return;
+        const tableRect = tableEl.getBoundingClientRect();
 
         setDragIndicator({
             type: 'col',
             x: isLeft ? rect.left : rect.right,
-            y: scrollRect.top,
+            y: tableRect.top,
             width: 2,
-            height: scrollRect.height
+            height: tableRect.height
         });
     };
 
@@ -1501,17 +1568,20 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         onDragEnd={handleDragEnd}
                                     >
                                         <td 
-                                            className="row-drag-handle border border-slate-300 px-1 py-1 text-center text-xs text-slate-400 select-none bg-slate-50 relative group/handle cursor-grab active:cursor-grabbing"
+                                            className={`
+                                                row-drag-handle border border-slate-300 px-1 py-1 text-center text-xs select-none relative group/handle cursor-grab active:cursor-grabbing
+                                                ${isRowSelected ? 'bg-blue-100 border-blue-200 z-20' : 'bg-slate-50 text-slate-400'}
+                                            `}
                                             onMouseDown={(e) => handleRowHeaderMouseDown(e, rowIndex)}
                                             onMouseUp={handleRowHeaderMouseUp}
                                         >
                                            <div className="pointer-events-none flex items-center justify-between h-full w-full pl-1">
                                                 <div 
-                                                    className="p-0.5 rounded text-slate-300 group-hover:text-slate-500 flex-shrink-0"
+                                                    className={`p-0.5 rounded flex-shrink-0 ${isRowSelected ? 'text-blue-500' : 'text-slate-300 group-hover:text-slate-500'}`}
                                                 >
                                                     <GripVerticalIcon className="w-4 h-4" />
                                                 </div>
-                                                <span className="flex-grow text-center">{rowIndex + 1}</span>
+                                                <span className={`flex-grow text-center ${isRowSelected ? 'font-semibold text-blue-700' : ''}`}>{rowIndex + 1}</span>
                                            </div>
                                         </td>
                                         {columns.map((col, colIndex) => {
