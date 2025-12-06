@@ -85,14 +85,27 @@ const App: React.FC = () => {
 
     const handleSaveAct = useCallback((actToSave: Act, insertAtIndex?: number) => {
         setActs(prevActs => {
-            const exists = prevActs.some(a => a.id === actToSave.id);
-            if (exists) {
-                return prevActs.map(a => (a.id === actToSave.id ? actToSave : a));
+            let newActs = [...prevActs];
+            const existsIndex = newActs.findIndex(a => a.id === actToSave.id);
+            
+            if (existsIndex !== -1) {
+                newActs[existsIndex] = actToSave;
+            } else {
+                const finalIndex = insertAtIndex === undefined ? newActs.length : insertAtIndex;
+                newActs.splice(finalIndex, 0, actToSave);
             }
             
-            const newActs = [...prevActs];
-            const finalIndex = insertAtIndex === undefined ? newActs.length : insertAtIndex;
-            newActs.splice(finalIndex, 0, actToSave);
+            // Dynamic Update: Check for other acts that link TO this act and update their text
+            newActs = newActs.map(act => {
+                if (act.nextWorkActId === actToSave.id) {
+                    return {
+                        ...act,
+                        nextWork: `Работы по акту №${actToSave.number || 'б/н'} (${actToSave.workName || '...'})`
+                    };
+                }
+                return act;
+            });
+
             return newActs;
         });
     }, [setActs]);

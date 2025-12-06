@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation } from '../types';
 import Modal from './Modal';
-import { DeleteIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon, CloseIcon } from './Icons';
+import { DeleteIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon, CloseIcon, GripVerticalIcon } from './Icons';
 import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
 import { ALL_COLUMNS } from './ActsTableConfig';
@@ -991,11 +991,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             handleClearCells();
         }
         
-        if (e.code === 'KeyC' && isCtrlKey) {
-             e.preventDefault();
-             handleCopy();
-        }
-        
         if (e.code === 'KeyV' && isCtrlKey) {
             e.preventDefault();
             handlePaste();
@@ -1438,10 +1433,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         onDrop={handleRowDrop}
                                     >
                                         <td 
-                                            className="border border-slate-300 px-1 py-1 text-center text-xs text-slate-400 select-none bg-slate-50 cursor-grab active:cursor-grabbing row-drag-handle"
+                                            className="border border-slate-300 px-1 py-1 text-center text-xs text-slate-400 select-none bg-slate-50 row-drag-handle relative group/handle"
                                             onMouseDown={(e) => handleRowHeaderMouseDown(e, rowIndex)}
                                         >
-                                            {rowIndex + 1}
+                                            <div className="absolute left-0 top-0 bottom-0 w-4 flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover/handle:opacity-100 transition-opacity hover:bg-slate-200"
+                                                 title="Потяните, чтобы переместить строку"
+                                            >
+                                                <GripVerticalIcon className="w-3 h-3 text-slate-500" />
+                                            </div>
+                                            <span className="group-hover/handle:opacity-30 transition-opacity">{rowIndex + 1}</span>
                                         </td>
                                         {columns.map((col, colIndex) => {
                                             const cellId = getCellId(rowIndex, colIndex);
@@ -1640,7 +1640,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                          if (sourceAct) {
                             const updatedAct = { ...sourceAct };
                             if (selectedAct) {
-                                updatedAct.nextWork = `Работы по акту №${selectedAct.number || '...'} (${selectedAct.workName || '...'})`;
+                                updatedAct.nextWork = `Работы по акту №${selectedAct.number || 'б/н'} (${selectedAct.workName || '...'})`;
                                 updatedAct.nextWorkActId = selectedAct.id;
                             } else {
                                 updatedAct.nextWork = '';
