@@ -710,8 +710,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
         // Drag Fix: If Left-Click on an already selected row (without modifiers), 
         // don't reset selection immediately. This allows dragging the group.
-        // We rely on simple click (without drag) to reset selection if needed, 
-        // but typically standard behavior is "mousedown doesn't deselect if dragging group".
         if (e.button === 0 && isRowSelected && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
              return;
         }
@@ -1153,26 +1151,26 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             return;
         }
         
-        // Ensure dragging is only initiated from the row header (first cell)
         const target = e.target as HTMLElement;
         const cell = target.closest('td');
         
-        // Check if the cell exists and is the first child of the row
-        if (!cell || cell !== e.currentTarget.firstElementChild) {
+        // Ensure we are dragging from the handle cell
+        if (!cell || !cell.classList.contains('row-drag-handle')) {
             e.preventDefault();
             return;
         }
 
         let indicesToDrag = [rowIndex];
-        // If the dragged row is part of a selection, drag all selected rows
         if (selectedRows.has(rowIndex)) {
             indicesToDrag = Array.from(selectedRows).sort((a,b) => a-b);
         }
         setDraggedRowIndices(indicesToDrag);
-        e.dataTransfer.effectAllowed = 'move';
         
-        // Custom drag image could be set here
+        // IMPORTANT: Must set data for Firefox
+        e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', JSON.stringify(indicesToDrag));
+        
+        // Optional: Set custom drag image if needed, but default row ghost is usually fine
     };
 
     const handleRowDragOver = (e: React.DragEvent<HTMLTableRowElement>, rowIndex: number) => {
@@ -1435,13 +1433,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         onDrop={handleRowDrop}
                                     >
                                         <td 
-                                            className="border border-slate-300 px-1 py-1 text-center text-xs text-slate-400 select-none bg-slate-50 relative group/handle cursor-grab active:cursor-grabbing"
+                                            className="row-drag-handle border border-slate-300 px-1 py-1 text-center text-xs text-slate-400 select-none bg-slate-50 relative group/handle cursor-grab active:cursor-grabbing"
                                             onMouseDown={(e) => handleRowHeaderMouseDown(e, rowIndex)}
                                         >
-                                           <div className="flex items-center justify-between h-full w-full pl-1">
+                                           <div className="pointer-events-none flex items-center justify-between h-full w-full pl-1">
                                                 <div 
                                                     className="p-0.5 rounded text-slate-300 group-hover:text-slate-500 flex-shrink-0"
-                                                    title="Потяните для перемещения"
                                                 >
                                                     <GripVerticalIcon className="w-4 h-4" />
                                                 </div>
