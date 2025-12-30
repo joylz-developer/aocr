@@ -35,6 +35,16 @@ export interface Regulation {
     embeddedChanges?: Regulation[]; 
 }
 
+export interface Certificate {
+    id: string;
+    number: string;
+    validUntil: string; // YYYY-MM-DD
+    fileType?: 'pdf' | 'image';
+    fileName?: string;
+    fileData?: string; // Base64 string of the file
+    materials: string[]; // List of material names included in this certificate
+}
+
 // Map of representative roles to their descriptions
 export const ROLES: { [key: string]: string } = {
     tnz: 'Представитель застройщика (технического заказчика) по вопросам строительного контроля',
@@ -132,6 +142,7 @@ export interface ImportSettings {
     organizations: ImportSettingsCategory;
     groups: ImportSettingsCategory;
     regulations?: ImportSettingsCategory;
+    certificates?: ImportSettingsCategory;
     deletedActs?: ImportSettingsCategory;
 }
 
@@ -144,6 +155,7 @@ export interface ImportData {
     organizations?: Organization[];
     groups?: CommissionGroup[];
     regulations?: Regulation[];
+    certificates?: Certificate[];
     deletedActs?: DeletedActEntry[];
 }
 
@@ -155,7 +167,7 @@ export type ActTableColumnKey = Exclude<keyof Act,
 > | 'workDates' | 'commissionGroup';
 
 // Defines the available pages in the application
-export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups' | 'trash' | 'regulations';
+export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups' | 'trash' | 'regulations' | 'certificates';
 
 export type Coords = { rowIndex: number; colIndex: number };
 

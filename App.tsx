@@ -1,7 +1,7 @@
 
 import React, { useState, useCallback, useRef } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation } from './types';
+import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate } from './types';
 import TemplateUploader from './components/TemplateUploader';
 import ImportModal from './components/ImportModal';
 import ConfirmationModal from './components/ConfirmationModal';
@@ -13,6 +13,7 @@ import SettingsPage from './pages/SettingsPage';
 import GroupsPage from './pages/GroupsPage';
 import TrashPage from './pages/TrashPage';
 import RegulationsPage from './pages/RegulationsPage';
+import CertificatesPage from './pages/CertificatesPage';
 import Sidebar from './components/Sidebar';
 import { saveAs } from 'file-saver';
 
@@ -39,6 +40,7 @@ const App: React.FC = () => {
     const [organizations, setOrganizations] = useLocalStorage<Organization[]>('organizations_data', []);
     const [groups, setGroups] = useLocalStorage<CommissionGroup[]>('commission_groups', []);
     const [regulations, setRegulations] = useLocalStorage<Regulation[]>('regulations_data', []);
+    const [certificates, setCertificates] = useLocalStorage<Certificate[]>('certificates_data', []);
     const [settings, setSettings] = useLocalStorage<ProjectSettings>('project_settings', {
         objectName: '',
         defaultCopiesCount: 2,
@@ -301,6 +303,27 @@ const App: React.FC = () => {
             }
         });
     }, [groups, acts, setGroups, setActs]);
+    
+    const handleSaveCertificate = useCallback((cert: Certificate) => {
+        setCertificates(prev => {
+            const exists = prev.some(c => c.id === cert.id);
+            if (exists) {
+                return prev.map(c => c.id === cert.id ? cert : c);
+            }
+            return [...prev, cert];
+        });
+    }, [setCertificates]);
+
+    const handleDeleteCertificate = useCallback((id: string) => {
+        setConfirmation({
+            title: 'Удаление сертификата',
+            message: 'Вы уверены, что хотите удалить этот сертификат?',
+            onConfirm: () => {
+                setCertificates(prev => prev.filter(c => c.id !== id));
+                setConfirmation(null);
+            }
+        });
+    }, [setCertificates]);
 
     const handleSaveSettings = useCallback((newSettings: ProjectSettings) => {
         setSettings(newSettings);
@@ -315,6 +338,7 @@ const App: React.FC = () => {
                 organizations,
                 groups,
                 regulations,
+                certificates,
                 projectSettings: settings,
                 deletedActs,
             };
@@ -344,7 +368,7 @@ const App: React.FC = () => {
                 
                 const data: ImportData = JSON.parse(text);
                 
-                if (data.template !== undefined || Array.isArray(data.acts) || Array.isArray(data.people) || Array.isArray(data.organizations) || Array.isArray(data.groups) || Array.isArray(data.regulations) || data.projectSettings || Array.isArray(data.deletedActs)) {
+                if (data.template !== undefined || Array.isArray(data.acts) || Array.isArray(data.people) || Array.isArray(data.organizations) || Array.isArray(data.groups) || Array.isArray(data.regulations) || Array.isArray(data.certificates) || data.projectSettings || Array.isArray(data.deletedActs)) {
                     setImportData(data);
                 } else {
                     alert('Ошибка: Неверный формат файла.');
@@ -370,7 +394,7 @@ const App: React.FC = () => {
         }
         
         const mergeOrReplace = <T extends {id: string} | DeletedActEntry>(
-            key: 'acts' | 'people' | 'organizations' | 'groups' | 'deletedActs' | 'regulations',
+            key: 'acts' | 'people' | 'organizations' | 'groups' | 'deletedActs' | 'regulations' | 'certificates',
             setData: React.Dispatch<React.SetStateAction<any>>,
             sortFn: ((a: T, b: T) => number) | null
         ) => {
@@ -398,6 +422,7 @@ const App: React.FC = () => {
         mergeOrReplace('organizations', setOrganizations, (a,b) => (a as Organization).name.localeCompare((b as Organization).name));
         mergeOrReplace('groups', setGroups, (a,b) => (a as CommissionGroup).name.localeCompare((b as CommissionGroup).name));
         mergeOrReplace('regulations', setRegulations, (a,b) => (a as Regulation).designation.localeCompare((b as Regulation).designation));
+        mergeOrReplace('certificates', setCertificates, (a,b) => (a as Certificate).number.localeCompare((b as Certificate).number));
         
         setImportData(null);
         alert('Данные успешно импортированы!');
@@ -441,6 +466,7 @@ const App: React.FC = () => {
                             organizations={organizations}
                             groups={groups}
                             regulations={regulations}
+                            certificates={certificates}
                             template={template}
                             settings={settings}
                             onSave={handleSaveAct} 
@@ -463,6 +489,8 @@ const App: React.FC = () => {
                         />;
             case 'regulations':
                 return <RegulationsPage regulations={regulations} onSaveRegulations={setRegulations} />;
+            case 'certificates':
+                return <CertificatesPage certificates={certificates} onSave={handleSaveCertificate} onDelete={handleDeleteCertificate} />;
             case 'settings':
                 return <SettingsPage settings={settings} onSave={handleSaveSettings} />;
             default:

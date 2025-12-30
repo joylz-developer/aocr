@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation } from '../types';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation, Certificate } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import Modal from '../components/Modal';
 import { PlusIcon, HelpIcon, ColumnsIcon } from '../components/Icons';
@@ -14,6 +14,7 @@ interface ActsPageProps {
     organizations: Organization[];
     groups: CommissionGroup[];
     regulations: Regulation[];
+    certificates: Certificate[];
     template: string | null;
     settings: ProjectSettings;
     onSave: (act: Act, insertAtIndex?: number) => void;
@@ -113,7 +114,7 @@ const ColumnPicker: React.FC<{
 };
 
 
-const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, regulations, template, settings, onSave, onMoveToTrash, onReorderActs, setCurrentPage }) => {
+const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, regulations, certificates, template, settings, onSave, onMoveToTrash, onReorderActs, setCurrentPage }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
@@ -200,6 +201,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     organizations={organizations}
                     groups={groups}
                     regulations={regulations}
+                    certificates={certificates}
                     template={template}
                     settings={settings}
                     visibleColumns={visibleColumns}
@@ -232,7 +234,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     <p>Для генерации документов ваш .docx шаблон должен содержать теги-заполнители. Приложение заменит эти теги на данные из формы. Нажмите на любой тег ниже, чтобы скопировать его.</p>
                     
                     <h4 className="font-semibold mt-4">Основные теги</h4>
-                     <ul className="list-disc space-y-2 pl-5 mt-2">
+                    <ul className="list-disc space-y-2 pl-5 mt-2">
                         <li><CopyableTag tag="{object_name}" /> &mdash; Наименование объекта.</li>
                         <li><CopyableTag tag="{act_number}" />, <CopyableTag tag="{act_day}" />, <CopyableTag tag="{act_month}" />, <CopyableTag tag="{act_year}" /></li>
                         <li><CopyableTag tag="{builder_details}" />, <CopyableTag tag="{contractor_details}" />, <CopyableTag tag="{designer_details}" />, <CopyableTag tag="{work_performer}" /></li>
@@ -252,24 +254,20 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     </ul>
 
                     <h4 className="font-semibold mt-6">Представители (Комиссия)</h4>
-                     <div className="my-2 p-3 rounded-md bg-blue-50 border border-blue-200">
+                    <div className="my-2 p-3 rounded-md bg-blue-50 border border-blue-200">
                         <h5 className="font-semibold text-blue-800">✨ Важное обновление синтаксиса</h5>
                         <p className="text-sm mt-1">Для вставки данных представителей теперь рекомендуется использовать синтаксис с подчеркиванием, например <CopyableTag tag="{tnz_name}" />. Этот формат более надежен.</p>
                     </div>
 
-                     <p className="mt-2">Используйте <strong>условные блоки</strong>, чтобы скрыть строки, если представитель не выбран. Для этого оберните нужный текст в теги <code>{`{#ключ}...{/ключ}`}</code>, где "ключ" - это код роли (например, <code>tnz</code>).</p>
+                    <p className="mt-2">Используйте <strong>условные блоки</strong>, чтобы скрыть строки, если представитель не выбран. Для этого оберните нужный текст в теги <code>{`{#ключ}...{/ключ}`}</code>, где "ключ" - это код роли (например, <code>tnz</code>).</p>
 
-                     <p className="mt-2 font-medium">Расшифровка ключей ролей:</p>
-                     <ul className="list-disc space-y-2 pl-5 mt-2">
-                         {Object.entries(ROLES).map(([key, description]) => (
+                    <p className="mt-2 font-medium">Расшифровка ключей ролей:</p>
+                    <ul className="list-disc space-y-1 pl-5 text-sm">
+                        {Object.entries(ROLES).map(([key, label]) => (
                             <li key={key}>
-                                <CopyableTag tag={key} /> &mdash; {description}
+                                <code>{key}</code> - {label} (теги: <CopyableTag tag={`{${key}_name}`} />, <CopyableTag tag={`{${key}_position}`} />, <CopyableTag tag={`{${key}_org}`} />, <CopyableTag tag={`{${key}_auth_doc}`} />)
                             </li>
-                         ))}
-                    </ul>
-                    <p className="mt-3">Полный список тегов для представителя (замените <strong>tnz</strong> на нужный ключ из списка выше):</p>
-                    <ul className="list-disc space-y-1 pl-5">
-                        <li><CopyableTag tag="{tnz_name}" />: ФИО, <CopyableTag tag="{tnz_position}" />: Должность, <CopyableTag tag="{tnz_org}" />: Организация, <CopyableTag tag="{tnz_auth_doc}" />: Документ, <CopyableTag tag="{tnz_details}" />: Сводная строка.</li>
+                        ))}
                     </ul>
                 </div>
             </Modal>

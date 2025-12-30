@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import Modal from './Modal';
-import { ImportData, ImportSettings, ImportMode, ImportSettingsCategory, Act, Person, Organization, ProjectSettings, CommissionGroup, DeletedActEntry } from '../types';
+import { ImportData, ImportSettings, ImportMode, ImportSettingsCategory, Act, Person, Organization, ProjectSettings, CommissionGroup, DeletedActEntry, Certificate } from '../types';
 
 interface ImportModalProps {
     data: ImportData;
@@ -8,8 +9,8 @@ interface ImportModalProps {
     onImport: (settings: ImportSettings) => void;
 }
 
-type CategoryKey = 'acts' | 'people' | 'organizations' | 'groups' | 'deletedActs';
-type CategoryItem = Act | Person | Organization | CommissionGroup | DeletedActEntry;
+type CategoryKey = 'acts' | 'people' | 'organizations' | 'groups' | 'deletedActs' | 'certificates';
+type CategoryItem = Act | Person | Organization | CommissionGroup | DeletedActEntry | Certificate;
 
 const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) => {
 
@@ -21,6 +22,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
         organizations: { import: !!data.organizations?.length, mode: 'merge', selectedIds: data.organizations?.map(i => i.id) },
         groups: { import: !!data.groups?.length, mode: 'merge', selectedIds: data.groups?.map(i => i.id) },
         deletedActs: { import: !!data.deletedActs?.length, mode: 'merge', selectedIds: data.deletedActs?.map(i => i.act.id) },
+        certificates: { import: !!data.certificates?.length, mode: 'merge', selectedIds: data.certificates?.map(i => i.id) },
     });
     
     const isDataPresent =
@@ -30,7 +32,8 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
         (data.people && data.people.length > 0) ||
         (data.organizations && data.organizations.length > 0) ||
         (data.groups && data.groups.length > 0) ||
-        (data.deletedActs && data.deletedActs.length > 0);
+        (data.deletedActs && data.deletedActs.length > 0) ||
+        (data.certificates && data.certificates.length > 0);
 
 
     const handleCheckboxChange = (category: CategoryKey, value: boolean) => {
@@ -154,7 +157,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
                                 } else if ('name' in item) {
                                     displayName = item.name;
                                 } else if ('number' in item) {
-                                    displayName = `Акт №${item.number}`;
+                                    displayName = `Сертификат №${item.number}`;
                                 }
 
                                 return (
@@ -221,6 +224,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
                     <ImportOptionRow category="people" label="Участники" items={data.people} />
                     <ImportOptionRow category="organizations" label="Организации" items={data.organizations} />
                     <ImportOptionRow category="groups" label="Группы комиссий" items={data.groups} />
+                    <ImportOptionRow category="certificates" label="Сертификаты" items={data.certificates} />
                     <ImportOptionRow category="deletedActs" label="Акты в корзине" items={data.deletedActs} />
                     </>
                 )}
