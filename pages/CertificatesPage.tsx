@@ -96,8 +96,8 @@ const CertificateForm: React.FC<{
 
             if (!cleanMimeType || !base64Data) throw new Error("Invalid file data");
 
-            // Gemini 2.5 Flash can handle PDFs and Images
-            const prompt = `Extract the certificate number and validity date from this document. Return JSON: { "number": string, "validUntil": string (YYYY-MM-DD), "materials": string[] (optional list of material names if found) }.`;
+            // Use prompt from settings or default fallback
+            const prompt = settings.certificateExtractionPrompt || `Extract certificate info. JSON: { "number": "Document Type + Number", "validUntil": "Issue Date YYYY-MM-DD", "materials": ["Material Name 1"] }`;
 
             const part = {
                 inlineData: {
@@ -215,12 +215,12 @@ const CertificateForm: React.FC<{
 
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className={labelClass}>Номер сертификата</label>
-                    <input type="text" name="number" value={formData.number} onChange={handleChange} className={inputClass} required placeholder="№ 12345" />
+                    <label className={labelClass}>Номер (тип + №)</label>
+                    <input type="text" name="number" value={formData.number} onChange={handleChange} className={inputClass} required placeholder="Паспорт качества № 123" />
                 </div>
                 <div>
-                    <label className={labelClass}>Действителен до</label>
-                    <input type="date" name="validUntil" value={formData.validUntil} onChange={handleChange} className={inputClass} required />
+                    <label className={labelClass}>Дата документа</label>
+                    <input type="date" name="validUntil" value={formData.validUntil} onChange={handleChange} className={inputClass} required title="Дата выдачи или составления" />
                 </div>
             </div>
 
@@ -306,8 +306,8 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, setti
                                 <div className="flex items-center gap-2">
                                     <CertificateIcon className="w-8 h-8 text-blue-500" />
                                     <div>
-                                        <h3 className="font-bold text-slate-800">№ {cert.number}</h3>
-                                        <p className="text-xs text-slate-500">До: {new Date(cert.validUntil).toLocaleDateString()}</p>
+                                        <h3 className="font-bold text-slate-800 text-sm">{cert.number}</h3>
+                                        <p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p>
                                     </div>
                                 </div>
                                 <div className="flex gap-1">

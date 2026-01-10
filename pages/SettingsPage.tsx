@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { ProjectSettings } from '../types';
 
@@ -151,6 +152,27 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
                         Ключ хранится локально в вашем браузере.
                     </p>
                 </div>
+
+                <fieldset className="space-y-4 pt-4 border-t">
+                    <legend className="text-base font-medium text-slate-800">Настройки ИИ</legend>
+                    <div>
+                        <label htmlFor="certificateExtractionPrompt" className={labelClass}>
+                            Промт для извлечения данных из сертификатов
+                        </label>
+                        <textarea
+                            id="certificateExtractionPrompt"
+                            name="certificateExtractionPrompt"
+                            value={formData.certificateExtractionPrompt || ''}
+                            onChange={handleChange}
+                            className={`${inputClass} text-sm font-mono`}
+                            rows={6}
+                            placeholder="Опишите, как ИИ должен извлекать данные..."
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                            Настройте инструкцию для ИИ, чтобы улучшить точность поиска номера, даты и материалов.
+                        </p>
+                    </div>
+                </fieldset>
 
                 <fieldset className="space-y-4 pt-4 border-t">
                     <legend className="text-base font-medium text-slate-800">Настройки формы акта</legend>

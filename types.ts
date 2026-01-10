@@ -38,7 +38,7 @@ export interface Regulation {
 export interface Certificate {
     id: string;
     number: string;
-    validUntil: string; // YYYY-MM-DD
+    validUntil: string; // YYYY-MM-DD (In UI this is now treated as "Issue Date/Date")
     fileType?: 'pdf' | 'image';
     fileName?: string;
     fileData?: string; // Base64 string of the file
@@ -123,6 +123,7 @@ export interface ProjectSettings {
     defaultAttachments?: string;
     defaultAdditionalInfo?: string;
     defaultActDate?: string;
+    certificateExtractionPrompt?: string;
 }
 
 // Types for Import/Export feature
