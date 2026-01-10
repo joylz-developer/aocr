@@ -1,20 +1,23 @@
 
 import React, { useState, useRef } from 'react';
-import { Certificate } from '../types';
+import { Certificate, ProjectSettings } from '../types';
 import Modal from '../components/Modal';
-import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon } from '../components/Icons';
+import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon } from '../components/Icons';
+import { GoogleGenAI } from '@google/genai';
 
 interface CertificatesPageProps {
     certificates: Certificate[];
+    settings: ProjectSettings;
     onSave: (cert: Certificate) => void;
     onDelete: (id: string) => void;
 }
 
 const CertificateForm: React.FC<{
     certificate: Certificate | null;
+    settings: ProjectSettings;
     onSave: (cert: Certificate) => void;
     onClose: () => void;
-}> = ({ certificate, onSave, onClose }) => {
+}> = ({ certificate, settings, onSave, onClose }) => {
     const [formData, setFormData] = useState<Certificate>(
         certificate || {
             id: crypto.randomUUID(),
@@ -27,17 +30,19 @@ const CertificateForm: React.FC<{
         }
     );
     const [newMaterial, setNewMaterial] = useState('');
+    const [isDragging, setIsDragging] = useState(false);
+    const [isScanning, setIsScanning] = useState(false);
+    const [aiError, setAiError] = useState<string | null>(null);
+    
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
+    const processFile = (file: File) => {
         const reader = new FileReader();
         reader.onload = (event) => {
             if (typeof event.target?.result === 'string') {
@@ -47,9 +52,84 @@ const CertificateForm: React.FC<{
                     fileType: file.type.includes('pdf') ? 'pdf' : 'image',
                     fileData: event.target!.result as string // full data url
                 }));
+                setAiError(null);
             }
         };
         reader.readAsDataURL(file);
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        processFile(file);
+    };
+
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file && (file.type.startsWith('image/') || file.type === 'application/pdf')) {
+            processFile(file);
+        } else {
+            alert('Пожалуйста, загрузите изображение или PDF файл.');
+        }
+    };
+
+    const handleAiScan = async () => {
+        if (!formData.fileData || !ai) return;
+        setIsScanning(true);
+        setAiError(null);
+
+        try {
+            const [mimeType, base64Data] = formData.fileData.split(',');
+            const cleanMimeType = mimeType.match(/:(.*?);/)?.[1];
+
+            if (!cleanMimeType || !base64Data) throw new Error("Invalid file data");
+
+            // Gemini 2.5 Flash can handle PDFs and Images
+            const prompt = `Extract the certificate number and validity date from this document. Return JSON: { "number": string, "validUntil": string (YYYY-MM-DD), "materials": string[] (optional list of material names if found) }.`;
+
+            const part = {
+                inlineData: {
+                    mimeType: cleanMimeType,
+                    data: base64Data
+                }
+            };
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: { parts: [part, { text: prompt }] },
+                config: { responseMimeType: "application/json" }
+            });
+
+            const result = JSON.parse(response.text);
+            
+            setFormData(prev => ({
+                ...prev,
+                number: result.number || prev.number,
+                validUntil: result.validUntil || prev.validUntil,
+                // Only merge materials if found and not already present to avoid dups/overwrite of manual work
+                materials: result.materials && Array.isArray(result.materials) && result.materials.length > 0 
+                    ? Array.from(new Set([...prev.materials, ...result.materials])) 
+                    : prev.materials
+            }));
+
+        } catch (error) {
+            console.error("AI Scan Error:", error);
+            setAiError("Не удалось распознать данные. Убедитесь, что файл содержит четкий текст.");
+        } finally {
+            setIsScanning(false);
+        }
     };
 
     const handleAddMaterial = () => {
@@ -79,6 +159,60 @@ const CertificateForm: React.FC<{
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
+            
+            <div>
+                <label className={labelClass}>Файл документа (PDF или Изображение)</label>
+                <div 
+                    className={`mt-1 flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 transition-colors ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'}`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                >
+                    <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" />
+                    
+                    {formData.fileName ? (
+                        <div className="flex flex-col items-center gap-2">
+                            <span className="text-sm font-medium text-slate-700 break-all text-center">{formData.fileName}</span>
+                            <button 
+                                type="button" 
+                                onClick={() => fileInputRef.current?.click()}
+                                className="text-xs text-blue-600 hover:underline"
+                            >
+                                Заменить файл
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="text-center">
+                            <CloudUploadIcon className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                            <p className="text-sm text-slate-600">Перетащите файл сюда или</p>
+                            <button 
+                                type="button" 
+                                onClick={() => fileInputRef.current?.click()}
+                                className="mt-1 text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                            >
+                                выберите на компьютере
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {ai && formData.fileData && (
+                <div className="flex flex-col items-center">
+                    <button
+                        type="button"
+                        onClick={handleAiScan}
+                        disabled={isScanning}
+                        className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2 rounded-md hover:from-blue-600 hover:to-indigo-700 disabled:opacity-70 transition-all shadow-sm"
+                        title="Распознать номер и дату автоматически"
+                    >
+                        <SparklesIcon className="w-4 h-4" />
+                        {isScanning ? 'Анализ документа...' : 'Заполнить через AI'}
+                    </button>
+                    {aiError && <p className="text-red-500 text-xs mt-2">{aiError}</p>}
+                </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
                 <div>
                     <label className={labelClass}>Номер сертификата</label>
@@ -87,21 +221,6 @@ const CertificateForm: React.FC<{
                 <div>
                     <label className={labelClass}>Действителен до</label>
                     <input type="date" name="validUntil" value={formData.validUntil} onChange={handleChange} className={inputClass} required />
-                </div>
-            </div>
-
-            <div>
-                <label className={labelClass}>Файл документа (PDF или Изображение)</label>
-                <div className="mt-1 flex items-center gap-2">
-                    <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" />
-                    <button 
-                        type="button" 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="px-3 py-2 bg-slate-100 border border-slate-300 rounded-md text-sm hover:bg-slate-200"
-                    >
-                        {formData.fileName ? 'Заменить файл' : 'Загрузить файл'}
-                    </button>
-                    <span className="text-sm text-slate-500 italic truncate max-w-xs">{formData.fileName || 'Файл не выбран'}</span>
                 </div>
             </div>
 
@@ -145,7 +264,7 @@ const CertificateForm: React.FC<{
     );
 };
 
-const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, onSave, onDelete }) => {
+const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, settings, onSave, onDelete }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingCert, setEditingCert] = useState<Certificate | null>(null);
     const [previewFile, setPreviewFile] = useState<{ type: 'pdf' | 'image', data: string } | null>(null);
@@ -229,7 +348,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, onSav
             </div>
 
             <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingCert ? 'Редактировать сертификат' : 'Новый сертификат'}>
-                <CertificateForm certificate={editingCert} onSave={onSave} onClose={handleCloseModal} />
+                <CertificateForm certificate={editingCert} settings={settings} onSave={onSave} onClose={handleCloseModal} />
             </Modal>
 
             {previewFile && (

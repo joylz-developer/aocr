@@ -490,7 +490,7 @@ const App: React.FC = () => {
             case 'regulations':
                 return <RegulationsPage regulations={regulations} onSaveRegulations={setRegulations} />;
             case 'certificates':
-                return <CertificatesPage certificates={certificates} onSave={handleSaveCertificate} onDelete={handleDeleteCertificate} />;
+                return <CertificatesPage certificates={certificates} settings={settings} onSave={handleSaveCertificate} onDelete={handleDeleteCertificate} />;
             case 'settings':
                 return <SettingsPage settings={settings} onSave={handleSaveSettings} />;
             default:
