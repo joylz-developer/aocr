@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Certificate, ProjectSettings } from '../types';
 import Modal from '../components/Modal';
 import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon } from '../components/Icons';
@@ -10,6 +10,13 @@ interface CertificatesPageProps {
     settings: ProjectSettings;
     onSave: (cert: Certificate) => void;
     onDelete: (id: string) => void;
+}
+
+// Type for AI Suggestions
+interface AiSuggestions {
+    number?: string;
+    validUntil?: string;
+    materials?: string[];
 }
 
 const CertificateForm: React.FC<{
@@ -33,6 +40,7 @@ const CertificateForm: React.FC<{
     const [isDragging, setIsDragging] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
     const [aiError, setAiError] = useState<string | null>(null);
+    const [aiSuggestions, setAiSuggestions] = useState<AiSuggestions | null>(null);
     
     const fileInputRef = useRef<HTMLInputElement>(null);
     const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
@@ -50,9 +58,10 @@ const CertificateForm: React.FC<{
                     ...prev,
                     fileName: file.name,
                     fileType: file.type.includes('pdf') ? 'pdf' : 'image',
-                    fileData: event.target!.result as string // full data url
+                    fileData: event.target!.result as string
                 }));
                 setAiError(null);
+                setAiSuggestions(null); // Reset suggestions on new file
             }
         };
         reader.readAsDataURL(file);
@@ -89,6 +98,7 @@ const CertificateForm: React.FC<{
         if (!formData.fileData || !ai) return;
         setIsScanning(true);
         setAiError(null);
+        setAiSuggestions(null);
 
         try {
             const [mimeType, base64Data] = formData.fileData.split(',');
@@ -96,8 +106,6 @@ const CertificateForm: React.FC<{
 
             if (!cleanMimeType || !base64Data) throw new Error("Invalid file data");
 
-            // Construct prompt from 3 specific settings fields
-            // Fallback strings are provided just in case settings are missing, though App.tsx provides defaults.
             const promptNumber = settings.certificatePromptNumber || "Document Type + Number";
             const promptDate = settings.certificatePromptDate || "Issue Date YYYY-MM-DD";
             const promptMaterials = settings.certificatePromptMaterials || "Exact material names";
@@ -130,7 +138,6 @@ const CertificateForm: React.FC<{
             const text = response.text;
             if (!text) throw new Error("Empty response from AI");
 
-            // Robust JSON extraction
             const jsonStartIndex = text.indexOf('{');
             const jsonEndIndex = text.lastIndexOf('}');
             
@@ -141,14 +148,12 @@ const CertificateForm: React.FC<{
             const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
             const result = JSON.parse(jsonString);
             
-            setFormData(prev => ({
-                ...prev,
-                number: result.number || prev.number,
-                validUntil: result.validUntil || prev.validUntil,
-                materials: result.materials && Array.isArray(result.materials) && result.materials.length > 0 
-                    ? Array.from(new Set([...prev.materials, ...result.materials])) 
-                    : prev.materials
-            }));
+            // Set suggestions instead of overwriting form data immediately
+            setAiSuggestions({
+                number: result.number,
+                validUntil: result.validUntil,
+                materials: Array.isArray(result.materials) ? result.materials : []
+            });
 
         } catch (error) {
             console.error("AI Scan Error:", error);
@@ -158,12 +163,17 @@ const CertificateForm: React.FC<{
         }
     };
 
-    const handleAddMaterial = () => {
-        if (!newMaterial.trim()) return;
+    const handleAddMaterial = (materialName: string) => {
+        const nameToAdd = materialName.trim();
+        if (!nameToAdd) return;
         setFormData(prev => ({
             ...prev,
-            materials: [...prev.materials, newMaterial.trim()]
+            materials: [...prev.materials, nameToAdd]
         }));
+    };
+
+    const handleManualAddMaterial = () => {
+        handleAddMaterial(newMaterial);
         setNewMaterial('');
     };
 
@@ -172,6 +182,19 @@ const CertificateForm: React.FC<{
             ...prev,
             materials: prev.materials.filter((_, i) => i !== index)
         }));
+    };
+
+    const handleEditMaterial = (index: number, newValue: string) => {
+        setFormData(prev => {
+            const newMaterials = [...prev.materials];
+            newMaterials[index] = newValue;
+            return { ...prev, materials: newMaterials };
+        });
+    };
+
+    const applyAiSuggestion = (field: 'number' | 'validUntil', value: string) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+        // Remove applied suggestion from view to reduce clutter? Or keep it? keeping it is safer.
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -184,122 +207,196 @@ const CertificateForm: React.FC<{
     const labelClass = "block text-sm font-medium text-slate-700";
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col h-[80vh] md:h-[70vh]">
             
-            <div>
-                <label className={labelClass}>Файл документа (PDF или Изображение)</label>
-                <div 
-                    className={`mt-1 flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 transition-colors ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'}`}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                >
-                    <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" />
+            <div className="flex flex-col md:flex-row gap-6 h-full min-h-0">
+                {/* LEFT COLUMN: Document Preview */}
+                <div className="w-full md:w-1/2 flex flex-col h-full min-h-0 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="p-3 border-b border-slate-200 bg-white rounded-t-lg flex justify-between items-center">
+                        <span className="font-semibold text-slate-700">Документ</span>
+                        <button 
+                            type="button" 
+                            onClick={() => fileInputRef.current?.click()}
+                            className="text-xs text-blue-600 hover:underline"
+                        >
+                            {formData.fileData ? 'Заменить файл' : 'Загрузить файл'}
+                        </button>
+                    </div>
                     
-                    {formData.fileData ? (
-                        <div className="w-full flex flex-col items-center gap-3">
-                            <div className="relative w-full h-48 bg-slate-100 rounded overflow-hidden border border-slate-200">
-                                {formData.fileType === 'image' ? (
-                                    <img src={formData.fileData} alt="Preview" className="w-full h-full object-contain" />
-                                ) : (
-                                    <div className="w-full h-full relative group">
-                                        {/* Use object or embed for PDF preview */}
-                                        <object data={formData.fileData} type="application/pdf" className="w-full h-full pointer-events-none">
-                                            <div className="flex items-center justify-center h-full text-slate-400">PDF Preview</div>
-                                        </object>
-                                        <div className="absolute inset-0 bg-transparent"></div> {/* Overlay to prevent iframe capturing clicks */}
+                    <div 
+                        className={`flex-grow overflow-hidden relative flex items-center justify-center transition-colors ${isDragging ? 'bg-blue-100' : ''}`}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                    >
+                        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" />
+                        
+                        {formData.fileData ? (
+                            formData.fileType === 'image' ? (
+                                <img src={formData.fileData} alt="Preview" className="max-w-full max-h-full object-contain p-2" />
+                            ) : (
+                                <object data={formData.fileData} type="application/pdf" className="w-full h-full">
+                                    <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                        <p>PDF Preview не поддерживается в этом браузере.</p>
                                     </div>
-                                )}
+                                </object>
+                            )
+                        ) : (
+                            <div className="text-center p-6">
+                                <CloudUploadIcon className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                                <p className="text-sm text-slate-500">Перетащите файл сюда</p>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-slate-700 truncate max-w-[200px]">{formData.fileName}</span>
-                                <button 
-                                    type="button" 
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="text-xs text-blue-600 hover:underline"
-                                >
-                                    Заменить
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="text-center">
-                            <CloudUploadIcon className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-                            <p className="text-sm text-slate-600">Перетащите файл сюда или</p>
-                            <button 
-                                type="button" 
-                                onClick={() => fileInputRef.current?.click()}
-                                className="mt-1 text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                        )}
+                    </div>
+                </div>
+
+                {/* RIGHT COLUMN: Form Fields */}
+                <div className="w-full md:w-1/2 flex flex-col h-full min-h-0 overflow-y-auto pr-1">
+                    
+                    {/* AI Button */}
+                    {ai && formData.fileData && (
+                        <div className="mb-6 flex flex-col">
+                            <button
+                                type="button"
+                                onClick={handleAiScan}
+                                disabled={isScanning}
+                                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-4 py-2.5 rounded-lg hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-70 transition-all shadow-sm font-medium"
                             >
-                                выберите на компьютере
+                                <SparklesIcon className="w-5 h-5" />
+                                {isScanning ? 'Анализ документа...' : 'Сканировать через AI'}
                             </button>
+                            {aiError && <p className="text-red-500 text-xs mt-2">{aiError}</p>}
                         </div>
                     )}
-                </div>
-            </div>
 
-            {ai && formData.fileData && (
-                <div className="flex flex-col items-center">
-                    <button
-                        type="button"
-                        onClick={handleAiScan}
-                        disabled={isScanning}
-                        className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2 rounded-md hover:from-blue-600 hover:to-indigo-700 disabled:opacity-70 transition-all shadow-sm"
-                        title="Распознать номер и дату автоматически"
-                    >
-                        <SparklesIcon className="w-4 h-4" />
-                        {isScanning ? 'Анализ документа...' : 'Заполнить через AI'}
-                    </button>
-                    {aiError && <p className="text-red-500 text-xs mt-2">{aiError}</p>}
-                </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className={labelClass}>Номер (тип + №)</label>
-                    <input type="text" name="number" value={formData.number} onChange={handleChange} className={inputClass} required placeholder="Паспорт качества № 123" />
-                </div>
-                <div>
-                    <label className={labelClass}>Дата документа</label>
-                    <input type="date" name="validUntil" value={formData.validUntil} onChange={handleChange} className={inputClass} required title="Дата выдачи или составления" />
-                </div>
-            </div>
-
-            <div className="border-t pt-4">
-                <label className={labelClass}>Материалы в сертификате</label>
-                <div className="flex gap-2 mt-1 mb-2">
-                    <input 
-                        type="text" 
-                        value={newMaterial} 
-                        onChange={e => setNewMaterial(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddMaterial())}
-                        className={inputClass} 
-                        placeholder="Название материала (нажмите Enter)" 
-                    />
-                    <button 
-                        type="button" 
-                        onClick={handleAddMaterial}
-                        className="mt-1 px-4 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 font-medium text-sm"
-                    >
-                        Добавить
-                    </button>
-                </div>
-                <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-md bg-slate-50 p-2 space-y-1">
-                    {formData.materials.length === 0 && <p className="text-xs text-slate-400 text-center py-2">Список материалов пуст</p>}
-                    {formData.materials.map((mat, idx) => (
-                        <div key={idx} className="flex justify-between items-center bg-white px-3 py-1.5 rounded border border-slate-200 text-sm">
-                            <span>{mat}</span>
-                            <button type="button" onClick={() => handleRemoveMaterial(idx)} className="text-red-500 hover:text-red-700">
-                                <CloseIcon className="w-4 h-4" />
-                            </button>
+                    <div className="space-y-5">
+                        {/* Number Field */}
+                        <div>
+                            <label className={labelClass}>Номер (тип + №)</label>
+                            <input type="text" name="number" value={formData.number} onChange={handleChange} className={inputClass} required placeholder="Паспорт качества № 123" />
+                            {aiSuggestions?.number && aiSuggestions.number !== formData.number && (
+                                <div 
+                                    onClick={() => applyAiSuggestion('number', aiSuggestions.number!)}
+                                    className="mt-2 cursor-pointer bg-violet-50 border border-violet-100 p-2 rounded-md hover:bg-violet-100 transition-colors group"
+                                >
+                                    <p className="text-xs text-violet-600 font-semibold mb-0.5 flex items-center">
+                                        <SparklesIcon className="w-3 h-3 mr-1"/> Предложение AI
+                                    </p>
+                                    <p className="text-sm text-slate-700">{aiSuggestions.number}</p>
+                                </div>
+                            )}
                         </div>
-                    ))}
+
+                        {/* Date Field */}
+                        <div>
+                            <label className={labelClass}>Дата документа</label>
+                            <input type="date" name="validUntil" value={formData.validUntil} onChange={handleChange} className={inputClass} required />
+                            {aiSuggestions?.validUntil && aiSuggestions.validUntil !== formData.validUntil && (
+                                <div 
+                                    onClick={() => applyAiSuggestion('validUntil', aiSuggestions.validUntil!)}
+                                    className="mt-2 cursor-pointer bg-violet-50 border border-violet-100 p-2 rounded-md hover:bg-violet-100 transition-colors group"
+                                >
+                                    <p className="text-xs text-violet-600 font-semibold mb-0.5 flex items-center">
+                                        <SparklesIcon className="w-3 h-3 mr-1"/> Предложение AI
+                                    </p>
+                                    <p className="text-sm text-slate-700">{new Date(aiSuggestions.validUntil).toLocaleDateString()}</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Materials Section */}
+                        <div className="border-t pt-4">
+                            <label className={labelClass}>Материалы</label>
+                            
+                            {/* AI Materials Suggestions */}
+                            {aiSuggestions?.materials && aiSuggestions.materials.length > 0 && (
+                                <div className="mb-4 bg-violet-50 border border-violet-100 rounded-md p-3">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <p className="text-xs text-violet-700 font-bold flex items-center"><SparklesIcon className="w-3 h-3 mr-1"/> Найдено в документе</p>
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                if (aiSuggestions.materials) {
+                                                    const unique = aiSuggestions.materials.filter(m => !formData.materials.includes(m));
+                                                    setFormData(prev => ({...prev, materials: [...prev.materials, ...unique]}));
+                                                    // Optional: clear suggestions after adding? No, leave them.
+                                                }
+                                            }}
+                                            className="text-xs bg-violet-600 text-white px-2 py-1 rounded hover:bg-violet-700"
+                                        >
+                                            Добавить все
+                                        </button>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {aiSuggestions.materials.map((mat, idx) => (
+                                            !formData.materials.includes(mat) && (
+                                                <button
+                                                    key={idx}
+                                                    type="button"
+                                                    onClick={() => handleAddMaterial(mat)}
+                                                    className="text-xs bg-white border border-violet-200 text-slate-700 px-2 py-1 rounded-full hover:border-violet-400 hover:text-violet-700 text-left max-w-full truncate"
+                                                    title="Нажмите, чтобы добавить"
+                                                >
+                                                    + {mat}
+                                                </button>
+                                            )
+                                        ))}
+                                        {aiSuggestions.materials.every(m => formData.materials.includes(m)) && (
+                                            <span className="text-xs text-slate-400 italic">Все материалы добавлены</span>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Manual Add Input */}
+                            <div className="flex gap-2 mt-1 mb-3">
+                                <input 
+                                    type="text" 
+                                    value={newMaterial} 
+                                    onChange={e => setNewMaterial(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleManualAddMaterial())}
+                                    className={inputClass} 
+                                    placeholder="Введите название и нажмите Enter" 
+                                />
+                                <button 
+                                    type="button" 
+                                    onClick={handleManualAddMaterial}
+                                    className="mt-1 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-300 rounded-md hover:bg-slate-200"
+                                >
+                                    <PlusIcon className="w-5 h-5"/>
+                                </button>
+                            </div>
+
+                            {/* Editable List */}
+                            <div className="space-y-2">
+                                {formData.materials.length === 0 && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded">Список материалов пуст</p>}
+                                {formData.materials.map((mat, idx) => (
+                                    <div key={idx} className="flex items-center gap-2 group">
+                                        <input
+                                            type="text"
+                                            value={mat}
+                                            onChange={(e) => handleEditMaterial(idx, e.target.value)}
+                                            className="block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded bg-slate-50 focus:bg-white transition-colors py-1.5 px-2"
+                                        />
+                                        <button 
+                                            type="button" 
+                                            onClick={() => handleRemoveMaterial(idx)} 
+                                            className="text-slate-400 hover:text-red-500 p-1 rounded hover:bg-slate-100"
+                                            title="Удалить"
+                                        >
+                                            <CloseIcon className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div className="flex justify-end space-x-3 pt-4">
+            <div className="flex justify-end space-x-3 pt-6 mt-auto border-t border-slate-200 bg-white">
                 <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-md hover:bg-slate-300">Отмена</button>
-                <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Сохранить</button>
+                <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-medium">Сохранить</button>
             </div>
         </form>
     );
