@@ -96,8 +96,23 @@ const CertificateForm: React.FC<{
 
             if (!cleanMimeType || !base64Data) throw new Error("Invalid file data");
 
-            // Use prompt from settings or default fallback
-            const prompt = settings.certificateExtractionPrompt || `Extract certificate info. JSON: { "number": "Document Type + Number", "validUntil": "Issue Date YYYY-MM-DD", "materials": ["Material Name 1"] }`;
+            // Base prompt ensuring JSON structure
+            const basePrompt = `
+                Analyze the provided document image/PDF.
+                Extract the following fields and return ONLY valid JSON:
+                {
+                    "number": "Document type (Certificate/Passport) + Number",
+                    "validUntil": "Date of issue/start in YYYY-MM-DD format",
+                    "materials": ["Exact material name 1", "Exact material name 2"]
+                }
+            `;
+
+            // User customized instructions
+            const userInstructions = settings.certificateExtractionPrompt 
+                ? `User additional instructions: ${settings.certificateExtractionPrompt}`
+                : '';
+
+            const finalPrompt = `${basePrompt}\n${userInstructions}`;
 
             const part = {
                 inlineData: {
@@ -108,17 +123,28 @@ const CertificateForm: React.FC<{
 
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
-                contents: { parts: [part, { text: prompt }] },
+                contents: { parts: [part, { text: finalPrompt }] },
                 config: { responseMimeType: "application/json" }
             });
 
-            const result = JSON.parse(response.text);
+            const text = response.text;
+            if (!text) throw new Error("Empty response from AI");
+
+            // Robust JSON extraction: Find the first '{' and last '}'
+            const jsonStartIndex = text.indexOf('{');
+            const jsonEndIndex = text.lastIndexOf('}');
+            
+            if (jsonStartIndex === -1 || jsonEndIndex === -1) {
+                throw new Error("JSON structure not found in response");
+            }
+
+            const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
+            const result = JSON.parse(jsonString);
             
             setFormData(prev => ({
                 ...prev,
                 number: result.number || prev.number,
                 validUntil: result.validUntil || prev.validUntil,
-                // Only merge materials if found and not already present to avoid dups/overwrite of manual work
                 materials: result.materials && Array.isArray(result.materials) && result.materials.length > 0 
                     ? Array.from(new Set([...prev.materials, ...result.materials])) 
                     : prev.materials
@@ -126,7 +152,7 @@ const CertificateForm: React.FC<{
 
         } catch (error) {
             console.error("AI Scan Error:", error);
-            setAiError("Не удалось распознать данные. Убедитесь, что файл содержит четкий текст.");
+            setAiError("Не удалось распознать данные. Убедитесь, что API ключ верен и файл содержит текст.");
         } finally {
             setIsScanning(false);
         }
@@ -170,16 +196,31 @@ const CertificateForm: React.FC<{
                 >
                     <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" />
                     
-                    {formData.fileName ? (
-                        <div className="flex flex-col items-center gap-2">
-                            <span className="text-sm font-medium text-slate-700 break-all text-center">{formData.fileName}</span>
-                            <button 
-                                type="button" 
-                                onClick={() => fileInputRef.current?.click()}
-                                className="text-xs text-blue-600 hover:underline"
-                            >
-                                Заменить файл
-                            </button>
+                    {formData.fileData ? (
+                        <div className="w-full flex flex-col items-center gap-3">
+                            <div className="relative w-full h-48 bg-slate-100 rounded overflow-hidden border border-slate-200">
+                                {formData.fileType === 'image' ? (
+                                    <img src={formData.fileData} alt="Preview" className="w-full h-full object-contain" />
+                                ) : (
+                                    <div className="w-full h-full relative group">
+                                        {/* Use object or embed for PDF preview */}
+                                        <object data={formData.fileData} type="application/pdf" className="w-full h-full pointer-events-none">
+                                            <div className="flex items-center justify-center h-full text-slate-400">PDF Preview</div>
+                                        </object>
+                                        <div className="absolute inset-0 bg-transparent"></div> {/* Overlay to prevent iframe capturing clicks */}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-slate-700 truncate max-w-[200px]">{formData.fileName}</span>
+                                <button 
+                                    type="button" 
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="text-xs text-blue-600 hover:underline"
+                                >
+                                    Заменить
+                                </button>
+                            </div>
                         </div>
                     ) : (
                         <div className="text-center">
@@ -281,8 +322,6 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, setti
 
     const handlePreview = (cert: Certificate) => {
         if (cert.fileData && cert.fileType) {
-            // Open simple preview in a new window/tab for simplicity or modal
-            // Using modal for consistency
             setPreviewFile({ type: cert.fileType, data: cert.fileData });
         } else {
             alert("Файл не загружен для этого сертификата.");
@@ -301,40 +340,64 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, setti
             <div className="flex-grow overflow-auto">
                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {certificates.map(cert => (
-                        <div key={cert.id} className="border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-slate-50 flex flex-col">
-                            <div className="flex justify-between items-start mb-2">
-                                <div className="flex items-center gap-2">
-                                    <CertificateIcon className="w-8 h-8 text-blue-500" />
-                                    <div>
-                                        <h3 className="font-bold text-slate-800 text-sm">{cert.number}</h3>
-                                        <p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p>
+                        <div key={cert.id} className="border border-slate-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col h-full">
+                            {/* Thumbnail Section */}
+                            <div 
+                                className="h-40 bg-slate-100 border-b border-slate-100 flex items-center justify-center cursor-pointer relative overflow-hidden group"
+                                onClick={() => handlePreview(cert)}
+                            >
+                                {cert.fileData ? (
+                                    cert.fileType === 'image' ? (
+                                        <img src={cert.fileData} alt={cert.number} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full relative pointer-events-none">
+                                            {/* Pointer events none to allow clicking the div container */}
+                                            <object data={cert.fileData} type="application/pdf" className="w-full h-full opacity-80" tabIndex={-1}>
+                                                <div className="flex items-center justify-center h-full">
+                                                    <CertificateIcon className="w-12 h-12 text-red-400" />
+                                                </div>
+                                            </object>
+                                            <div className="absolute inset-0 bg-transparent"></div>
+                                        </div>
+                                    )
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center text-slate-400">
+                                        <CertificateIcon className="w-10 h-10 mb-1 opacity-50" />
+                                        <span className="text-xs">Нет файла</span>
                                     </div>
+                                )}
+                                
+                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity flex items-center justify-center">
+                                    <span className="opacity-0 group-hover:opacity-100 bg-white/90 px-3 py-1 rounded-full text-xs font-medium shadow-sm">
+                                        Просмотр
+                                    </span>
                                 </div>
-                                <div className="flex gap-1">
-                                    <button onClick={() => handleOpenModal(cert)} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded"><EditIcon className="w-4 h-4"/></button>
-                                    <button onClick={() => onDelete(cert.id)} className="p-1.5 text-red-600 hover:bg-red-100 rounded"><DeleteIcon className="w-4 h-4"/></button>
-                                </div>
-                            </div>
-                            
-                            <div className="flex-grow mb-3">
-                                <p className="text-xs font-semibold text-slate-500 mb-1 uppercase">Материалы:</p>
-                                <ul className="text-sm text-slate-700 list-disc list-inside space-y-0.5 max-h-24 overflow-y-auto">
-                                    {cert.materials.length > 0 ? cert.materials.map((m, i) => (
-                                        <li key={i} className="truncate">{m}</li>
-                                    )) : <li className="text-slate-400 italic">Нет материалов</li>}
-                                </ul>
                             </div>
 
-                            <div className="mt-auto pt-3 border-t border-slate-200 flex justify-between items-center">
-                                <span className="text-xs text-slate-400 truncate max-w-[150px]" title={cert.fileName}>{cert.fileName || "Нет файла"}</span>
-                                {cert.fileData && (
-                                    <button 
-                                        onClick={() => handlePreview(cert)}
-                                        className="text-xs text-blue-600 hover:underline font-medium"
-                                    >
-                                        Просмотр
-                                    </button>
-                                )}
+                            <div className="p-4 flex flex-col flex-grow">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div>
+                                        <h3 className="font-bold text-slate-800 text-sm leading-tight mb-1">{cert.number}</h3>
+                                        <p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p>
+                                    </div>
+                                    <div className="flex gap-1 ml-2">
+                                        <button onClick={() => handleOpenModal(cert)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
+                                        <button onClick={() => onDelete(cert.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex-grow">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Материалы:</p>
+                                    <ul className="text-xs text-slate-700 space-y-1">
+                                        {cert.materials.slice(0, 3).map((m, i) => (
+                                            <li key={i} className="truncate border-l-2 border-blue-100 pl-2">{m}</li>
+                                        ))}
+                                        {cert.materials.length > 3 && (
+                                            <li className="text-slate-400 pl-2 italic">...и еще {cert.materials.length - 3}</li>
+                                        )}
+                                        {cert.materials.length === 0 && <li className="text-slate-400 italic pl-2">Список пуст</li>}
+                                    </ul>
+                                </div>
                             </div>
                         </div>
                     ))}
@@ -353,7 +416,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, setti
 
             {previewFile && (
                 <Modal isOpen={!!previewFile} onClose={() => setPreviewFile(null)} title="Просмотр документа">
-                    <div className="h-[70vh] w-full flex items-center justify-center bg-slate-100 rounded overflow-hidden">
+                    <div className="h-[75vh] w-full flex items-center justify-center bg-slate-100 rounded overflow-hidden">
                         {previewFile.type === 'pdf' ? (
                             <iframe src={previewFile.data} className="w-full h-full" title="PDF Preview" />
                         ) : (

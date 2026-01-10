@@ -157,7 +157,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
                     <legend className="text-base font-medium text-slate-800">Настройки ИИ</legend>
                     <div>
                         <label htmlFor="certificateExtractionPrompt" className={labelClass}>
-                            Промт для извлечения данных из сертификатов
+                            Инструкции для ИИ (сканирование сертификатов)
                         </label>
                         <textarea
                             id="certificateExtractionPrompt"
@@ -166,10 +166,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
                             onChange={handleChange}
                             className={`${inputClass} text-sm font-mono`}
                             rows={6}
-                            placeholder="Опишите, как ИИ должен извлекать данные..."
+                            placeholder="Опишите, какие именно материалы искать и как их называть..."
                         />
                         <p className="text-xs text-slate-500 mt-1">
-                            Настройте инструкцию для ИИ, чтобы улучшить точность поиска номера, даты и материалов.
+                            <strong>Совет:</strong> Просто опишите своими словами, что нужно искать. Программа сама позаботится о формате (JSON).<br/>
+                            Пример: <em>"Ищи только бетон и арматуру. В название бетона включай класс и марку по водонепроницаемости."</em>
                         </p>
                     </div>
                 </fieldset>
