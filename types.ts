@@ -123,7 +123,11 @@ export interface ProjectSettings {
     defaultAttachments?: string;
     defaultAdditionalInfo?: string;
     defaultActDate?: string;
-    certificateExtractionPrompt?: string;
+    
+    // AI Prompts
+    certificatePromptNumber?: string;
+    certificatePromptDate?: string;
+    certificatePromptMaterials?: string;
 }
 
 // Types for Import/Export feature

@@ -96,23 +96,23 @@ const CertificateForm: React.FC<{
 
             if (!cleanMimeType || !base64Data) throw new Error("Invalid file data");
 
-            // Base prompt ensuring JSON structure
-            const basePrompt = `
+            // Construct prompt from 3 specific settings fields
+            // Fallback strings are provided just in case settings are missing, though App.tsx provides defaults.
+            const promptNumber = settings.certificatePromptNumber || "Document Type + Number";
+            const promptDate = settings.certificatePromptDate || "Issue Date YYYY-MM-DD";
+            const promptMaterials = settings.certificatePromptMaterials || "Exact material names";
+
+            const finalPrompt = `
                 Analyze the provided document image/PDF.
                 Extract the following fields and return ONLY valid JSON:
                 {
-                    "number": "Document type (Certificate/Passport) + Number",
-                    "validUntil": "Date of issue/start in YYYY-MM-DD format",
-                    "materials": ["Exact material name 1", "Exact material name 2"]
+                    "number": "${promptNumber}",
+                    "validUntil": "${promptDate}",
+                    "materials": ["${promptMaterials}"]
                 }
+                
+                IMPORTANT: Return valid JSON only. Do not add markdown code blocks.
             `;
-
-            // User customized instructions
-            const userInstructions = settings.certificateExtractionPrompt 
-                ? `User additional instructions: ${settings.certificateExtractionPrompt}`
-                : '';
-
-            const finalPrompt = `${basePrompt}\n${userInstructions}`;
 
             const part = {
                 inlineData: {
@@ -130,7 +130,7 @@ const CertificateForm: React.FC<{
             const text = response.text;
             if (!text) throw new Error("Empty response from AI");
 
-            // Robust JSON extraction: Find the first '{' and last '}'
+            // Robust JSON extraction
             const jsonStartIndex = text.indexOf('{');
             const jsonEndIndex = text.lastIndexOf('}');
             

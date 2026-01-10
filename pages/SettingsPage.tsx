@@ -154,24 +154,54 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
                 </div>
 
                 <fieldset className="space-y-4 pt-4 border-t">
-                    <legend className="text-base font-medium text-slate-800">Настройки ИИ</legend>
-                    <div>
-                        <label htmlFor="certificateExtractionPrompt" className={labelClass}>
-                            Инструкции для ИИ (сканирование сертификатов)
-                        </label>
-                        <textarea
-                            id="certificateExtractionPrompt"
-                            name="certificateExtractionPrompt"
-                            value={formData.certificateExtractionPrompt || ''}
-                            onChange={handleChange}
-                            className={`${inputClass} text-sm font-mono`}
-                            rows={6}
-                            placeholder="Опишите, какие именно материалы искать и как их называть..."
-                        />
-                        <p className="text-xs text-slate-500 mt-1">
-                            <strong>Совет:</strong> Просто опишите своими словами, что нужно искать. Программа сама позаботится о формате (JSON).<br/>
-                            Пример: <em>"Ищи только бетон и арматуру. В название бетона включай класс и марку по водонепроницаемости."</em>
-                        </p>
+                    <legend className="text-base font-medium text-slate-800">Настройки ИИ (Сканирование сертификатов)</legend>
+                    <p className="text-xs text-slate-500 mb-4">Настройте, как ИИ должен искать информацию в документах. Пишите простым языком.</p>
+                    
+                    <div className="space-y-4">
+                        <div>
+                            <label htmlFor="certificatePromptNumber" className={labelClass}>
+                                Правило поиска Номера документа
+                            </label>
+                            <textarea
+                                id="certificatePromptNumber"
+                                name="certificatePromptNumber"
+                                value={formData.certificatePromptNumber || ''}
+                                onChange={handleChange}
+                                className={`${inputClass} text-sm`}
+                                rows={2}
+                                placeholder="Что искать в поле номера..."
+                            />
+                        </div>
+
+                        <div>
+                            <label htmlFor="certificatePromptDate" className={labelClass}>
+                                Правило поиска Даты документа
+                            </label>
+                            <textarea
+                                id="certificatePromptDate"
+                                name="certificatePromptDate"
+                                value={formData.certificatePromptDate || ''}
+                                onChange={handleChange}
+                                className={`${inputClass} text-sm`}
+                                rows={2}
+                                placeholder="Какую дату искать..."
+                            />
+                        </div>
+
+                        <div>
+                            <label htmlFor="certificatePromptMaterials" className={labelClass}>
+                                Правило поиска Материалов
+                            </label>
+                            <textarea
+                                id="certificatePromptMaterials"
+                                name="certificatePromptMaterials"
+                                value={formData.certificatePromptMaterials || ''}
+                                onChange={handleChange}
+                                className={`${inputClass} text-sm`}
+                                rows={3}
+                                placeholder="Как описывать материалы..."
+                            />
+                        </div>
                     </div>
                 </fieldset>
 

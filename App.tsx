@@ -32,13 +32,9 @@ const fileToBase64 = (file: File): Promise<string> =>
         reader.onerror = (error) => reject(error);
     });
 
-const DEFAULT_CERT_PROMPT = `Проанализируй документ. Извлеки данные в формате JSON:
-{
-  "number": "Тип документа (обязательно укажи 'Паспорт качества', 'Сертификат соответствия' или другой тип) + Номер документа. Пример: 'Паспорт качества № 123' или 'Сертификат соответствия № АА-001'.",
-  "validUntil": "Дата выдачи/составления документа в формате YYYY-MM-DD. Внимание: нужна именно дата начала действия или дата выдачи, а НЕ дата окончания.",
-  "materials": ["Точное наименование продукции 1", "Точное наименование продукции 2"]
-}
-Для материалов: извлекай конкретные марки, типы и размеры (например, 'Бетон B25 W6', 'Арматура А500С d12').`;
+const DEFAULT_PROMPT_NUMBER = "Тип документа (обязательно укажи 'Паспорт качества', 'Сертификат соответствия' или другой тип) + Номер документа. Пример: 'Паспорт качества № 123'";
+const DEFAULT_PROMPT_DATE = "Дата выдачи/составления документа (НЕ дата окончания).";
+const DEFAULT_PROMPT_MATERIALS = "Точное наименование продукции, марки, типы и размеры (например, 'Бетон B25 W6').";
 
 const App: React.FC = () => {
     const [template, setTemplate] = useLocalStorage<string | null>('docx_template', null);
@@ -59,7 +55,9 @@ const App: React.FC = () => {
         showParticipantDetails: true,
         geminiApiKey: '',
         defaultActDate: '{workEndDate}',
-        certificateExtractionPrompt: DEFAULT_CERT_PROMPT
+        certificatePromptNumber: DEFAULT_PROMPT_NUMBER,
+        certificatePromptDate: DEFAULT_PROMPT_DATE,
+        certificatePromptMaterials: DEFAULT_PROMPT_MATERIALS
     });
     const [currentPage, setCurrentPage] = useState<Page>('acts');
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
