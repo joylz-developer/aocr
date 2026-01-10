@@ -19,6 +19,94 @@ interface AiSuggestions {
     materials?: string[];
 }
 
+// --- Image Viewer Component with Pan & Zoom ---
+const ImageViewer: React.FC<{ src: string; alt: string }> = ({ src, alt }) => {
+    const [scale, setScale] = useState(1);
+    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const [isDragging, setIsDragging] = useState(false);
+    const dragStart = useRef({ x: 0, y: 0 });
+    const imgRef = useRef<HTMLDivElement>(null);
+
+    const handleWheel = (e: React.WheelEvent) => {
+        e.preventDefault();
+        e.stopPropagation(); // Stop scrolling parent modal
+        const delta = e.deltaY * -0.001;
+        const newScale = Math.min(Math.max(0.5, scale + delta), 5);
+        setScale(newScale);
+    };
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+        dragStart.current = { x: e.clientX - position.x, y: e.clientY - position.y };
+    };
+
+    const handleMouseMove = (e: React.MouseEvent) => {
+        if (!isDragging) return;
+        e.preventDefault();
+        setPosition({
+            x: e.clientX - dragStart.current.x,
+            y: e.clientY - dragStart.current.y
+        });
+    };
+
+    const handleMouseUp = () => {
+        setIsDragging(false);
+    };
+
+    const resetView = () => {
+        setScale(1);
+        setPosition({ x: 0, y: 0 });
+    };
+
+    const zoomIn = () => setScale(s => Math.min(s + 0.5, 5));
+    const zoomOut = () => setScale(s => Math.max(0.5, s - 0.5));
+
+    return (
+        <div className="relative w-full h-full overflow-hidden bg-slate-800 rounded-lg group select-none">
+            <div 
+                ref={imgRef}
+                className="w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing"
+                onWheel={handleWheel}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+            >
+                <img 
+                    src={src} 
+                    alt={alt} 
+                    className="max-w-none transition-transform duration-75"
+                    style={{ 
+                        transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                        maxHeight: '100%',
+                        maxWidth: '100%'
+                    }}
+                    draggable={false}
+                />
+            </div>
+
+            {/* Controls */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 bg-black/50 backdrop-blur-sm p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                <button type="button" onClick={zoomOut} className="p-1.5 text-white hover:bg-white/20 rounded-full" title="Уменьшить">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4"/></svg>
+                </button>
+                <button type="button" onClick={resetView} className="px-2 text-xs text-white font-mono hover:bg-white/20 rounded-full flex items-center">
+                    {Math.round(scale * 100)}%
+                </button>
+                <button type="button" onClick={zoomIn} className="p-1.5 text-white hover:bg-white/20 rounded-full" title="Увеличить">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/></svg>
+                </button>
+            </div>
+            
+             <div className="absolute top-2 right-2 text-[10px] text-white/50 pointer-events-none">
+                Колесико: Зум | Драг: Перемещение
+            </div>
+        </div>
+    );
+};
+
+
 const CertificateForm: React.FC<{
     certificate: Certificate | null;
     settings: ProjectSettings;
@@ -75,16 +163,21 @@ const CertificateForm: React.FC<{
 
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
+        e.stopPropagation();
         setIsDragging(true);
     };
 
     const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
+        e.stopPropagation();
+        // Only disable if we are leaving the main container, not entering a child
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
         setIsDragging(false);
     };
 
     const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
+        e.stopPropagation();
         setIsDragging(false);
         const file = e.dataTransfer.files?.[0];
         if (file && (file.type.startsWith('image/') || file.type === 'application/pdf')) {
@@ -194,7 +287,6 @@ const CertificateForm: React.FC<{
 
     const applyAiSuggestion = (field: 'number' | 'validUntil', value: string) => {
         setFormData(prev => ({ ...prev, [field]: value }));
-        // Remove applied suggestion from view to reduce clutter? Or keep it? keeping it is safer.
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -211,8 +303,15 @@ const CertificateForm: React.FC<{
             
             <div className="flex flex-col md:flex-row gap-6 h-full min-h-0">
                 {/* LEFT COLUMN: Document Preview */}
-                <div className="w-full md:w-1/2 flex flex-col h-full min-h-0 bg-slate-50 rounded-lg border border-slate-200">
-                    <div className="p-3 border-b border-slate-200 bg-white rounded-t-lg flex justify-between items-center">
+                <div 
+                    className={`w-full md:w-1/2 flex flex-col h-full min-h-0 bg-slate-50 rounded-lg border-2 transition-colors relative
+                        ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}
+                    `}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                >
+                    <div className="p-3 border-b border-slate-200 bg-white rounded-t-lg flex justify-between items-center z-10">
                         <span className="font-semibold text-slate-700">Документ</span>
                         <button 
                             type="button" 
@@ -223,28 +322,31 @@ const CertificateForm: React.FC<{
                         </button>
                     </div>
                     
-                    <div 
-                        className={`flex-grow overflow-hidden relative flex items-center justify-center transition-colors ${isDragging ? 'bg-blue-100' : ''}`}
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={handleDrop}
-                    >
+                    <div className="flex-grow overflow-hidden relative flex items-center justify-center p-2">
                         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" />
                         
                         {formData.fileData ? (
                             formData.fileType === 'image' ? (
-                                <img src={formData.fileData} alt="Preview" className="max-w-full max-h-full object-contain p-2" />
+                                <ImageViewer src={formData.fileData} alt="Preview" />
                             ) : (
-                                <object data={formData.fileData} type="application/pdf" className="w-full h-full">
+                                <object data={formData.fileData} type="application/pdf" className="w-full h-full rounded-md shadow-inner">
                                     <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                                        <p>PDF Preview не поддерживается в этом браузере.</p>
+                                        <p>PDF Preview не поддерживается.</p>
                                     </div>
                                 </object>
                             )
                         ) : (
-                            <div className="text-center p-6">
+                            <div className="text-center p-6 pointer-events-none">
                                 <CloudUploadIcon className="w-12 h-12 text-slate-300 mx-auto mb-2" />
                                 <p className="text-sm text-slate-500">Перетащите файл сюда</p>
+                            </div>
+                        )}
+
+                        {/* Drag Overlay */}
+                        {isDragging && (
+                            <div className="absolute inset-0 bg-blue-100/90 flex flex-col items-center justify-center z-20 border-2 border-blue-500 border-dashed rounded-lg animate-fade-in-up">
+                                <CloudUploadIcon className="w-16 h-16 text-blue-600 mb-2" />
+                                <span className="text-lg font-bold text-blue-700">Отпустите, чтобы заменить файл</span>
                             </div>
                         )}
                     </div>
@@ -319,7 +421,6 @@ const CertificateForm: React.FC<{
                                                 if (aiSuggestions.materials) {
                                                     const unique = aiSuggestions.materials.filter(m => !formData.materials.includes(m));
                                                     setFormData(prev => ({...prev, materials: [...prev.materials, ...unique]}));
-                                                    // Optional: clear suggestions after adding? No, leave them.
                                                 }
                                             }}
                                             className="text-xs bg-violet-600 text-white px-2 py-1 rounded hover:bg-violet-700"
@@ -517,7 +618,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, setti
                         {previewFile.type === 'pdf' ? (
                             <iframe src={previewFile.data} className="w-full h-full" title="PDF Preview" />
                         ) : (
-                            <img src={previewFile.data} alt="Certificate" className="max-w-full max-h-full object-contain" />
+                            <ImageViewer src={previewFile.data} alt="Certificate Preview" />
                         )}
                     </div>
                 </Modal>
