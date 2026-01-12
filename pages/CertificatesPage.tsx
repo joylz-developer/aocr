@@ -472,17 +472,17 @@ const CertificateForm: React.FC<{
                             <div className="space-y-2">
                                 {formData.materials.length === 0 && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded">Список материалов пуст</p>}
                                 {formData.materials.map((mat, idx) => (
-                                    <div key={idx} className="flex items-center gap-2 group">
-                                        <input
-                                            type="text"
+                                    <div key={idx} className="flex items-start gap-2 group">
+                                        <textarea
                                             value={mat}
                                             onChange={(e) => handleEditMaterial(idx, e.target.value)}
-                                            className="block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded bg-slate-50 focus:bg-white transition-colors py-1.5 px-2"
+                                            className="block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded bg-slate-50 focus:bg-white transition-colors py-1.5 px-2 resize-y"
+                                            rows={2}
                                         />
                                         <button 
                                             type="button" 
                                             onClick={() => handleRemoveMaterial(idx)} 
-                                            className="text-slate-400 hover:text-red-500 p-1 rounded hover:bg-slate-100"
+                                            className="text-slate-400 hover:text-red-500 p-1 rounded hover:bg-slate-100 mt-1"
                                             title="Удалить"
                                         >
                                             <CloseIcon className="w-4 h-4" />
@@ -526,6 +526,19 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, setti
         }
     };
 
+    const openInNewTab = (fileData: string) => {
+        fetch(fileData)
+            .then(res => res.blob())
+            .then(blob => {
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');
+            })
+            .catch(err => {
+                console.error("Error opening file:", err);
+                alert("Не удалось открыть файл.");
+            });
+    };
+
     return (
         <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
             <div className="flex justify-between items-center mb-6 flex-shrink-0">
@@ -543,6 +556,11 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, setti
                             <div 
                                 className="h-40 bg-slate-100 border-b border-slate-100 flex items-center justify-center cursor-pointer relative overflow-hidden group"
                                 onClick={() => handlePreview(cert)}
+                                onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    if(cert.fileData) openInNewTab(cert.fileData);
+                                }}
+                                title="Нажмите для предпросмотра, дважды для открытия в новой вкладке"
                             >
                                 {cert.fileData ? (
                                     cert.fileType === 'image' ? (
@@ -608,12 +626,18 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, setti
                  </div>
             </div>
 
-            <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingCert ? 'Редактировать сертификат' : 'Новый сертификат'}>
+            <Modal 
+                isOpen={isModalOpen} 
+                onClose={handleCloseModal} 
+                title={editingCert ? 'Редактировать сертификат' : 'Новый сертификат'}
+                maxWidth="max-w-[90vw] lg:max-w-7xl"
+                className="resize-x overflow-hidden"
+            >
                 <CertificateForm certificate={editingCert} settings={settings} onSave={onSave} onClose={handleCloseModal} />
             </Modal>
 
             {previewFile && (
-                <Modal isOpen={!!previewFile} onClose={() => setPreviewFile(null)} title="Просмотр документа">
+                <Modal isOpen={!!previewFile} onClose={() => setPreviewFile(null)} title="Просмотр документа" maxWidth="max-w-6xl">
                     <div className="h-[75vh] w-full flex items-center justify-center bg-slate-100 rounded overflow-hidden">
                         {previewFile.type === 'pdf' ? (
                             <iframe src={previewFile.data} className="w-full h-full" title="PDF Preview" />

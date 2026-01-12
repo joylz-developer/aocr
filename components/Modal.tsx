@@ -1,3 +1,4 @@
+
 import React, { ReactNode, useRef } from 'react';
 
 interface ModalProps {
@@ -5,9 +6,11 @@ interface ModalProps {
     onClose: () => void;
     title: string;
     children: ReactNode;
+    maxWidth?: string; // Allow overriding the default width
+    className?: string; // Allow passing extra classes like 'resize'
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, maxWidth, className }) => {
     if (!isOpen) return null;
     
     // Мы используем ref, чтобы отслеживать, началось ли событие mousedown на фоне.
@@ -38,7 +41,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
             onMouseDown={handleMouseDown}
             onMouseUp={handleMouseUp}
         >
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 flex flex-col max-h-[90vh]">
+            <div className={`bg-white rounded-lg shadow-xl w-full mx-4 flex flex-col max-h-[95vh] ${maxWidth || 'max-w-2xl'} ${className || ''}`}>
                 <div className="flex justify-between items-center p-4 border-b flex-shrink-0">
                     <h2 className="text-xl font-semibold">{title}</h2>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
