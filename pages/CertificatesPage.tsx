@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { Certificate, ProjectSettings } from '../types';
 import Modal from '../components/Modal';
 import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon } from '../components/Icons';
@@ -159,7 +159,7 @@ const CertificateForm: React.FC<{
     // Mass Edit AI States
     const [massEditPrompt, setMassEditPrompt] = useState('');
     const [isMassEditing, setIsMassEditing] = useState(false);
-    const [backupMaterials, setBackupMaterials] = useState<string[] | null>(null);
+    const [previewMaterials, setPreviewMaterials] = useState<string[] | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
@@ -291,11 +291,7 @@ const CertificateForm: React.FC<{
     const handleAiMassEdit = async () => {
         if (!ai || !massEditPrompt.trim() || formData.materials.length === 0) return;
         setIsMassEditing(true);
-        
-        // Backup current state
-        if (!backupMaterials) {
-            setBackupMaterials([...formData.materials]);
-        }
+        setPreviewMaterials(null);
 
         try {
             const prompt = `
@@ -308,6 +304,7 @@ const CertificateForm: React.FC<{
                 - "Split by comma" -> explode items
                 - "Translate to English" -> translate
                 - "Fix typos" -> fix
+                - "Clear list" -> return empty array
                 
                 Return ONLY the new list of materials as a JSON array of strings. ["mat1", "mat2"]
             `;
@@ -323,27 +320,28 @@ const CertificateForm: React.FC<{
             const result = JSON.parse(text);
 
             if (Array.isArray(result)) {
-                setFormData(prev => ({ ...prev, materials: result }));
+                setPreviewMaterials(result);
             }
         } catch (e) {
             alert("Ошибка при обработке AI. Попробуйте другой запрос.");
             console.error(e);
+            setPreviewMaterials(null);
         } finally {
             setIsMassEditing(false);
         }
     };
 
-    const handleRestoreBackup = () => {
-        if (backupMaterials) {
-            setFormData(prev => ({ ...prev, materials: backupMaterials }));
-            setBackupMaterials(null);
-            setMassEditPrompt('');
-        }
+    const handleCancelMassEdit = () => {
+        setPreviewMaterials(null);
+        setMassEditPrompt('');
     };
 
     const handleCommitMassEdit = () => {
-        setBackupMaterials(null);
-        setMassEditPrompt('');
+        if (previewMaterials) {
+            setFormData(prev => ({ ...prev, materials: previewMaterials }));
+            setPreviewMaterials(null);
+            setMassEditPrompt('');
+        }
     };
 
     // --- Material List Logic ---
@@ -385,7 +383,6 @@ const CertificateForm: React.FC<{
 
     const handleRemoveAllMaterials = () => {
         if (confirm("Вы уверены, что хотите удалить все материалы?")) {
-            setBackupMaterials([...formData.materials]); // Allow undo via mass edit logic or similar if desired, but here just simple clear
             setFormData(prev => ({ ...prev, materials: [] }));
         }
     };
@@ -408,11 +405,39 @@ const CertificateForm: React.FC<{
         onClose();
     };
 
+    // --- Computed Views for AI Diff ---
+    
+    const displayedMaterials = useMemo(() => {
+        if (!previewMaterials) return formData.materials.map(m => ({ text: m, status: 'current' }));
+
+        const result: { text: string, status: 'current' | 'added' | 'removed' }[] = [];
+        
+        // Items in preview (either kept or added)
+        previewMaterials.forEach(item => {
+            if (formData.materials.includes(item)) {
+                result.push({ text: item, status: 'current' });
+            } else {
+                result.push({ text: item, status: 'added' });
+            }
+        });
+
+        // Items in original but not in preview (deleted)
+        formData.materials.forEach(item => {
+            if (!previewMaterials.includes(item)) {
+                result.push({ text: item, status: 'removed' });
+            }
+        });
+
+        return result;
+    }, [formData.materials, previewMaterials]);
+
+
     const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900";
     const labelClass = "block text-sm font-medium text-slate-700";
 
     // Helper to check if AI suggestions are already all added
     const areAllSuggestionsAdded = aiSuggestions?.materials?.every(m => formData.materials.includes(m));
+    const isPreviewMode = !!previewMaterials;
 
     return (
         <form onSubmit={handleSubmit} className="flex flex-col h-[80vh] md:h-[70vh]">
@@ -477,8 +502,8 @@ const CertificateForm: React.FC<{
                             <button
                                 type="button"
                                 onClick={handleAiScan}
-                                disabled={isScanning}
-                                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-4 py-2.5 rounded-lg hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-70 transition-all shadow-sm font-medium"
+                                disabled={isScanning || isPreviewMode}
+                                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-4 py-2.5 rounded-lg hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-sm font-medium"
                             >
                                 <SparklesIcon className="w-5 h-5" />
                                 {isScanning ? 'Анализ документа...' : 'Сканировать через AI'}
@@ -491,8 +516,8 @@ const CertificateForm: React.FC<{
                         {/* Number Field */}
                         <div>
                             <label className={labelClass}>Номер (тип + №)</label>
-                            <input type="text" name="number" value={formData.number} onChange={handleChange} className={inputClass} required placeholder="Паспорт качества № 123" />
-                            {aiSuggestions?.number && aiSuggestions.number !== formData.number && (
+                            <input type="text" name="number" value={formData.number} onChange={handleChange} className={inputClass} required placeholder="Паспорт качества № 123" disabled={isPreviewMode} />
+                            {aiSuggestions?.number && aiSuggestions.number !== formData.number && !isPreviewMode && (
                                 <div 
                                     onClick={() => applyAiSuggestion('number', aiSuggestions.number!)}
                                     className="mt-2 cursor-pointer bg-violet-50 border border-violet-100 p-2 rounded-md hover:bg-violet-100 transition-colors group"
@@ -508,8 +533,8 @@ const CertificateForm: React.FC<{
                         {/* Date Field */}
                         <div>
                             <label className={labelClass}>Дата документа</label>
-                            <input type="date" name="validUntil" value={formData.validUntil} onChange={handleChange} className={inputClass} required />
-                            {aiSuggestions?.validUntil && aiSuggestions.validUntil !== formData.validUntil && (
+                            <input type="date" name="validUntil" value={formData.validUntil} onChange={handleChange} className={inputClass} required disabled={isPreviewMode} />
+                            {aiSuggestions?.validUntil && aiSuggestions.validUntil !== formData.validUntil && !isPreviewMode && (
                                 <div 
                                     onClick={() => applyAiSuggestion('validUntil', aiSuggestions.validUntil!)}
                                     className="mt-2 cursor-pointer bg-violet-50 border border-violet-100 p-2 rounded-md hover:bg-violet-100 transition-colors group"
@@ -526,7 +551,7 @@ const CertificateForm: React.FC<{
                         <div className="border-t pt-4">
                             <div className="flex justify-between items-center mb-1">
                                 <label className={labelClass}>Материалы ({formData.materials.length})</label>
-                                {formData.materials.length > 0 && (
+                                {formData.materials.length > 0 && !isPreviewMode && (
                                     <button 
                                         type="button" 
                                         onClick={handleRemoveAllMaterials}
@@ -538,7 +563,7 @@ const CertificateForm: React.FC<{
                             </div>
                             
                             {/* AI Materials Suggestions */}
-                            {aiSuggestions?.materials && aiSuggestions.materials.length > 0 && !areAllSuggestionsAdded && (
+                            {aiSuggestions?.materials && aiSuggestions.materials.length > 0 && !areAllSuggestionsAdded && !isPreviewMode && (
                                 <div className="mb-4 bg-violet-50 border border-violet-100 rounded-md p-3">
                                     <div className="flex justify-between items-center mb-2">
                                         <p className="text-xs text-violet-700 font-bold flex items-center"><SparklesIcon className="w-3 h-3 mr-1"/> Найдено в документе</p>
@@ -602,18 +627,20 @@ const CertificateForm: React.FC<{
                                     onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleManualAddMaterial())}
                                     className={inputClass} 
                                     placeholder="Введите название и нажмите Enter" 
+                                    disabled={isPreviewMode}
                                 />
                                 <button 
                                     type="button" 
                                     onClick={handleManualAddMaterial}
-                                    className="mt-1 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-300 rounded-md hover:bg-slate-200"
+                                    disabled={isPreviewMode}
+                                    className="mt-1 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-300 rounded-md hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <PlusIcon className="w-5 h-5"/>
                                 </button>
                             </div>
                             
                             {/* Undo Banner */}
-                            {lastDeletedMaterial && (
+                            {lastDeletedMaterial && !isPreviewMode && (
                                 <div className="mb-2 p-2 bg-slate-100 text-xs flex justify-between items-center rounded border border-slate-200 animate-fade-in-up">
                                     <span className="text-slate-600 truncate mr-2">
                                         Удалено: "{lastDeletedMaterial.value}"
@@ -629,28 +656,39 @@ const CertificateForm: React.FC<{
                             )}
 
                             {/* Editable List */}
-                            <div className="space-y-2">
-                                {formData.materials.length === 0 && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded">Список материалов пуст</p>}
-                                {formData.materials.map((mat, idx) => (
+                            <div className="flex flex-col gap-2">
+                                {displayedMaterials.length === 0 && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded">Список материалов пуст</p>}
+                                {displayedMaterials.map((item, idx) => (
                                     <div 
                                         key={idx} 
-                                        className={`flex items-start gap-2 group p-1 rounded transition-colors ${hoveredDeleteIndex === idx ? 'bg-red-50' : ''}`}
+                                        className={`flex items-start gap-2 group p-1 rounded transition-colors 
+                                            ${hoveredDeleteIndex === idx && !isPreviewMode ? 'bg-red-50' : ''}
+                                            ${item.status === 'added' ? 'bg-green-100 border border-green-200' : ''}
+                                            ${item.status === 'removed' ? 'bg-red-100 border border-red-200 opacity-70' : ''}
+                                        `}
                                     >
                                         <AutoResizeTextarea
-                                            value={mat}
+                                            value={item.text}
                                             onChange={(e) => handleEditMaterial(idx, e.target.value)}
-                                            className="block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded bg-slate-50 focus:bg-white transition-colors py-1.5 px-2"
+                                            disabled={isPreviewMode || item.status === 'removed'}
+                                            className={`block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded focus:bg-white transition-colors py-1.5 px-2
+                                                ${item.status !== 'current' ? 'bg-transparent border-transparent' : 'bg-slate-50'}
+                                            `}
                                         />
-                                        <button 
-                                            type="button" 
-                                            onClick={() => handleRemoveMaterial(idx)} 
-                                            onMouseEnter={() => setHoveredDeleteIndex(idx)}
-                                            onMouseLeave={() => setHoveredDeleteIndex(null)}
-                                            className="text-slate-400 hover:text-red-500 p-1.5 rounded hover:bg-red-100 mt-0.5 transition-colors"
-                                            title="Удалить строку"
-                                        >
-                                            <CloseIcon className="w-4 h-4" />
-                                        </button>
+                                        {!isPreviewMode && item.status === 'current' && (
+                                            <button 
+                                                type="button" 
+                                                onClick={() => handleRemoveMaterial(idx)} 
+                                                onMouseEnter={() => setHoveredDeleteIndex(idx)}
+                                                onMouseLeave={() => setHoveredDeleteIndex(null)}
+                                                className="text-slate-400 hover:text-red-500 p-1.5 rounded hover:bg-red-100 mt-0.5 transition-colors"
+                                                title="Удалить строку"
+                                            >
+                                                <CloseIcon className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                        {isPreviewMode && item.status === 'added' && <div className="p-1.5 mt-0.5 text-green-600 font-bold text-xs" title="Будет добавлено">+</div>}
+                                        {isPreviewMode && item.status === 'removed' && <div className="p-1.5 mt-0.5 text-red-600 font-bold text-xs" title="Будет удалено">-</div>}
                                     </div>
                                 ))}
                             </div>
@@ -658,13 +696,13 @@ const CertificateForm: React.FC<{
                             {/* Mass AI Edit Section */}
                             {formData.materials.length > 0 && ai && (
                                 <div className="mt-6 pt-4 border-t border-slate-200">
-                                    {!backupMaterials ? (
+                                    {!previewMaterials ? (
                                         <div className="flex gap-2">
                                             <input 
                                                 type="text" 
                                                 value={massEditPrompt}
                                                 onChange={e => setMassEditPrompt(e.target.value)}
-                                                placeholder="AI: 'Удали размеры', 'Исправь опечатки', 'Переведи'..."
+                                                placeholder="AI: 'Удали размеры', 'Исправь опечатки', 'Очистить список'..."
                                                 className="flex-grow text-sm border border-violet-200 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-violet-500"
                                                 onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAiMassEdit())}
                                             />
@@ -679,7 +717,7 @@ const CertificateForm: React.FC<{
                                         </div>
                                     ) : (
                                         <div className="bg-violet-50 p-3 rounded-md border border-violet-100 animate-fade-in-up">
-                                            <p className="text-xs text-violet-800 mb-2 font-medium">Список изменен с помощью AI. Сохранить изменения?</p>
+                                            <p className="text-xs text-violet-800 mb-2 font-medium">Предварительный просмотр изменений. Сохранить?</p>
                                             <div className="flex gap-2">
                                                 <button 
                                                     type="button" 
@@ -690,7 +728,7 @@ const CertificateForm: React.FC<{
                                                 </button>
                                                 <button 
                                                     type="button" 
-                                                    onClick={handleRestoreBackup}
+                                                    onClick={handleCancelMassEdit}
                                                     className="flex-1 bg-white border border-slate-300 text-slate-700 text-xs py-1.5 rounded hover:bg-slate-50"
                                                 >
                                                     Отменить
@@ -708,7 +746,7 @@ const CertificateForm: React.FC<{
 
             <div className="flex justify-end space-x-3 pt-6 mt-auto border-t border-slate-200 bg-white">
                 <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-md hover:bg-slate-300">Отмена</button>
-                <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-medium">Сохранить</button>
+                <button type="submit" disabled={isPreviewMode} className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed">Сохранить</button>
             </div>
         </form>
     );
