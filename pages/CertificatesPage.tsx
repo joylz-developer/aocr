@@ -1,8 +1,8 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { Certificate, ProjectSettings } from '../types';
 import Modal from '../components/Modal';
-import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon } from '../components/Icons';
+import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon } from '../components/Icons';
 import { GoogleGenAI } from '@google/genai';
 
 interface CertificatesPageProps {
@@ -18,6 +18,28 @@ interface AiSuggestions {
     validUntil?: string;
     materials?: string[];
 }
+
+// --- Helper Components ---
+
+const AutoResizeTextarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement>> = (props) => {
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useLayoutEffect(() => {
+        if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+            textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+        }
+    }, [props.value]);
+
+    return (
+        <textarea
+            ref={textareaRef}
+            {...props}
+            rows={1}
+            className={`resize-none overflow-hidden ${props.className || ''}`}
+        />
+    );
+};
 
 // --- Image Viewer Component with Pan & Zoom ---
 const ImageViewer: React.FC<{ src: string; alt: string }> = ({ src, alt }) => {
@@ -130,6 +152,15 @@ const CertificateForm: React.FC<{
     const [aiError, setAiError] = useState<string | null>(null);
     const [aiSuggestions, setAiSuggestions] = useState<AiSuggestions | null>(null);
     
+    // UI States
+    const [lastDeletedMaterial, setLastDeletedMaterial] = useState<{index: number, value: string} | null>(null);
+    const [hoveredDeleteIndex, setHoveredDeleteIndex] = useState<number | null>(null);
+    
+    // Mass Edit AI States
+    const [massEditPrompt, setMassEditPrompt] = useState('');
+    const [isMassEditing, setIsMassEditing] = useState(false);
+    const [backupMaterials, setBackupMaterials] = useState<string[] | null>(null);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
     const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
 
@@ -256,6 +287,67 @@ const CertificateForm: React.FC<{
         }
     };
 
+    // --- Mass Edit AI Logic ---
+    const handleAiMassEdit = async () => {
+        if (!ai || !massEditPrompt.trim() || formData.materials.length === 0) return;
+        setIsMassEditing(true);
+        
+        // Backup current state
+        if (!backupMaterials) {
+            setBackupMaterials([...formData.materials]);
+        }
+
+        try {
+            const prompt = `
+                Current materials list: ${JSON.stringify(formData.materials)}
+                User request: "${massEditPrompt}"
+                
+                Perform the requested operation on the list. 
+                Examples: 
+                - "Remove dimensions" -> strip sizes
+                - "Split by comma" -> explode items
+                - "Translate to English" -> translate
+                - "Fix typos" -> fix
+                
+                Return ONLY the new list of materials as a JSON array of strings. ["mat1", "mat2"]
+            `;
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: { parts: [{ text: prompt }] },
+                config: { responseMimeType: "application/json" }
+            });
+
+            const text = response.text;
+            if(!text) throw new Error("No response");
+            const result = JSON.parse(text);
+
+            if (Array.isArray(result)) {
+                setFormData(prev => ({ ...prev, materials: result }));
+            }
+        } catch (e) {
+            alert("Ошибка при обработке AI. Попробуйте другой запрос.");
+            console.error(e);
+        } finally {
+            setIsMassEditing(false);
+        }
+    };
+
+    const handleRestoreBackup = () => {
+        if (backupMaterials) {
+            setFormData(prev => ({ ...prev, materials: backupMaterials }));
+            setBackupMaterials(null);
+            setMassEditPrompt('');
+        }
+    };
+
+    const handleCommitMassEdit = () => {
+        setBackupMaterials(null);
+        setMassEditPrompt('');
+    };
+
+    // --- Material List Logic ---
+
     const handleAddMaterial = (materialName: string) => {
         const nameToAdd = materialName.trim();
         if (!nameToAdd) return;
@@ -271,10 +363,31 @@ const CertificateForm: React.FC<{
     };
 
     const handleRemoveMaterial = (index: number) => {
+        const itemToRemove = formData.materials[index];
+        setLastDeletedMaterial({ index, value: itemToRemove });
+        
         setFormData(prev => ({
             ...prev,
             materials: prev.materials.filter((_, i) => i !== index)
         }));
+    };
+
+    const handleUndoDelete = () => {
+        if (lastDeletedMaterial) {
+            setFormData(prev => {
+                const newMaterials = [...prev.materials];
+                newMaterials.splice(lastDeletedMaterial.index, 0, lastDeletedMaterial.value);
+                return { ...prev, materials: newMaterials };
+            });
+            setLastDeletedMaterial(null);
+        }
+    };
+
+    const handleRemoveAllMaterials = () => {
+        if (confirm("Вы уверены, что хотите удалить все материалы?")) {
+            setBackupMaterials([...formData.materials]); // Allow undo via mass edit logic or similar if desired, but here just simple clear
+            setFormData(prev => ({ ...prev, materials: [] }));
+        }
     };
 
     const handleEditMaterial = (index: number, newValue: string) => {
@@ -297,6 +410,9 @@ const CertificateForm: React.FC<{
 
     const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900";
     const labelClass = "block text-sm font-medium text-slate-700";
+
+    // Helper to check if AI suggestions are already all added
+    const areAllSuggestionsAdded = aiSuggestions?.materials?.every(m => formData.materials.includes(m));
 
     return (
         <form onSubmit={handleSubmit} className="flex flex-col h-[80vh] md:h-[70vh]">
@@ -408,43 +524,71 @@ const CertificateForm: React.FC<{
 
                         {/* Materials Section */}
                         <div className="border-t pt-4">
-                            <label className={labelClass}>Материалы</label>
+                            <div className="flex justify-between items-center mb-1">
+                                <label className={labelClass}>Материалы ({formData.materials.length})</label>
+                                {formData.materials.length > 0 && (
+                                    <button 
+                                        type="button" 
+                                        onClick={handleRemoveAllMaterials}
+                                        className="text-xs text-red-500 hover:text-red-700 underline"
+                                    >
+                                        Удалить все
+                                    </button>
+                                )}
+                            </div>
                             
                             {/* AI Materials Suggestions */}
-                            {aiSuggestions?.materials && aiSuggestions.materials.length > 0 && (
+                            {aiSuggestions?.materials && aiSuggestions.materials.length > 0 && !areAllSuggestionsAdded && (
                                 <div className="mb-4 bg-violet-50 border border-violet-100 rounded-md p-3">
                                     <div className="flex justify-between items-center mb-2">
                                         <p className="text-xs text-violet-700 font-bold flex items-center"><SparklesIcon className="w-3 h-3 mr-1"/> Найдено в документе</p>
-                                        <button 
-                                            type="button"
-                                            onClick={() => {
-                                                if (aiSuggestions.materials) {
-                                                    const unique = aiSuggestions.materials.filter(m => !formData.materials.includes(m));
-                                                    setFormData(prev => ({...prev, materials: [...prev.materials, ...unique]}));
-                                                }
-                                            }}
-                                            className="text-xs bg-violet-600 text-white px-2 py-1 rounded hover:bg-violet-700"
-                                        >
-                                            Добавить все
-                                        </button>
+                                        <div className="flex gap-2">
+                                            <button 
+                                                type="button"
+                                                onClick={() => {
+                                                    if (aiSuggestions.materials) {
+                                                        setFormData(prev => ({...prev, materials: [...aiSuggestions.materials!]}));
+                                                    }
+                                                }}
+                                                className="text-xs bg-white border border-violet-200 text-violet-700 px-2 py-1 rounded hover:bg-violet-50"
+                                            >
+                                                Заменить все
+                                            </button>
+                                            <button 
+                                                type="button"
+                                                onClick={() => {
+                                                    if (aiSuggestions.materials) {
+                                                        const unique = aiSuggestions.materials.filter(m => !formData.materials.includes(m));
+                                                        setFormData(prev => ({...prev, materials: [...prev.materials, ...unique]}));
+                                                    }
+                                                }}
+                                                className="text-xs bg-violet-600 text-white px-2 py-1 rounded hover:bg-violet-700"
+                                            >
+                                                Добавить все
+                                            </button>
+                                        </div>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
-                                        {aiSuggestions.materials.map((mat, idx) => (
-                                            !formData.materials.includes(mat) && (
+                                        {aiSuggestions.materials.map((mat, idx) => {
+                                            const isDuplicate = formData.materials.includes(mat);
+                                            return (
                                                 <button
                                                     key={idx}
                                                     type="button"
-                                                    onClick={() => handleAddMaterial(mat)}
-                                                    className="text-xs bg-white border border-violet-200 text-slate-700 px-2 py-1 rounded-full hover:border-violet-400 hover:text-violet-700 text-left max-w-full truncate"
-                                                    title="Нажмите, чтобы добавить"
+                                                    onClick={() => !isDuplicate && handleAddMaterial(mat)}
+                                                    disabled={isDuplicate}
+                                                    className={`text-xs border px-2 py-1 rounded-full text-left max-w-full truncate
+                                                        ${isDuplicate 
+                                                            ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-default line-through' 
+                                                            : 'bg-white border-violet-200 text-slate-700 hover:border-violet-400 hover:text-violet-700'
+                                                        }
+                                                    `}
+                                                    title={isDuplicate ? "Уже добавлено" : "Нажмите, чтобы добавить"}
                                                 >
-                                                    + {mat}
+                                                    {isDuplicate ? '' : '+ '}{mat}
                                                 </button>
-                                            )
-                                        ))}
-                                        {aiSuggestions.materials.every(m => formData.materials.includes(m)) && (
-                                            <span className="text-xs text-slate-400 italic">Все материалы добавлены</span>
-                                        )}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
@@ -467,29 +611,96 @@ const CertificateForm: React.FC<{
                                     <PlusIcon className="w-5 h-5"/>
                                 </button>
                             </div>
+                            
+                            {/* Undo Banner */}
+                            {lastDeletedMaterial && (
+                                <div className="mb-2 p-2 bg-slate-100 text-xs flex justify-between items-center rounded border border-slate-200 animate-fade-in-up">
+                                    <span className="text-slate-600 truncate mr-2">
+                                        Удалено: "{lastDeletedMaterial.value}"
+                                    </span>
+                                    <button 
+                                        type="button"
+                                        onClick={handleUndoDelete}
+                                        className="text-blue-600 font-medium hover:underline flex items-center gap-1 whitespace-nowrap"
+                                    >
+                                        <RestoreIcon className="w-3 h-3" /> Вернуть
+                                    </button>
+                                </div>
+                            )}
 
                             {/* Editable List */}
                             <div className="space-y-2">
                                 {formData.materials.length === 0 && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded">Список материалов пуст</p>}
                                 {formData.materials.map((mat, idx) => (
-                                    <div key={idx} className="flex items-start gap-2 group">
-                                        <textarea
+                                    <div 
+                                        key={idx} 
+                                        className={`flex items-start gap-2 group p-1 rounded transition-colors ${hoveredDeleteIndex === idx ? 'bg-red-50' : ''}`}
+                                    >
+                                        <AutoResizeTextarea
                                             value={mat}
                                             onChange={(e) => handleEditMaterial(idx, e.target.value)}
-                                            className="block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded bg-slate-50 focus:bg-white transition-colors py-1.5 px-2 resize-y"
-                                            rows={2}
+                                            className="block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded bg-slate-50 focus:bg-white transition-colors py-1.5 px-2"
                                         />
                                         <button 
                                             type="button" 
                                             onClick={() => handleRemoveMaterial(idx)} 
-                                            className="text-slate-400 hover:text-red-500 p-1 rounded hover:bg-slate-100 mt-1"
-                                            title="Удалить"
+                                            onMouseEnter={() => setHoveredDeleteIndex(idx)}
+                                            onMouseLeave={() => setHoveredDeleteIndex(null)}
+                                            className="text-slate-400 hover:text-red-500 p-1.5 rounded hover:bg-red-100 mt-0.5 transition-colors"
+                                            title="Удалить строку"
                                         >
                                             <CloseIcon className="w-4 h-4" />
                                         </button>
                                     </div>
                                 ))}
                             </div>
+                            
+                            {/* Mass AI Edit Section */}
+                            {formData.materials.length > 0 && ai && (
+                                <div className="mt-6 pt-4 border-t border-slate-200">
+                                    {!backupMaterials ? (
+                                        <div className="flex gap-2">
+                                            <input 
+                                                type="text" 
+                                                value={massEditPrompt}
+                                                onChange={e => setMassEditPrompt(e.target.value)}
+                                                placeholder="AI: 'Удали размеры', 'Исправь опечатки', 'Переведи'..."
+                                                className="flex-grow text-sm border border-violet-200 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                                onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAiMassEdit())}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleAiMassEdit}
+                                                disabled={isMassEditing || !massEditPrompt.trim()}
+                                                className="bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-3 py-2 rounded-md hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-50 text-sm whitespace-nowrap flex items-center"
+                                            >
+                                                {isMassEditing ? '...' : <SparklesIcon className="w-4 h-4" />}
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-violet-50 p-3 rounded-md border border-violet-100 animate-fade-in-up">
+                                            <p className="text-xs text-violet-800 mb-2 font-medium">Список изменен с помощью AI. Сохранить изменения?</p>
+                                            <div className="flex gap-2">
+                                                <button 
+                                                    type="button" 
+                                                    onClick={handleCommitMassEdit}
+                                                    className="flex-1 bg-violet-600 text-white text-xs py-1.5 rounded hover:bg-violet-700"
+                                                >
+                                                    Сохранить
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={handleRestoreBackup}
+                                                    className="flex-1 bg-white border border-slate-300 text-slate-700 text-xs py-1.5 rounded hover:bg-slate-50"
+                                                >
+                                                    Отменить
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                         </div>
                     </div>
                 </div>
