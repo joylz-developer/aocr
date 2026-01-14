@@ -13,6 +13,7 @@ import RegulationDetails from './RegulationDetails';
 import MaterialsInput from './MaterialsInput';
 
 const AUTO_NEXT_ID = 'AUTO_NEXT';
+const AUTO_NEXT_LABEL = '⬇️ Следующий по списку (Автоматически)';
 
 // Props for the main table component
 interface ActsTableProps {
@@ -214,7 +215,7 @@ const NextWorkPopover: React.FC<{
             <div className="p-2 border-b border-slate-100">
                 <input 
                     type="text" 
-                    placeholder="Поиск акта..." 
+                    placeholder="Поиск или ввод текста..." 
                     className="w-full text-sm border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -228,6 +229,18 @@ const NextWorkPopover: React.FC<{
                 >
                     -- Очистить / Нет связи --
                 </button>
+                
+                {searchTerm.trim() && (
+                     <button
+                        className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 border-b border-slate-100 flex items-center gap-2 group"
+                        onClick={() => onSelect(searchTerm)}
+                        title="Использовать введенный текст без привязки"
+                    >
+                        <EditIcon className="w-4 h-4 text-slate-400 group-hover:text-blue-500"/>
+                        <span className="truncate">✍️ Ввести вручную: <span className="font-semibold">"{searchTerm}"</span></span>
+                    </button>
+                )}
+
                 <button 
                     className="w-full text-left px-3 py-2 text-sm text-blue-700 bg-blue-50 hover:bg-blue-100 border-b border-blue-100 font-medium flex items-center gap-2"
                     onClick={() => onSelect(AUTO_NEXT_ID)}
@@ -245,7 +258,7 @@ const NextWorkPopover: React.FC<{
                         <div className="text-xs text-slate-500 truncate">{act.workName || 'Без названия'}</div>
                     </button>
                 )) : (
-                     <div className="px-3 py-4 text-center text-xs text-slate-400">Нет подходящих актов</div>
+                     !searchTerm && <div className="px-3 py-4 text-center text-xs text-slate-400">Нет подходящих актов</div>
                 )}
             </div>
         </div>
@@ -856,6 +869,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                 rowData.push(group ? group.name : '');
                             } else if (col.type === 'date') {
                                 rowData.push(formatDateForDisplay(act[col.key as keyof Act] as string));
+                            } else if (col.key === 'nextWork') {
+                                if (act.nextWorkActId === AUTO_NEXT_ID) {
+                                    rowData.push(AUTO_NEXT_LABEL);
+                                } else {
+                                    rowData.push(act.nextWork || '');
+                                }
                             } else {
                                  const key = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                                 rowData.push(act[key] || '');
@@ -928,6 +947,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 } else if (col.type === 'date') {
                     const columnKey = col.key as keyof Act;
                     (updatedAct as any)[columnKey] = parseDisplayDate(cellData) || '';
+                } else if (col.key === 'nextWork') {
+                    if (cellData.trim() === AUTO_NEXT_LABEL || cellData.includes('Следующий по списку (Автоматически)')) {
+                        updatedAct.nextWorkActId = AUTO_NEXT_ID;
+                        updatedAct.nextWork = ''; 
+                    } else {
+                        updatedAct.nextWork = cellData;
+                        updatedAct.nextWorkActId = undefined; // Explicitly clear binding for manual text
+                    }
                 }
                 else {
                     const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
@@ -1764,6 +1791,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                 const selectedAct = selectedActOrId as Act;
                                 updatedAct.nextWork = `Работы по акту №${selectedAct.number || 'б/н'} (${selectedAct.workName || '...'})`;
                                 updatedAct.nextWorkActId = selectedAct.id;
+                            } else if (typeof selectedActOrId === 'string') {
+                                // Manual text entry
+                                updatedAct.nextWork = selectedActOrId;
+                                updatedAct.nextWorkActId = undefined; // Clear binding
                             } else {
                                 updatedAct.nextWork = '';
                                 updatedAct.nextWorkActId = undefined;
