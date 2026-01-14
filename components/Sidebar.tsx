@@ -1,7 +1,7 @@
 
 import React from 'react';
-import { Page } from '../types';
-import { ChevronLeftIcon, ActsIcon, PeopleIcon, OrganizationsIcon, SettingsIcon, ImportIcon, ExportIcon, TemplateIcon, GroupsIcon, TrashIcon, BookIcon, CertificateIcon } from './Icons';
+import { Page, Theme } from '../types';
+import { ChevronLeftIcon, ActsIcon, PeopleIcon, OrganizationsIcon, SettingsIcon, ImportIcon, ExportIcon, TemplateIcon, GroupsIcon, TrashIcon, BookIcon, CertificateIcon, SunIcon, MoonIcon, EyeIcon } from './Icons';
 
 interface SidebarProps {
     isOpen: boolean;
@@ -13,6 +13,8 @@ interface SidebarProps {
     onImport: () => void;
     onExport: () => void;
     onChangeTemplate: () => void;
+    theme: Theme;
+    onToggleTheme: () => void;
 }
 
 const SidebarButton: React.FC<{
@@ -24,7 +26,8 @@ const SidebarButton: React.FC<{
     disabled?: boolean;
     onClick?: () => void;
     title?: string;
-}> = ({ icon, label, badge, isActive = false, isOpen, disabled = false, title, ...props }) => {
+    className?: string;
+}> = ({ icon, label, badge, isActive = false, isOpen, disabled = false, title, className, ...props }) => {
     const baseClasses = "flex items-center w-full text-left rounded-md transition-colors duration-200 relative";
     const sizeClasses = isOpen ? "px-4 py-2.5" : "p-3 justify-center";
     const stateClasses = disabled
@@ -35,7 +38,7 @@ const SidebarButton: React.FC<{
 
     return (
         <button
-            className={`${baseClasses} ${sizeClasses} ${stateClasses}`}
+            className={`${baseClasses} ${sizeClasses} ${stateClasses} ${className || ''}`}
             disabled={disabled}
             title={isOpen ? undefined : title || label}
             {...props}
@@ -51,7 +54,7 @@ const SidebarButton: React.FC<{
     );
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentPage, setCurrentPage, isTemplateLoaded, trashCount, onImport, onExport, onChangeTemplate }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentPage, setCurrentPage, isTemplateLoaded, trashCount, onImport, onExport, onChangeTemplate, theme, onToggleTheme }) => {
     const navItems = [
         { page: 'acts', label: 'Акты', icon: <ActsIcon className="w-5 h-5" /> },
         { page: 'people', label: 'Участники', icon: <PeopleIcon className="w-5 h-5" /> },
@@ -62,8 +65,24 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentPage, setCu
         { page: 'settings', label: 'Настройки', icon: <SettingsIcon className="w-5 h-5" /> },
     ];
 
+    const getThemeIcon = () => {
+        switch (theme) {
+            case 'dark': return <MoonIcon className="w-5 h-5" />;
+            case 'eye-protection': return <EyeIcon className="w-5 h-5" />;
+            default: return <SunIcon className="w-5 h-5" />;
+        }
+    };
+
+    const getThemeLabel = () => {
+        switch (theme) {
+            case 'dark': return 'Темная тема';
+            case 'eye-protection': return 'Защита глаз';
+            default: return 'Светлая тема';
+        }
+    };
+
     return (
-        <aside className={`bg-white shadow-lg flex flex-col transition-all duration-300 ease-in-out ${isOpen ? 'w-64' : 'w-20'}`}>
+        <aside className={`bg-white shadow-lg flex flex-col transition-all duration-300 ease-in-out ${isOpen ? 'w-64' : 'w-20'} z-20`}>
             <div className={`flex items-center border-b h-16 flex-shrink-0 ${isOpen ? 'justify-between px-4' : 'justify-center'}`}>
                 {isOpen && <h1 className="text-xl font-bold text-blue-700">DocGen AI</h1>}
                 <button
@@ -75,7 +94,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentPage, setCu
                 </button>
             </div>
 
-            <nav className="flex-grow p-3 space-y-1">
+            <nav className="flex-grow p-3 space-y-1 overflow-y-auto">
                 {navItems.map(item => (
                     <SidebarButton
                         key={item.page}
@@ -118,6 +137,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentPage, setCu
                     isOpen={isOpen}
                     disabled={!isTemplateLoaded}
                     onClick={onChangeTemplate}
+                 />
+                 
+                 <div className="my-1 border-t border-slate-100 pt-1"></div>
+                 
+                 <SidebarButton
+                    icon={getThemeIcon()}
+                    label={getThemeLabel()}
+                    isOpen={isOpen}
+                    onClick={onToggleTheme}
+                    className="text-slate-600 hover:bg-slate-100"
                  />
             </div>
         </aside>

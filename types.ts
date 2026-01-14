@@ -195,3 +195,5 @@ export interface DeletedActEntry {
   deletedOn: string; // ISO string
   associatedGroup?: CommissionGroup; // Snapshot of the group at time of deletion
 }
+
+export type Theme = 'light' | 'dark' | 'eye-protection';

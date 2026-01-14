@@ -1,7 +1,7 @@
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate } from './types';
+import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme } from './types';
 import TemplateUploader from './components/TemplateUploader';
 import ImportModal from './components/ImportModal';
 import ConfirmationModal from './components/ConfirmationModal';
@@ -60,6 +60,10 @@ const App: React.FC = () => {
         certificatePromptDate: DEFAULT_PROMPT_DATE,
         certificatePromptMaterials: DEFAULT_PROMPT_MATERIALS
     });
+    
+    // Theme State
+    const [theme, setTheme] = useLocalStorage<Theme>('app_theme', 'light');
+
     const [currentPage, setCurrentPage] = useState<Page>('acts');
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const importInputRef = useRef<HTMLInputElement>(null);
@@ -80,6 +84,26 @@ const App: React.FC = () => {
     // History State
     const [past, setPast] = useState<Act[][]>([]);
     const [future, setFuture] = useState<Act[][]>([]);
+
+    // Apply Theme
+    useEffect(() => {
+        const root = document.documentElement;
+        root.classList.remove('theme-dark', 'theme-eye-protection');
+        
+        if (theme === 'dark') {
+            root.classList.add('theme-dark');
+        } else if (theme === 'eye-protection') {
+            root.classList.add('theme-eye-protection');
+        }
+    }, [theme]);
+
+    const handleToggleTheme = () => {
+        setTheme(prev => {
+            if (prev === 'light') return 'dark';
+            if (prev === 'dark') return 'eye-protection';
+            return 'light';
+        });
+    };
 
     const handleTemplateUpload = async (file: File) => {
         try {
@@ -569,9 +593,11 @@ const App: React.FC = () => {
                 onImport={handleImportClick}
                 onExport={handleExportData}
                 onChangeTemplate={handleChangeTemplate}
+                theme={theme}
+                onToggleTheme={handleToggleTheme}
             />
             <div className="flex-1 flex flex-col overflow-hidden">
-                 <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
+                 <main className="flex-1 overflow-y-auto">
                     {!template ? (
                         <div className="h-full flex items-center justify-center">
                             <TemplateUploader onUpload={handleTemplateUpload} />

@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -217,9 +218,27 @@
       */
       background-attachment: local, local, scroll, scroll;
   }
+
+  /* --- Themes --- */
+  
+  html.theme-dark body {
+      filter: invert(1) hue-rotate(180deg);
+      background-color: #121212;
+  }
+  
+  html.theme-dark img,
+  html.theme-dark video,
+  html.theme-dark .no-invert {
+      filter: invert(1) hue-rotate(180deg);
+  }
+
+  html.theme-eye-protection body {
+      filter: sepia(0.4) contrast(0.9) brightness(0.95);
+      background-color: #fbf1c7;
+  }
 </style>
 </head>
-<body class="bg-slate-100 text-slate-800">
+<body class="bg-slate-100 text-slate-800 transition-colors duration-300">
   <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>
