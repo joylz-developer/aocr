@@ -27,7 +27,8 @@ const AutoResizeTextarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElem
     useLayoutEffect(() => {
         if (textareaRef.current) {
             textareaRef.current.style.height = 'auto';
-            textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+            // Add 2px to account for borders in border-box sizing, ensuring text isn't cut off
+            textareaRef.current.style.height = `${textareaRef.current.scrollHeight + 2}px`;
         }
     }, [props.value]);
 
@@ -656,12 +657,12 @@ const CertificateForm: React.FC<{
                             )}
 
                             {/* Editable List */}
-                            <div className="flex flex-col gap-2">
+                            <div className="flex flex-col gap-1">
                                 {displayedMaterials.length === 0 && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded">Список материалов пуст</p>}
                                 {displayedMaterials.map((item, idx) => (
                                     <div 
                                         key={idx} 
-                                        className={`flex items-start gap-2 group p-1 rounded transition-colors 
+                                        className={`flex items-start gap-1 group py-1 px-1 rounded transition-colors 
                                             ${hoveredDeleteIndex === idx && !isPreviewMode ? 'bg-red-50' : ''}
                                             ${item.status === 'added' ? 'bg-green-100 border border-green-200' : ''}
                                             ${item.status === 'removed' ? 'bg-red-100 border border-red-200 opacity-70' : ''}
@@ -671,7 +672,7 @@ const CertificateForm: React.FC<{
                                             value={item.text}
                                             onChange={(e) => handleEditMaterial(idx, e.target.value)}
                                             disabled={isPreviewMode || item.status === 'removed'}
-                                            className={`block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded focus:bg-white transition-colors py-1.5 px-2
+                                            className={`block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded focus:bg-white transition-colors py-1 px-2
                                                 ${item.status !== 'current' ? 'bg-transparent border-transparent' : 'bg-slate-50'}
                                             `}
                                         />
@@ -754,146 +755,97 @@ const CertificateForm: React.FC<{
 
 const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, settings, onSave, onDelete }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingCert, setEditingCert] = useState<Certificate | null>(null);
-    const [previewFile, setPreviewFile] = useState<{ type: 'pdf' | 'image', data: string } | null>(null);
+    const [editingCertificate, setEditingCertificate] = useState<Certificate | null>(null);
 
     const handleOpenModal = (cert: Certificate | null = null) => {
-        setEditingCert(cert);
+        setEditingCertificate(cert);
         setIsModalOpen(true);
     };
 
     const handleCloseModal = () => {
-        setEditingCert(null);
+        setEditingCertificate(null);
         setIsModalOpen(false);
-    };
-
-    const handlePreview = (cert: Certificate) => {
-        if (cert.fileData && cert.fileType) {
-            setPreviewFile({ type: cert.fileType, data: cert.fileData });
-        } else {
-            alert("Файл не загружен для этого сертификата.");
-        }
-    };
-
-    const openInNewTab = (fileData: string) => {
-        fetch(fileData)
-            .then(res => res.blob())
-            .then(blob => {
-                const url = URL.createObjectURL(blob);
-                window.open(url, '_blank');
-            })
-            .catch(err => {
-                console.error("Error opening file:", err);
-                alert("Не удалось открыть файл.");
-            });
     };
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
             <div className="flex justify-between items-center mb-6 flex-shrink-0">
-                <h1 className="text-2xl font-bold text-slate-800">Сертификаты и Паспорта</h1>
+                <h1 className="text-2xl font-bold text-slate-800">Сертификаты</h1>
                 <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
                     <PlusIcon /> Добавить сертификат
                 </button>
             </div>
 
-            <div className="flex-grow overflow-auto">
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {certificates.map(cert => (
-                        <div key={cert.id} className="border border-slate-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col h-full">
-                            {/* Thumbnail Section */}
-                            <div 
-                                className="h-40 bg-slate-100 border-b border-slate-100 flex items-center justify-center cursor-pointer relative overflow-hidden group"
-                                onClick={() => handlePreview(cert)}
-                                onDoubleClick={(e) => {
-                                    e.stopPropagation();
-                                    if(cert.fileData) openInNewTab(cert.fileData);
-                                }}
-                                title="Нажмите для предпросмотра, дважды для открытия в новой вкладке"
-                            >
-                                {cert.fileData ? (
-                                    cert.fileType === 'image' ? (
-                                        <img src={cert.fileData} alt={cert.number} className="w-full h-full object-cover" />
-                                    ) : (
-                                        <div className="w-full h-full relative pointer-events-none">
-                                            {/* Pointer events none to allow clicking the div container */}
-                                            <object data={cert.fileData} type="application/pdf" className="w-full h-full opacity-80" tabIndex={-1}>
-                                                <div className="flex items-center justify-center h-full">
-                                                    <CertificateIcon className="w-12 h-12 text-red-400" />
+            <div className="flex-grow overflow-auto border border-slate-200 rounded-md">
+                <table className="min-w-full divide-y divide-slate-200">
+                    <thead className="bg-slate-50 sticky top-0 z-10">
+                        <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Номер и дата</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Материалы</th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-slate-200">
+                        {certificates.length > 0 ? certificates.map(cert => (
+                            <tr key={cert.id} className="hover:bg-slate-50">
+                                <td className="px-6 py-4 whitespace-nowrap align-top">
+                                    <div className="flex items-center">
+                                        <CertificateIcon className="w-5 h-5 text-slate-400 mr-3" />
+                                        <div>
+                                            <div className="text-sm font-medium text-slate-900">{cert.number}</div>
+                                            <div className="text-sm text-slate-500">до {new Date(cert.validUntil).toLocaleDateString('ru-RU')}</div>
+                                            {cert.fileName && (
+                                                <div className="text-xs text-slate-400 mt-1 max-w-[200px] truncate" title={cert.fileName}>
+                                                    📎 {cert.fileName}
                                                 </div>
-                                            </object>
-                                            <div className="absolute inset-0 bg-transparent"></div>
+                                            )}
                                         </div>
-                                    )
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center text-slate-400">
-                                        <CertificateIcon className="w-10 h-10 mb-1 opacity-50" />
-                                        <span className="text-xs">Нет файла</span>
                                     </div>
-                                )}
-                                
-                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity flex items-center justify-center">
-                                    <span className="opacity-0 group-hover:opacity-100 bg-white/90 px-3 py-1 rounded-full text-xs font-medium shadow-sm">
-                                        Просмотр
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div className="p-4 flex flex-col flex-grow">
-                                <div className="flex justify-between items-start mb-2">
-                                    <div>
-                                        <h3 className="font-bold text-slate-800 text-sm leading-tight mb-1">{cert.number}</h3>
-                                        <p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p>
-                                    </div>
-                                    <div className="flex gap-1 ml-2">
-                                        <button onClick={() => handleOpenModal(cert)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
-                                        <button onClick={() => onDelete(cert.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
-                                    </div>
-                                </div>
-                                
-                                <div className="flex-grow">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Материалы:</p>
-                                    <ul className="text-xs text-slate-700 space-y-1">
-                                        {cert.materials.slice(0, 3).map((m, i) => (
-                                            <li key={i} className="truncate border-l-2 border-blue-100 pl-2">{m}</li>
-                                        ))}
-                                        {cert.materials.length > 3 && (
-                                            <li className="text-slate-400 pl-2 italic">...и еще {cert.materials.length - 3}</li>
+                                </td>
+                                <td className="px-6 py-4 align-top">
+                                    <div className="flex flex-wrap gap-1">
+                                        {cert.materials.length > 0 ? (
+                                            cert.materials.slice(0, 5).map((mat, idx) => (
+                                                <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                                    {mat}
+                                                </span>
+                                            ))
+                                        ) : (
+                                            <span className="text-sm text-slate-400 italic">Нет материалов</span>
                                         )}
-                                        {cert.materials.length === 0 && <li className="text-slate-400 italic pl-2">Список пуст</li>}
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                    {certificates.length === 0 && (
-                        <div className="col-span-full flex flex-col items-center justify-center py-20 text-slate-400">
-                             <CertificateIcon className="w-16 h-16 mb-4 opacity-20" />
-                             <p>База сертификатов пуста.</p>
-                        </div>
-                    )}
-                 </div>
+                                        {cert.materials.length > 5 && (
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
+                                                +{cert.materials.length - 5} еще...
+                                            </span>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium align-top">
+                                    <div className="flex justify-end space-x-2">
+                                        <button onClick={() => handleOpenModal(cert)} className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full" title="Редактировать"><EditIcon /></button>
+                                        <button onClick={() => onDelete(cert.id)} className="p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full" title="Удалить"><DeleteIcon /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        )) : (
+                            <tr>
+                                <td colSpan={3} className="text-center py-10 text-slate-500">
+                                    Сертификатов пока нет.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
             </div>
 
-            <Modal 
-                isOpen={isModalOpen} 
-                onClose={handleCloseModal} 
-                title={editingCert ? 'Редактировать сертификат' : 'Новый сертификат'}
-                maxWidth="max-w-[90vw] lg:max-w-7xl"
-                className="resize-x overflow-hidden"
-            >
-                <CertificateForm certificate={editingCert} settings={settings} onSave={onSave} onClose={handleCloseModal} />
-            </Modal>
-
-            {previewFile && (
-                <Modal isOpen={!!previewFile} onClose={() => setPreviewFile(null)} title="Просмотр документа" maxWidth="max-w-6xl">
-                    <div className="h-[75vh] w-full flex items-center justify-center bg-slate-100 rounded overflow-hidden">
-                        {previewFile.type === 'pdf' ? (
-                            <iframe src={previewFile.data} className="w-full h-full" title="PDF Preview" />
-                        ) : (
-                            <ImageViewer src={previewFile.data} alt="Certificate Preview" />
-                        )}
-                    </div>
+            {isModalOpen && (
+                <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingCertificate ? 'Редактировать сертификат' : 'Новый сертификат'} maxWidth="max-w-6xl" className="h-[90vh]">
+                    <CertificateForm
+                        certificate={editingCertificate}
+                        settings={settings}
+                        onSave={onSave}
+                        onClose={handleCloseModal}
+                    />
                 </Modal>
             )}
         </div>
