@@ -400,9 +400,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setCurrentPage('groups');
     };
 
-    const handleSaveWithTemplateResolution = useCallback((actToSave: Act) => {
-        const resolvedAct = { ...actToSave };
-
+    // Helper to resolve templates and return updated Act object (does NOT save)
+    const applyTemplatesToAct = useCallback((act: Act) => {
+        const actToSave = { ...act };
         const resolve = (templateStr: string, contextAct: Act) => {
             if (!templateStr || typeof templateStr !== 'string') return templateStr;
             return templateStr.replace(/\{(\w+)\}/g, (_, key) => {
@@ -415,23 +415,39 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 return value !== undefined && value !== null ? String(value) : '';
             });
         };
-        
-        const context = actToSave;
 
         if (settings.showAttachments && settings.defaultAttachments) {
-            resolvedAct.attachments = resolve(settings.defaultAttachments, context);
+            actToSave.attachments = resolve(settings.defaultAttachments, actToSave);
         }
         if (settings.showAdditionalInfo && settings.defaultAdditionalInfo) {
-            resolvedAct.additionalInfo = resolve(settings.defaultAdditionalInfo, context);
+            actToSave.additionalInfo = resolve(settings.defaultAdditionalInfo, actToSave);
         }
         
         const dateTemplate = settings.defaultActDate !== undefined ? settings.defaultActDate : '{workEndDate}';
-        const resolvedDateString = resolve(dateTemplate, context);
-        resolvedAct.date = parseDisplayDate(resolvedDateString) || resolvedAct.date;
+        const resolvedDateString = resolve(dateTemplate, actToSave);
+        actToSave.date = parseDisplayDate(resolvedDateString) || actToSave.date;
+        
+        return actToSave;
+    }, [settings]);
 
+    const handleSaveWithTemplateResolution = useCallback((actToSave: Act) => {
+        const resolvedAct = applyTemplatesToAct(actToSave);
         onSave(resolvedAct);
-    }, [onSave, settings]);
+    }, [onSave, applyTemplatesToAct]);
     
+    // Bulk Update Helper: Applies changes from a Map to the acts array and calls onReorderActs once
+    const performBulkUpdate = useCallback((modifiedActsMap: Map<string, Act>) => {
+        if (modifiedActsMap.size === 0) return;
+        
+        const finalActs = acts.map(act => {
+            if (modifiedActsMap.has(act.id)) {
+                return applyTemplatesToAct(modifiedActsMap.get(act.id)!);
+            }
+            return act;
+        });
+        onReorderActs(finalActs);
+    }, [acts, applyTemplatesToAct, onReorderActs]);
+
     const getOrgDetailsString = useCallback((org: Organization): string => {
         return `${org.name}, ИНН ${org.inn}, ОГРН ${org.ogrn}, ${org.address}`;
     }, []);
@@ -876,18 +892,28 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             });
             const minRow = Math.min(...coordsList.map(c => c.rowIndex));
             const minCol = Math.min(...coordsList.map(c => c.colIndex));
-            const updatedActsMap = new Map<string, Act>();
+            
+            const modifiedActsMap = new Map<string, Act>();
+
             for (const cellId of selectedCells) {
                 const [r, c] = cellId.split(':').map(Number);
                 const sourceRowIndex = (r - minRow) % pastedHeight;
                 const sourceColIndex = (c - minCol) % pastedWidth;
                 const cellData = pastedRows[sourceRowIndex]?.[sourceColIndex];
                 if (cellData === undefined) continue;
+                
                 const originalAct = acts[r];
                 if (!originalAct) continue;
-                let updatedAct = updatedActsMap.get(originalAct.id) || { ...originalAct };
+                
+                let updatedAct = modifiedActsMap.get(originalAct.id);
+                if (!updatedAct) {
+                    updatedAct = { ...originalAct };
+                    modifiedActsMap.set(originalAct.id, updatedAct);
+                }
+                
                 const col = columns[c];
                 if (!col || col.key === 'id') continue;
+                
                 if (col.key === 'workDates') {
                     const parts = cellData.split(' - ').map(s => s.trim());
                     const start = parseDisplayDate(parts[0]) || '';
@@ -907,23 +933,27 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                     (updatedAct as any)[columnKey] = cellData;
                 }
-                updatedActsMap.set(originalAct.id, updatedAct);
             }
-            const actsToSave = Array.from(updatedActsMap.values());
-            actsToSave.forEach(handleSaveWithTemplateResolution);
+            performBulkUpdate(modifiedActsMap);
             setCopiedCells(null);
         } catch (err) {
              console.error("Failed to paste: ", err);
         }
-    }, [selectedCells, acts, columns, groups, handleSaveWithTemplateResolution]);
+    }, [selectedCells, acts, columns, groups, performBulkUpdate]);
     
     const handleClearCells = useCallback(() => {
-        const updatedActsMap = new Map<string, Act>();
+        const modifiedActsMap = new Map<string, Act>();
         selectedCells.forEach(cellId => {
             const [r, c] = cellId.split(':').map(Number);
             const originalAct = acts[r];
             if (!originalAct) return;
-            let updatedAct = updatedActsMap.get(originalAct.id) || { ...originalAct };
+            
+            let updatedAct = modifiedActsMap.get(originalAct.id);
+            if (!updatedAct) {
+                updatedAct = { ...originalAct };
+                modifiedActsMap.set(originalAct.id, updatedAct);
+            }
+            
             const col = columns[c];
             if (!col || col.key === 'id') return;
             if (col.key === 'workDates') {
@@ -939,10 +969,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                 (updatedAct as any)[columnKey] = '';
             }
-            updatedActsMap.set(originalAct.id, updatedAct);
         });
-        Array.from(updatedActsMap.values()).forEach(handleSaveWithTemplateResolution);
-    }, [selectedCells, acts, columns, handleSaveWithTemplateResolution]);
+        performBulkUpdate(modifiedActsMap);
+    }, [selectedCells, acts, columns, performBulkUpdate]);
 
     const handleBulkDownload = () => {
         if (!template) {
@@ -1152,27 +1181,34 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             const selectedCols = Array.from(new Set(Array.from(selectedCells, id => parseInt(id.split(':')[1], 10)))).sort((a, b) => a - b);
             const { minRow: fillMinRow, maxRow: fillMaxRow } = normalizeSelection(fillTargetArea.start, fillTargetArea.end);
             const isFillingUpwards = fillMaxRow < selMinRow;
+            
             const actsToUpdate = new Map<string, Act>();
+            
             for (let r = fillMinRow; r <= fillMaxRow; r++) {
                 const targetAct = acts[r];
                 if (!targetAct) continue;
+                
                 let updatedAct = actsToUpdate.get(targetAct.id) || { ...targetAct };
+                
                 const patternRowIndex = isFillingUpwards
                     ? selMaxRow - ((selMinRow - 1 - r) % patternHeight)
                     : selMinRow + ((r - (selMaxRow + 1)) % patternHeight);
                 const sourceAct = acts[patternRowIndex];
                 if (!sourceAct) continue;
+                
                 for (const c of selectedCols) {
                     const sourceCellId = getCellId(patternRowIndex, c);
                     if (!selectedCells.has(sourceCellId)) continue;
                     const colKey = columns[c]?.key;
                     if (!colKey) continue;
+                    
                     if (colKey === 'workDates') {
                         updatedAct.workStartDate = sourceAct.workStartDate;
                         updatedAct.workEndDate = sourceAct.workEndDate;
                         updatedAct.date = sourceAct.workEndDate; 
                     } else if (colKey === 'commissionGroup') {
-                         handleGroupChange(updatedAct, sourceAct.commissionGroupId || '');
+                         // Note: We're not using handleGroupChange here to avoid immediate save recursion.
+                         // Instead we copy logic manually or rely on template resolution later.
                          const group = groups.find(g => g.id === sourceAct.commissionGroupId);
                          if (group) {
                             updatedAct.commissionGroupId = group.id;
@@ -1181,6 +1217,18 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                             updatedAct.contractorOrgId = group.contractorOrgId;
                             updatedAct.designerOrgId = group.designerOrgId;
                             updatedAct.workPerformerOrgId = group.workPerformerOrgId;
+                            
+                            // Re-apply org details strings logic if needed, but applyTemplatesToAct handles fields.
+                            // However, builderDetails string generation logic is inside handleGroupChange. 
+                            // We should really reuse that logic but purely functional.
+                            // For simplicity in filling, let's assume performBulkUpdate handles templates, 
+                            // but org details strings (builderDetails etc) are static strings on the object.
+                            // We should copy them from sourceAct or re-generate.
+                            // Copying from sourceAct is safer if they belong to the same group.
+                            updatedAct.builderDetails = sourceAct.builderDetails;
+                            updatedAct.contractorDetails = sourceAct.contractorDetails;
+                            updatedAct.designerDetails = sourceAct.designerDetails;
+                            updatedAct.workPerformer = sourceAct.workPerformer;
                          } else {
                             updatedAct.commissionGroupId = undefined;
                          }
@@ -1192,7 +1240,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 }
                 actsToUpdate.set(updatedAct.id, updatedAct);
             }
-            Array.from(actsToUpdate.values()).forEach(handleSaveWithTemplateResolution);
+            performBulkUpdate(actsToUpdate);
             setIsFilling(false);
             setFillTargetArea(null);
         };
@@ -1204,7 +1252,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isFilling, selectedCells, fillTargetArea, acts, columns, groups, handleGroupChange, handleSaveWithTemplateResolution]);
+    }, [isFilling, selectedCells, fillTargetArea, acts, columns, groups, performBulkUpdate]);
 
 
     // [Drag handlers...]
