@@ -249,12 +249,17 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                 return true;
             });
 
+            // Track unique columns involved in the selection to tailor the prompt
+            const involvedFieldKeys = new Set<string>();
+
             const cellsToUpdate = Array.from(selectedCells).map(cellId => {
                 const [rowIndex, colIndex] = cellId.split(':').map(Number);
                 const act = acts[rowIndex];
                 const col = finalCols[colIndex];
                 if (!act || !col) return null;
                 
+                involvedFieldKeys.add(col.key);
+
                 // Special handling for calculated/virtual fields if needed, 
                 // but for editing we mainly care about direct properties
                 let value = '';
@@ -272,21 +277,53 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                 };
             }).filter(Boolean);
 
+            if (cellsToUpdate.length === 0) return;
+
             const ai = new GoogleGenAI({ apiKey: settings.geminiApiKey! });
             
+            // Define data formats for specific columns
+            const columnRules: Record<string, string> = {
+                number: "String/Number. Act number (e.g. '1', '14-A').",
+                date: "Date (YYYY-MM-DD). Date of the act signing.",
+                workDates: "Date Range (YYYY-MM-DD - YYYY-MM-DD). Start and End date of works.",
+                workName: "Text. Specific construction work description (e.g. 'Installation of concrete foundations').",
+                projectDocs: "Text. References to project drawings/sheets.",
+                materials: "Text. List of materials used (name, brand, certificate).",
+                certs: "Text. Executive schemes and drawings.",
+                regulations: "Text. Building codes and regulations (SNiP, SP, GOST).",
+                nextWork: "Text. Description of next construction stage allowed.",
+                additionalInfo: "Text. Any additional notes.",
+                copiesCount: "Integer. Number of copies.",
+                attachments: "Text. List of attached documents.",
+                commissionGroup: "Text. Name of the commission group."
+            };
+
+            const involvedColumnsInfo = Array.from(involvedFieldKeys).map(key => {
+                const colDef = ALL_COLUMNS.find(c => c.key === key);
+                return `- Field "${key}" (${colDef?.label}): ${columnRules[key] || "Text"}`;
+            }).join('\n');
+
             const prompt = `
-                I have a list of table cells with their current values.
+                I have a list of table cells from a Construction Act (AOSR) document.
+                
                 User Instruction: "${aiPrompt}"
                 
-                Cells Data:
+                You must update the cell values based on the User Instruction.
+                
+                CRITICAL: You must strictly follow the data format for each column type defined below.
+                If the user asks to "generate data", generate realistic Russian construction data appropriate for each specific column.
+                
+                Column Definitions and Formats:
+                ${involvedColumnsInfo}
+                
+                Current Cells Data (JSON):
                 ${JSON.stringify(cellsToUpdate)}
                 
-                Return the updated values in JSON format as an array of objects:
-                [ { "id": "record_id", "field": "field_key", "value": "new_value" }, ... ]
-                
-                For 'workDates' field, return value in format "YYYY-MM-DD - YYYY-MM-DD".
-                For 'date' or other date fields, use YYYY-MM-DD.
-                Only return the JSON array.
+                Output Rule:
+                - Return the updated values in JSON format as an array of objects.
+                - Format: [ { "id": "record_id", "field": "field_key", "value": "new_value" }, ... ]
+                - Do not include markdown formatting. Just the raw JSON string.
+                - Dates MUST be YYYY-MM-DD.
             `;
 
             const response = await ai.models.generateContent({
@@ -400,7 +437,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     </p>
                     <textarea
                         className="w-full h-32 p-3 border border-slate-300 rounded-md focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none resize-none"
-                        placeholder="Например: 'Переведи на английский', 'Исправь опечатки', 'Добавь префикс...'"
+                        placeholder="Например: 'Переведи на английский', 'Исправь опечатки', 'Сгенерируй случайные даты'..."
                         value={aiPrompt}
                         onChange={(e) => setAiPrompt(e.target.value)}
                         autoFocus
