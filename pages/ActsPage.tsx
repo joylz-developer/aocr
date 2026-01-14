@@ -3,10 +3,11 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation, Certificate } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import Modal from '../components/Modal';
-import { PlusIcon, HelpIcon, ColumnsIcon } from '../components/Icons';
+import { PlusIcon, HelpIcon, ColumnsIcon, SparklesIcon } from '../components/Icons';
 import ActsTable from '../components/ActsTable';
 import DeleteActsConfirmationModal from '../components/DeleteActsConfirmationModal';
 import { ALL_COLUMNS } from '../components/ActsTableConfig';
+import { GoogleGenAI } from '@google/genai';
 
 interface ActsPageProps {
     acts: Act[];
@@ -117,6 +118,7 @@ const ColumnPicker: React.FC<{
 const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, regulations, certificates, template, settings, onSave, onMoveToTrash, onReorderActs, setCurrentPage }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
+    const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
     const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
         'acts_table_visible_columns_v4', 
         new Set(ALL_COLUMNS.filter(c => c.key !== 'id').map(c => c.key))
@@ -128,6 +130,11 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
     );
 
     const [actsPendingDeletion, setActsPendingDeletion] = useState<Act[] | null>(null);
+    
+    // AI Edit State
+    const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+    const [aiPrompt, setAiPrompt] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
 
     
     const pickableColumns = useMemo(() => {
@@ -140,8 +147,8 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         });
     }, [settings]);
 
-    const handleCreateNewAct = () => {
-        const newAct: Act = {
+    const createNewActFactory = () => {
+         return {
             id: crypto.randomUUID(),
             number: '', 
             date: new Date().toISOString().split('T')[0],
@@ -163,6 +170,10 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
             attachments: settings.defaultAttachments || '', 
             representatives: {},
         };
+    };
+
+    const handleCreateNewAct = () => {
+        const newAct = createNewActFactory();
         const insertIndex = activeCell ? activeCell.rowIndex + 1 : acts.length;
         onSave(newAct, insertIndex);
     };
@@ -170,6 +181,114 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
     const handleRequestDelete = (actIds: string[]) => {
         const actsToDelete = acts.filter(a => actIds.includes(a.id));
         setActsPendingDeletion(actsToDelete);
+    };
+
+    const handleAiEditClick = () => {
+        if (selectedCells.size === 0) {
+            alert("Пожалуйста, выделите ячейки для редактирования.");
+            return;
+        }
+        if (!settings.geminiApiKey) {
+            alert("Пожалуйста, добавьте API ключ Gemini в настройках.");
+            setCurrentPage('settings');
+            return;
+        }
+        setIsAiModalOpen(true);
+    };
+
+    const handleAiEditSubmit = async () => {
+        if (!aiPrompt.trim()) return;
+        setAiLoading(true);
+
+        try {
+            // Reconstruct visible columns logic to map colIndex to key
+            const colMap = new Map(ALL_COLUMNS.map(col => [col.key, col]));
+            const orderedCols = columnOrder
+                .filter(key => colMap.has(key as any) && visibleColumns.has(key))
+                .map(key => colMap.get(key as any)!);
+            
+            const finalCols = [...orderedCols, ...ALL_COLUMNS.filter(c => visibleColumns.has(c.key) && !orderedCols.some(oc => oc.key === c.key))].filter(col => {
+                 if (col.key === 'date' && !settings.showActDate) return false;
+                if (col.key === 'additionalInfo' && !settings.showAdditionalInfo) return false;
+                if (col.key === 'attachments' && !settings.showAttachments) return false;
+                if (col.key === 'copiesCount' && !settings.showCopiesCount) return false;
+                return true;
+            });
+
+            const cellsToUpdate = Array.from(selectedCells).map(cellId => {
+                const [rowIndex, colIndex] = cellId.split(':').map(Number);
+                const act = acts[rowIndex];
+                const col = finalCols[colIndex];
+                if (!act || !col) return null;
+                
+                // Special handling for calculated/virtual fields if needed, 
+                // but for editing we mainly care about direct properties
+                let value = '';
+                 if (col.key === 'workDates') {
+                     value = `${act.workStartDate} - ${act.workEndDate}`;
+                 } else {
+                     // @ts-ignore
+                     value = act[col.key] || '';
+                 }
+                
+                return {
+                    id: act.id,
+                    field: col.key,
+                    value: value
+                };
+            }).filter(Boolean);
+
+            const ai = new GoogleGenAI({ apiKey: settings.geminiApiKey! });
+            
+            const prompt = `
+                I have a list of table cells with their current values.
+                User Instruction: "${aiPrompt}"
+                
+                Cells Data:
+                ${JSON.stringify(cellsToUpdate)}
+                
+                Return the updated values in JSON format as an array of objects:
+                [ { "id": "record_id", "field": "field_key", "value": "new_value" }, ... ]
+                
+                For 'workDates' field, return value in format "YYYY-MM-DD - YYYY-MM-DD".
+                For 'date' or other date fields, use YYYY-MM-DD.
+                Only return the JSON array.
+            `;
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: { parts: [{ text: prompt }] },
+                config: { responseMimeType: "application/json" }
+            });
+
+            const result = JSON.parse(response.text);
+            
+            if (Array.isArray(result)) {
+                result.forEach((update: any) => {
+                    const actToUpdate = acts.find(a => a.id === update.id);
+                    if (actToUpdate) {
+                         const newAct = { ...actToUpdate };
+                         if (update.field === 'workDates') {
+                             const parts = update.value.split(' - ').map((s: string) => s.trim());
+                             newAct.workStartDate = parts[0] || '';
+                             newAct.workEndDate = parts[1] || parts[0] || '';
+                         } else {
+                             // @ts-ignore
+                             newAct[update.field] = update.value;
+                         }
+                         onSave(newAct);
+                    }
+                });
+            }
+            
+            setIsAiModalOpen(false);
+            setAiPrompt('');
+        } catch (error) {
+            console.error(error);
+            alert("Ошибка при обработке AI запроса.");
+        } finally {
+            setAiLoading(false);
+        }
     };
 
 
@@ -183,6 +302,14 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     </button>
                 </div>
                 <div className="flex items-center gap-3">
+                     <button 
+                        onClick={handleAiEditClick}
+                        disabled={selectedCells.size === 0}
+                        className="flex items-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-4 py-2 rounded-md hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
+                        title="Редактировать выделенные ячейки с помощью AI"
+                    >
+                        <SparklesIcon className="w-5 h-5" /> AI Редактор
+                    </button>
                     <ColumnPicker 
                         pickableColumns={pickableColumns}
                         visibleColumns={visibleColumns} 
@@ -209,6 +336,9 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     onColumnOrderChange={setColumnOrder}
                     activeCell={activeCell}
                     setActiveCell={setActiveCell}
+                    selectedCells={selectedCells}
+                    setSelectedCells={setSelectedCells}
+                    createNewAct={createNewActFactory}
                     onSave={onSave}
                     onRequestDelete={handleRequestDelete}
                     onReorderActs={onReorderActs}
@@ -228,6 +358,36 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     }}
                 />
             )}
+            
+            <Modal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} title="AI Редактор ячеек">
+                <div className="space-y-4">
+                    <p className="text-sm text-slate-600">
+                        Опишите, как нужно изменить данные в выделенных ячейках ({selectedCells.size} шт.).
+                    </p>
+                    <textarea
+                        className="w-full h-32 p-3 border border-slate-300 rounded-md focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none resize-none"
+                        placeholder="Например: 'Переведи на английский', 'Исправь опечатки', 'Добавь префикс...'"
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        autoFocus
+                    />
+                    <div className="flex justify-end gap-3 pt-2">
+                        <button 
+                            onClick={() => setIsAiModalOpen(false)}
+                            className="px-4 py-2 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md"
+                        >
+                            Отмена
+                        </button>
+                        <button 
+                            onClick={handleAiEditSubmit}
+                            disabled={aiLoading || !aiPrompt.trim()}
+                            className="px-4 py-2 bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {aiLoading ? 'Обработка...' : <><SparklesIcon className="w-4 h-4" /> Выполнить</>}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
 
             <Modal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} title="Справка по заполнению шаблона">
                 <div className="prose max-w-none text-slate-700 allow-text-selection">

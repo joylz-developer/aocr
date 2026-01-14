@@ -19,7 +19,7 @@ interface ActsTableProps {
     organizations: Organization[];
     groups: CommissionGroup[];
     regulations: Regulation[];
-    certificates?: Certificate[]; // Optional for backward compatibility but used
+    certificates?: Certificate[];
     template: string | null;
     settings: ProjectSettings;
     visibleColumns: Set<string>;
@@ -27,16 +27,21 @@ interface ActsTableProps {
     onColumnOrderChange: (newOrder: string[]) => void;
     activeCell: Coords | null;
     setActiveCell: (cell: Coords | null) => void;
+    // Lifted state
+    selectedCells: Set<string>;
+    setSelectedCells: (cells: Set<string>) => void;
+    
     onSave: (act: Act, insertAtIndex?: number) => void;
     onRequestDelete: (ids: string[]) => void;
     onReorderActs: (newActs: Act[]) => void;
     setCurrentPage: (page: Page) => void;
+    createNewAct: () => Act; // Factory for context menu insertions
 }
 
 const formatDateForDisplay = (dateString: string): string => {
     if (!dateString) return '';
     const dateParts = dateString.split('-');
-    if (dateParts.length !== 3) return dateString; // Return original if not in YYYY-MM-DD format
+    if (dateParts.length !== 3) return dateString; 
     const [year, month, day] = dateParts;
     return `${day}.${month}.${year}`;
 };
@@ -54,12 +59,11 @@ const parseDisplayDate = (dateString: string): string | null => {
     
     const date = new Date(Date.UTC(year, month - 1, day));
     if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
-        return null; // Invalid date like 31.02.2024
+        return null;
     }
 
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 };
-
 
 const DateEditorPopover: React.FC<{
     act: Act;
@@ -82,15 +86,12 @@ const DateEditorPopover: React.FC<{
 
     const handleDateChange = (field: 'workStartDate' | 'workEndDate', value: string) => {
         const updatedAct = { ...act, [field]: value };
-        
-        // Ensure end date is not before start date
         if (field === 'workStartDate' && value && updatedAct.workEndDate && new Date(updatedAct.workEndDate) < new Date(value)) {
             updatedAct.workEndDate = value;
         }
         if (field === 'workEndDate' && value && updatedAct.workStartDate && new Date(value) < new Date(updatedAct.workStartDate)) {
             updatedAct.workStartDate = value;
         }
-
         onActChange(updatedAct);
     };
     
@@ -244,11 +245,11 @@ const NextWorkPopover: React.FC<{
 
 
 // Main Table Component
-const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, certificates = [], template, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, onSave, onRequestDelete, onReorderActs, setCurrentPage }) => {
+const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, certificates = [], template, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, selectedCells, setSelectedCells, onSave, onRequestDelete, onReorderActs, setCurrentPage, createNewAct }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [dateError, setDateError] = useState<string | null>(null);
-    const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
+    // REMOVED local selectedCells state, using props
     const [copiedCells, setCopiedCells] = useState<Set<string> | null>(null);
     const [isDraggingSelection, setIsDraggingSelection] = useState(false);
     const [isFilling, setIsFilling] = useState(false);
@@ -298,7 +299,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; rowIndex: number; colIndex: number } | null>(null);
 
     const tableContainerRef = useRef<HTMLDivElement>(null);
-    // Ref for the specific div that handles scrolling
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     
     const editorRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
@@ -313,15 +313,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     }, [acts]);
 
     const columns = useMemo(() => {
-        // Map available columns by key for easy lookup
         const colMap = new Map(ALL_COLUMNS.map(col => [col.key, col]));
-        
-        // Start with the persisted order, filter valid and visible columns
         const orderedCols = columnOrder
             .filter(key => colMap.has(key as any) && visibleColumns.has(key))
             .map(key => colMap.get(key as any)!);
 
-        // Check if there are any visible columns NOT in the order list (e.g. new features) and append them
         const orderedKeys = new Set(orderedCols.map(c => c.key));
         const missingCols = ALL_COLUMNS.filter(c => visibleColumns.has(c.key) && !orderedKeys.has(c.key));
 
@@ -338,8 +334,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const getCellId = (rowIndex: number, colIndex: number) => `${rowIndex}:${colIndex}`;
     
-    // Helper to get relative coordinates for popovers inside the container
-    // Calculates position relative to tableContainerRef (which wraps everything)
     const getRelativeCoords = (target: HTMLElement) => {
         if (!tableContainerRef.current) return { top: 0, left: 0, width: 0 };
         const containerRect = tableContainerRef.current.getBoundingClientRect();
@@ -356,13 +350,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (selectedCells.size === 0 || columns.length === 0) {
             return rowsFullySelected;
         }
-
         const cellsByRow = new Map<number, number>();
         for (const cellId of selectedCells) {
             const [rowIndex] = cellId.split(':').map(Number);
             cellsByRow.set(rowIndex, (cellsByRow.get(rowIndex) || 0) + 1);
         }
-
         for (const [rowIndex, count] of cellsByRow.entries()) {
             if (count === columns.length) {
                 rowsFullySelected.add(rowIndex);
@@ -371,16 +363,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         return rowsFullySelected;
     }, [selectedCells, columns]);
     
-    // Check if a full column is selected
     const selectedColumns = useMemo(() => {
         if (selectedCells.size === 0 || acts.length === 0) return new Set<number>();
-        
         const cellsByCol = new Map<number, number>();
         for (const cellId of selectedCells) {
             const [, colIndex] = cellId.split(':').map(Number);
             cellsByCol.set(colIndex, (cellsByCol.get(colIndex) || 0) + 1);
         }
-
         const colsFullySelected = new Set<number>();
         for (const [colIndex, count] of cellsByCol.entries()) {
             if (count === acts.length) {
@@ -389,7 +378,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
         return colsFullySelected;
     }, [selectedCells, acts.length]);
-
 
     const affectedRowsFromSelection = useMemo(() => {
         return new Set(Array.from(selectedCells, cellId => parseInt(cellId.split(':')[0], 10)));
@@ -474,7 +462,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const closeEditor = useCallback(() => {
         setEditingCell(null);
         setDateError(null);
-        // Do not verify popovers here, they are handled separately or auto-closed on selection change
     }, []);
     
     const handleEditorSave = useCallback(() => {
@@ -536,27 +523,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (!editingCell) return;
     
         const handleClickOutside = (event: MouseEvent) => {
-            // Prevent editor closing if clicking inside a popover that belongs to the editor context
-            // Checking if click target is inside a known overlay or the editor itself
-            // Since MaterialsInput uses a Modal, we need to be careful not to close the editor when interacting with the modal.
-            // But Modal is rendered via Portal/Fixed overlay often.
-            // Simple check: if target is within editorContainerRef, don't close.
-            // Popovers usually stopPropagation, but if not, we can check logic.
-
             if (datePopoverState || regulationsModalOpen || regulationPopoverState) return;
-            
-            // NOTE: For MaterialsInput modal, since it renders in a Portal or separate layer, click outside checks might fail.
-            // However, MaterialsInput handles its own state. If we click "outside" the editor cell (e.g. on another cell), we should close.
-            // If we click inside the Modal spawned by MaterialsInput, we should NOT close.
-            // Usually modals stop propagation or use a backdrop.
-
             if (editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
-                // Heuristic: if click is on a modal overlay, don't close editor yet
-                const isModalClick = (event.target as HTMLElement).closest('.fixed.inset-0.z-50'); // standard modal class in this app
+                const isModalClick = (event.target as HTMLElement).closest('.fixed.inset-0.z-50');
                 if (isModalClick) return;
 
-                handleEditorSave(); // Attempt to save
-                closeEditor(); // Always close editor, discarding invalid input if save fails
+                handleEditorSave();
+                closeEditor();
             }
         };
     
@@ -594,7 +567,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             
             setEditorValue(String(initialValue));
             
-            // Focus logic inside setTimeout to ensure DOM is ready and refs are attached
             setTimeout(() => {
                 if (col.key !== 'regulations' && col.key !== 'materials') { 
                      if (editorRef.current) editorRef.current.focus();
@@ -648,7 +620,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             return prev + sep + newText;
         });
         
-        // Don't close editor automatically, let user see added chips
         if (editorRef.current instanceof HTMLTextAreaElement) {
              setTimeout(() => {
                  if (editorRef.current) {
@@ -693,18 +664,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (e.detail > 1) e.preventDefault();
         setCopiedCells(null);
         
-        // Auto-close popovers when clicking a cell
         setDatePopoverState(null);
         setRegulationPopoverState(null);
         setNextWorkPopoverState(null);
 
-        // Right-Click Fix: If Right-Click (button 2) and cell is already selected, don't change selection
         if (e.button === 2) {
              const cellId = getCellId(rowIndex, colIndex);
              if (selectedCells.has(cellId)) return;
         }
     
-        // Regular cell selection logic
         const cellId = getCellId(rowIndex, colIndex);
         if (e.shiftKey && activeCell) {
             const { minRow, maxRow, minCol, maxCol } = normalizeSelection(activeCell, { rowIndex, colIndex });
@@ -731,7 +699,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     };
     
-    // ... [Rest of selection/drag/copy/paste logic remains the same] ...
     const handleRowHeaderMouseDown = (e: React.MouseEvent, rowIndex: number) => {
         dragHandlePressedRef.current = true;
         tableContainerRef.current?.focus({ preventScroll: true });
@@ -984,21 +951,18 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
         const isCtrlKey = isMac ? e.metaKey : e.ctrlKey;
 
-        // Copy (Ctrl+C / Cmd+C)
         if (e.code === 'KeyC' && isCtrlKey) {
             e.preventDefault();
             handleCopy();
             return;
         }
 
-        // Paste (Ctrl+V / Cmd+V)
         if (e.code === 'KeyV' && isCtrlKey) {
             e.preventDefault();
             handlePaste();
             return;
         }
 
-        // Arrow Navigation
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
             e.preventDefault();
             
@@ -1019,11 +983,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
             const newCellId = getCellId(rowIndex, colIndex);
             
-            // For now, treat arrow keys as moving selection, not extending (unless Shift implemented later)
             setActiveCell({ rowIndex, colIndex });
             setSelectedCells(new Set([newCellId]));
             
-            // Simple scroll into view if needed
             const cellEl = document.querySelector(`td[data-row-index="${rowIndex}"][data-col-index="${colIndex}"]`);
             cellEl?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
             return;
@@ -1033,10 +995,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             e.preventDefault();
             handleClearCells();
         }
-    }, [editingCell, selectedCells, handleClearCells, handleCopy, handlePaste, activeCell, setActiveCell, acts.length, columns.length]);
+    }, [editingCell, selectedCells, handleClearCells, handleCopy, handlePaste, activeCell, setActiveCell, acts.length, columns.length, setSelectedCells]);
 
-    // [Auto-scroll logic, effects for dragging/filling omitted for brevity as they are unchanged logic]
-    // ... [Same implementation as previous version] ...
+    // [Auto-scroll and Drag-select effects omitted for brevity but presumed kept or updated to use props]
+    // Since I'm providing full content, I'll include them to be safe.
+    
     useEffect(() => {
         const scrollContainer = scrollContainerRef.current;
         if (!isDraggingSelection || !scrollContainer) return;
@@ -1107,10 +1070,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isDraggingSelection, activeCell]);
+    }, [isDraggingSelection, activeCell, setSelectedCells]);
 
-    // [Filling logic omitted for brevity - same as before]
-    useEffect(() => {
+    // Filling effect
+     useEffect(() => {
         const getSelectionBounds = (cells: Set<string>): { minRow: number; maxRow: number; minCol: number; maxCol: number } | null => {
             const coordsList = Array.from(cells).map(id => {
                 const [rowIndex, colIndex] = id.split(':').map(Number);
@@ -1208,7 +1171,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     }, [isFilling, selectedCells, fillTargetArea, acts, columns, groups, handleGroupChange, handleSaveWithTemplateResolution]);
 
 
-    // [Drag handlers omitted for brevity - same as before]
+    // [Drag handlers...]
     const handleRowDragStart = (e: React.DragEvent<HTMLTableRowElement>, rowIndex: number) => {
         if (editingCell) { e.preventDefault(); return; }
         if (!dragHandlePressedRef.current) { e.preventDefault(); return; }
@@ -1363,11 +1326,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setContextMenu({ x: e.clientX, y: e.clientY, rowIndex, colIndex });
     };
 
-    useEffect(() => {
-        if (activeCell && tableContainerRef.current) {}
-    }, [activeCell]);
-
-
     return (
         <div 
             className="h-full flex flex-col relative outline-none" 
@@ -1426,7 +1384,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                             acts.map((act, rowIndex) => {
                                 const isRowSelected = selectedRows.has(rowIndex);
                                 const isRowDragged = draggedRowIndices?.includes(rowIndex);
-                                const isDropTarget = dropTargetRowIndex === rowIndex;
                                 
                                 return (
                                     <tr 
@@ -1729,8 +1686,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         label="Вставить строку выше" 
                         icon={<RowAboveIcon className="w-4 h-4" />}
                         onClick={() => { 
-                             const act = acts[contextMenu.rowIndex];
-                             if (act) onSave(act, contextMenu.rowIndex);
+                             const newAct = createNewAct();
+                             onSave(newAct, contextMenu.rowIndex);
                              setContextMenu(null);
                         }} 
                     />
@@ -1738,8 +1695,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         label="Вставить строку ниже" 
                         icon={<RowBelowIcon className="w-4 h-4" />}
                         onClick={() => { 
-                             const act = acts[contextMenu.rowIndex];
-                             if (act) onSave(act, contextMenu.rowIndex + 1);
+                             const newAct = createNewAct();
+                             onSave(newAct, contextMenu.rowIndex + 1);
                              setContextMenu(null);
                         }} 
                     />
