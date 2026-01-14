@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation, Certificate } from '../types';
 import Modal from './Modal';
-import { DeleteIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon, CloseIcon, GripVerticalIcon } from './Icons';
+import { DeleteIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon, CloseIcon, GripVerticalIcon, DownloadIcon } from './Icons';
 import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
 import { ALL_COLUMNS } from './ActsTableConfig';
@@ -688,6 +688,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const handleCellMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
         tableContainerRef.current?.focus({ preventScroll: true });
         
+        setContextMenu(null); // Ensure context menu is closed on left click
+
         if (e.detail > 1) e.preventDefault();
         setCopiedCells(null);
         
@@ -948,6 +950,20 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         });
         Array.from(updatedActsMap.values()).forEach(handleSaveWithTemplateResolution);
     }, [selectedCells, acts, columns, handleSaveWithTemplateResolution]);
+
+    const handleBulkDownload = () => {
+        if (!template) {
+            alert('Сначала загрузите шаблон.');
+            return;
+        }
+        
+        Array.from(selectedRows).forEach(rowIndex => {
+            const act = acts[rowIndex];
+            if (act) {
+                generateDocument(template, act, people);
+            }
+        });
+    };
     
     const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
         if (editingCell) {
@@ -964,24 +980,60 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             setNextWorkPopoverState(null);
             return;
         }
-        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) && selectedRows.size > 0) {
-             const newSelectedCells = new Set<string>();
-             if (activeCell) {
-                newSelectedCells.add(getCellId(activeCell.rowIndex, activeCell.colIndex));
-             }
-             setSelectedCells(newSelectedCells);
-        }
+
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
         const isCtrlKey = isMac ? e.metaKey : e.ctrlKey;
+
+        // Copy (Ctrl+C / Cmd+C)
+        if (e.code === 'KeyC' && isCtrlKey) {
+            e.preventDefault();
+            handleCopy();
+            return;
+        }
+
+        // Paste (Ctrl+V / Cmd+V)
+        if (e.code === 'KeyV' && isCtrlKey) {
+            e.preventDefault();
+            handlePaste();
+            return;
+        }
+
+        // Arrow Navigation
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            e.preventDefault();
+            
+            if (!activeCell) {
+                if (acts.length > 0 && columns.length > 0) {
+                     setActiveCell({ rowIndex: 0, colIndex: 0 });
+                     setSelectedCells(new Set([getCellId(0, 0)]));
+                }
+                return;
+            }
+
+            let { rowIndex, colIndex } = activeCell;
+
+            if (e.key === 'ArrowUp') rowIndex = Math.max(0, rowIndex - 1);
+            if (e.key === 'ArrowDown') rowIndex = Math.min(acts.length - 1, rowIndex + 1);
+            if (e.key === 'ArrowLeft') colIndex = Math.max(0, colIndex - 1);
+            if (e.key === 'ArrowRight') colIndex = Math.min(columns.length - 1, colIndex + 1);
+
+            const newCellId = getCellId(rowIndex, colIndex);
+            
+            // For now, treat arrow keys as moving selection, not extending (unless Shift implemented later)
+            setActiveCell({ rowIndex, colIndex });
+            setSelectedCells(new Set([newCellId]));
+            
+            // Simple scroll into view if needed
+            const cellEl = document.querySelector(`td[data-row-index="${rowIndex}"][data-col-index="${colIndex}"]`);
+            cellEl?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            return;
+        }
+
         if ((e.key === 'Delete' || e.key === 'Backspace') && selectedCells.size > 0) {
             e.preventDefault();
             handleClearCells();
         }
-        if (e.code === 'KeyV' && isCtrlKey) {
-            e.preventDefault();
-            handlePaste();
-        }
-    }, [editingCell, selectedCells, handleClearCells, handleCopy, handlePaste, selectedRows, activeCell, setActiveCell]);
+    }, [editingCell, selectedCells, handleClearCells, handleCopy, handlePaste, activeCell, setActiveCell, acts.length, columns.length]);
 
     // [Auto-scroll logic, effects for dragging/filling omitted for brevity as they are unchanged logic]
     // ... [Same implementation as previous version] ...
@@ -1570,6 +1622,33 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     />
                 )}
             </div>
+
+             {/* Floating Action Bar for Selected Rows */}
+             {selectedRows.size > 0 && (
+                <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-white shadow-xl border border-slate-200 rounded-full px-6 py-2 flex items-center gap-4 z-50 animate-fade-in-up">
+                    <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">
+                        Выбрано: {selectedRows.size}
+                    </span>
+                    <div className="h-4 w-px bg-slate-300"></div>
+                    <button
+                        onClick={handleBulkDownload}
+                        className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                        title="Скачать выделенные акты"
+                    >
+                        <DownloadIcon className="w-4 h-4" /> Скачать
+                    </button>
+                    <button
+                        onClick={() => {
+                             const idsToDelete = Array.from(selectedRows).map(idx => acts[idx].id);
+                             onRequestDelete(idsToDelete);
+                        }}
+                        className="flex items-center gap-2 text-sm text-red-600 hover:text-red-800 font-medium transition-colors"
+                        title="Удалить выделенные акты"
+                    >
+                        <DeleteIcon className="w-4 h-4" /> Удалить
+                    </button>
+                </div>
+            )}
 
             {datePopoverState && (
                 <DateEditorPopover
