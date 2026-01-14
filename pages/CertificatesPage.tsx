@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { Certificate, ProjectSettings, CertificateFile } from '../types';
 import Modal from '../components/Modal';
+import ConfirmationModal from '../components/ConfirmationModal';
 import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon } from '../components/Icons';
 import { GoogleGenAI } from '@google/genai';
 
@@ -176,6 +177,7 @@ const CertificateForm: React.FC<{
     // UI States
     const [lastDeletedMaterial, setLastDeletedMaterial] = useState<{index: number, value: string} | null>(null);
     const [hoveredDeleteIndex, setHoveredDeleteIndex] = useState<number | null>(null);
+    const [fileToDeleteId, setFileToDeleteId] = useState<string | null>(null);
     
     // Mass Edit AI States
     const [massEditPrompt, setMassEditPrompt] = useState('');
@@ -253,18 +255,24 @@ const CertificateForm: React.FC<{
         }
     };
 
-    const handleDeleteFile = (e: React.MouseEvent, fileId: string) => {
+    const handleDeleteFileClick = (e: React.MouseEvent, fileId: string) => {
         e.stopPropagation();
-        if (confirm("Удалить этот файл?")) {
-            setFormData(prev => {
-                const newFiles = prev.files.filter(f => f.id !== fileId);
-                // If we deleted the active file, switch to another
-                if (fileId === activeFileId) {
-                    setActiveFileId(newFiles.length > 0 ? newFiles[newFiles.length - 1].id : null);
-                }
-                return { ...prev, files: newFiles };
-            });
-        }
+        setFileToDeleteId(fileId);
+    };
+
+    const handleConfirmDeleteFile = () => {
+        if (!fileToDeleteId) return;
+        
+        setFormData(prev => {
+            const newFiles = prev.files.filter(f => f.id !== fileToDeleteId);
+            // If we deleted the active file, switch to another
+            if (fileToDeleteId === activeFileId) {
+                setActiveFileId(newFiles.length > 0 ? newFiles[newFiles.length - 1].id : null);
+            }
+            return { ...prev, files: newFiles };
+        });
+        
+        setFileToDeleteId(null);
     };
 
     const handleAiScan = async () => {
@@ -496,366 +504,378 @@ const CertificateForm: React.FC<{
     const isPreviewMode = !!previewMaterials;
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col h-[85vh]">
-            
-            <div className="flex flex-col md:flex-row gap-6 h-full min-h-0">
-                {/* LEFT COLUMN: Document Preview Gallery */}
-                <div className="w-full md:w-3/5 flex flex-col h-full min-h-0 gap-2">
-                    <div 
-                        className={`flex-grow flex flex-col bg-slate-50 rounded-lg border-2 transition-colors relative overflow-hidden
-                            ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}
-                        `}
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={handleDrop}
-                    >
-                        <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-center z-10 bg-gradient-to-b from-black/50 to-transparent pointer-events-none">
-                            <span className="font-semibold text-white drop-shadow-md pointer-events-auto">
-                                {activeFile ? activeFile.name : 'Нет файла'}
-                            </span>
-                            {activeFile && (
-                                <button
-                                    type="button"
-                                    onClick={(e) => handleDeleteFile(e, activeFile.id)}
-                                    className="p-1.5 bg-red-600/80 text-white rounded-full hover:bg-red-700 pointer-events-auto shadow-sm"
-                                    title="Удалить текущий файл"
-                                >
-                                    <DeleteIcon className="w-4 h-4" />
-                                </button>
-                            )}
-                        </div>
-                        
-                        <div className="flex-grow overflow-hidden relative flex items-center justify-center p-2 bg-slate-800">
-                            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" multiple />
-                            
-                            {activeFile ? (
-                                activeFile.type === 'image' ? (
-                                    <ImageViewer src={activeFile.data} alt="Preview" />
-                                ) : (
-                                    <object data={activeFile.data} type="application/pdf" className="w-full h-full rounded-md shadow-inner bg-white">
-                                        <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                                            <p>PDF Preview не поддерживается.</p>
-                                        </div>
-                                    </object>
-                                )
-                            ) : (
-                                <div className="text-center p-6 pointer-events-none flex flex-col items-center">
-                                    <CloudUploadIcon className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                                    <p className="text-lg text-slate-400 font-medium">Перетащите файлы сюда</p>
-                                    <p className="text-sm text-slate-500 mt-1">или выберите из списка снизу</p>
-                                </div>
-                            )}
-
-                            {/* Drag Overlay */}
-                            {isDragging && (
-                                <div className="absolute inset-0 bg-blue-100/90 flex flex-col items-center justify-center z-20 border-2 border-blue-500 border-dashed rounded-lg animate-fade-in-up">
-                                    <CloudUploadIcon className="w-16 h-16 text-blue-600 mb-2" />
-                                    <span className="text-lg font-bold text-blue-700">Отпустите, чтобы добавить файлы</span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Thumbnail Strip */}
-                    <div className="h-24 flex-shrink-0 bg-slate-100 rounded-lg border border-slate-200 p-2 overflow-x-auto flex gap-2 items-center">
-                        {formData.files.map(file => (
-                            <div 
-                                key={file.id}
-                                onClick={() => setActiveFileId(file.id)}
-                                className={`
-                                    relative h-20 w-20 min-w-[5rem] rounded-md border-2 overflow-hidden cursor-pointer group flex-shrink-0
-                                    ${activeFileId === file.id ? 'border-blue-600 ring-2 ring-blue-200' : 'border-slate-300 hover:border-slate-400'}
-                                `}
-                            >
-                                {file.type === 'image' ? (
-                                    <img src={file.data} alt="thumb" className="w-full h-full object-cover" />
-                                ) : (
-                                    <div className="w-full h-full bg-white flex flex-col items-center justify-center p-1">
-                                        <CertificateIcon className="w-8 h-8 text-red-500" />
-                                        <span className="text-[8px] text-slate-600 truncate w-full text-center mt-1">{file.name}</span>
-                                    </div>
-                                )}
-                                <div className="absolute top-0 right-0 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button 
-                                        type="button" 
-                                        onClick={(e) => handleDeleteFile(e, file.id)}
-                                        className="bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600"
-                                    >
-                                        <CloseIcon className="w-3 h-3" />
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                        
-                        <button 
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            className="h-20 w-20 min-w-[5rem] rounded-md border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-colors"
-                            title="Добавить файлы"
+        <>
+            <form onSubmit={handleSubmit} className="flex flex-col h-[75vh]">
+                
+                <div className="flex flex-col md:flex-row gap-6 h-full min-h-0">
+                    {/* LEFT COLUMN: Document Preview Gallery */}
+                    <div className="w-full md:w-3/5 flex flex-col h-full min-h-0 gap-2">
+                        <div 
+                            className={`flex-grow flex flex-col bg-slate-50 rounded-lg border-2 transition-colors relative overflow-hidden
+                                ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}
+                            `}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDrop}
                         >
-                            <PlusIcon className="w-6 h-6 mb-1" />
-                            <span className="text-xs font-medium">Добавить</span>
-                        </button>
-                    </div>
-                </div>
-
-                {/* RIGHT COLUMN: Form Fields */}
-                <div className="w-full md:w-2/5 flex flex-col h-full min-h-0">
-                    <div className="overflow-y-auto pr-2 flex-grow space-y-5 pb-4">
-                        
-                        {/* AI Button */}
-                        {ai && activeFile && (
-                            <div className="flex flex-col">
-                                <button
-                                    type="button"
-                                    onClick={handleAiScan}
-                                    disabled={isScanning || isPreviewMode}
-                                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-4 py-2.5 rounded-lg hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-sm font-medium"
-                                >
-                                    <SparklesIcon className="w-5 h-5" />
-                                    {isScanning ? 'Анализ текущего файла...' : 'Сканировать (AI)'}
-                                </button>
-                                {aiError && <p className="text-red-500 text-xs mt-2">{aiError}</p>}
-                            </div>
-                        )}
-
-                        {/* Number Field */}
-                        <div>
-                            <label className={labelClass}>Номер (тип + №)</label>
-                            <input type="text" name="number" value={formData.number} onChange={handleChange} className={inputClass} required placeholder="Паспорт качества № 123" disabled={isPreviewMode} />
-                            {aiSuggestions?.number && aiSuggestions.number !== formData.number && !isPreviewMode && (
-                                <div 
-                                    onClick={() => applyAiSuggestion('number', aiSuggestions.number!)}
-                                    className="mt-2 cursor-pointer bg-violet-50 border border-violet-100 p-2 rounded-md hover:bg-violet-100 transition-colors group"
-                                >
-                                    <p className="text-xs text-violet-600 font-semibold mb-0.5 flex items-center">
-                                        <SparklesIcon className="w-3 h-3 mr-1"/> Предложение AI
-                                    </p>
-                                    <p className="text-sm text-slate-700">{aiSuggestions.number}</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Date Field */}
-                        <div>
-                            <label className={labelClass}>Дата документа</label>
-                            <input type="date" name="validUntil" value={formData.validUntil} onChange={handleChange} className={inputClass} required disabled={isPreviewMode} />
-                            {aiSuggestions?.validUntil && aiSuggestions.validUntil !== formData.validUntil && !isPreviewMode && (
-                                <div 
-                                    onClick={() => applyAiSuggestion('validUntil', aiSuggestions.validUntil!)}
-                                    className="mt-2 cursor-pointer bg-violet-50 border border-violet-100 p-2 rounded-md hover:bg-violet-100 transition-colors group"
-                                >
-                                    <p className="text-xs text-violet-600 font-semibold mb-0.5 flex items-center">
-                                        <SparklesIcon className="w-3 h-3 mr-1"/> Предложение AI
-                                    </p>
-                                    <p className="text-sm text-slate-700">{new Date(aiSuggestions.validUntil).toLocaleDateString()}</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Materials Section */}
-                        <div className="border-t pt-4">
-                            <div className="flex justify-between items-center mb-1">
-                                <label className={labelClass}>Материалы ({formData.materials.length})</label>
-                                {formData.materials.length > 0 && !isPreviewMode && (
-                                    <button 
-                                        type="button" 
-                                        onClick={handleRemoveAllMaterials}
-                                        className="text-xs text-red-500 hover:text-red-700 underline"
+                            <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-center z-10 bg-gradient-to-b from-black/50 to-transparent pointer-events-none">
+                                <span className="font-semibold text-white drop-shadow-md pointer-events-auto">
+                                    {activeFile ? activeFile.name : 'Нет файла'}
+                                </span>
+                                {activeFile && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => handleDeleteFileClick(e, activeFile.id)}
+                                        className="p-1.5 bg-red-600/80 text-white rounded-full hover:bg-red-700 pointer-events-auto shadow-sm"
+                                        title="Удалить текущий файл"
                                     >
-                                        Удалить все
+                                        <DeleteIcon className="w-4 h-4" />
                                     </button>
                                 )}
                             </div>
                             
-                            {/* AI Materials Suggestions */}
-                            {aiSuggestions?.materials && aiSuggestions.materials.length > 0 && !areAllSuggestionsAdded && !isPreviewMode && (
-                                <div className="mb-4 bg-violet-50 border border-violet-100 rounded-md p-3">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <p className="text-xs text-violet-700 font-bold flex items-center"><SparklesIcon className="w-3 h-3 mr-1"/> Найдено в документе</p>
-                                        <div className="flex gap-2">
-                                            <button 
-                                                type="button"
-                                                onClick={() => {
-                                                    if (aiSuggestions.materials) {
-                                                        setFormData(prev => ({...prev, materials: [...aiSuggestions.materials!]}));
-                                                    }
-                                                }}
-                                                className="text-xs bg-white border border-violet-200 text-violet-700 px-2 py-1 rounded hover:bg-violet-50"
-                                            >
-                                                Заменить все
-                                            </button>
-                                            <button 
-                                                type="button"
-                                                onClick={() => {
-                                                    if (aiSuggestions.materials) {
-                                                        const unique = aiSuggestions.materials.filter(m => !formData.materials.includes(m));
-                                                        setFormData(prev => ({...prev, materials: [...prev.materials, ...unique]}));
-                                                    }
-                                                }}
-                                                className="text-xs bg-violet-600 text-white px-2 py-1 rounded hover:bg-violet-700"
-                                            >
-                                                Добавить все
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        {aiSuggestions.materials.map((mat, idx) => {
-                                            const isDuplicate = formData.materials.includes(mat);
-                                            return (
-                                                <button
-                                                    key={idx}
-                                                    type="button"
-                                                    onClick={() => !isDuplicate && handleAddMaterial(mat)}
-                                                    disabled={isDuplicate}
-                                                    className={`text-xs border px-2 py-1 rounded-full text-left max-w-full truncate
-                                                        ${isDuplicate 
-                                                            ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-default line-through' 
-                                                            : 'bg-white border-violet-200 text-slate-700 hover:border-violet-400 hover:text-violet-700'
-                                                        }
-                                                    `}
-                                                    title={isDuplicate ? "Уже добавлено" : "Нажмите, чтобы добавить"}
-                                                >
-                                                    {isDuplicate ? '' : '+ '}{mat}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Manual Add Input */}
-                            <div className="flex gap-2 mt-1 mb-3">
-                                <input 
-                                    type="text" 
-                                    value={newMaterial} 
-                                    onChange={e => setNewMaterial(e.target.value)}
-                                    onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleManualAddMaterial())}
-                                    className={inputClass} 
-                                    placeholder="Введите название и нажмите Enter" 
-                                    disabled={isPreviewMode}
-                                />
-                                <button 
-                                    type="button" 
-                                    onClick={handleManualAddMaterial}
-                                    disabled={isPreviewMode}
-                                    className="mt-1 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-300 rounded-md hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <PlusIcon className="w-5 h-5"/>
-                                </button>
-                            </div>
-                            
-                            {/* Undo Banner */}
-                            {lastDeletedMaterial && !isPreviewMode && (
-                                <div className="mb-2 p-2 bg-slate-100 text-xs flex justify-between items-center rounded border border-slate-200 animate-fade-in-up">
-                                    <span className="text-slate-600 truncate mr-2">
-                                        Удалено: "{lastDeletedMaterial.value}"
-                                    </span>
-                                    <button 
-                                        type="button"
-                                        onClick={handleUndoDelete}
-                                        className="text-blue-600 font-medium hover:underline flex items-center gap-1 whitespace-nowrap"
-                                    >
-                                        <RestoreIcon className="w-3 h-3" /> Вернуть
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* Editable List */}
-                            <div className="flex flex-col gap-1">
-                                {displayedMaterials.length === 0 && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded">Список материалов пуст</p>}
-                                {displayedMaterials.map((item, idx) => (
-                                    <div 
-                                        key={idx} 
-                                        className={`flex items-start gap-1 group py-1 px-1 rounded transition-colors 
-                                            ${hoveredDeleteIndex === idx && !isPreviewMode ? 'bg-red-50' : ''}
-                                            ${item.status === 'added' ? 'bg-green-100 border border-green-200' : ''}
-                                            ${item.status === 'removed' ? 'bg-red-100 border border-red-200 opacity-70' : ''}
-                                        `}
-                                    >
-                                        <AutoResizeTextarea
-                                            value={item.text}
-                                            onChange={(e) => handleEditMaterial(idx, e.target.value)}
-                                            disabled={isPreviewMode || item.status === 'removed'}
-                                            className={`block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded focus:bg-white transition-colors py-1 px-2
-                                                ${item.status !== 'current' ? 'bg-transparent border-transparent' : 'bg-slate-50'}
-                                            `}
-                                        />
-                                        {!isPreviewMode && item.status === 'current' && (
-                                            <button 
-                                                type="button" 
-                                                onClick={() => handleRemoveMaterial(idx)} 
-                                                onMouseEnter={() => setHoveredDeleteIndex(idx)}
-                                                onMouseLeave={() => setHoveredDeleteIndex(null)}
-                                                className="text-slate-400 hover:text-red-500 p-1.5 rounded hover:bg-red-100 mt-0.5 transition-colors"
-                                                title="Удалить строку"
-                                            >
-                                                <CloseIcon className="w-4 h-4" />
-                                            </button>
-                                        )}
-                                        {isPreviewMode && item.status === 'added' && <div className="p-1.5 mt-0.5 text-green-600 font-bold text-xs" title="Будет добавлено">+</div>}
-                                        {isPreviewMode && item.status === 'removed' && <div className="p-1.5 mt-0.5 text-red-600 font-bold text-xs" title="Будет удалено">-</div>}
-                                    </div>
-                                ))}
-                            </div>
-                            
-                            {/* Mass AI Edit Section */}
-                            {formData.materials.length > 0 && ai && (
-                                <div className="mt-6 pt-4 border-t border-slate-200">
-                                    {!previewMaterials ? (
-                                        <div className="flex gap-2">
-                                            <input 
-                                                type="text" 
-                                                value={massEditPrompt}
-                                                onChange={e => setMassEditPrompt(e.target.value)}
-                                                placeholder="AI: 'Удали размеры', 'Исправь...', 'Очистить'..."
-                                                className="flex-grow text-sm border border-violet-200 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                                                onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAiMassEdit())}
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={handleAiMassEdit}
-                                                disabled={isMassEditing || !massEditPrompt.trim()}
-                                                className="bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-3 py-2 rounded-md hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-50 text-sm whitespace-nowrap flex items-center"
-                                            >
-                                                {isMassEditing ? '...' : <SparklesIcon className="w-4 h-4" />}
-                                            </button>
-                                        </div>
+                            <div className="flex-grow overflow-hidden relative flex items-center justify-center p-2 bg-slate-800">
+                                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" multiple />
+                                
+                                {activeFile ? (
+                                    activeFile.type === 'image' ? (
+                                        <ImageViewer src={activeFile.data} alt="Preview" />
                                     ) : (
-                                        <div className="bg-violet-50 p-3 rounded-md border border-violet-100 animate-fade-in-up">
-                                            <p className="text-xs text-violet-800 mb-2 font-medium">Предварительный просмотр изменений. Сохранить?</p>
+                                        <object data={activeFile.data} type="application/pdf" className="w-full h-full rounded-md shadow-inner bg-white">
+                                            <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                                <p>PDF Preview не поддерживается.</p>
+                                            </div>
+                                        </object>
+                                    )
+                                ) : (
+                                    <div className="text-center p-6 pointer-events-none flex flex-col items-center">
+                                        <CloudUploadIcon className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                                        <p className="text-lg text-slate-400 font-medium">Перетащите файлы сюда</p>
+                                        <p className="text-sm text-slate-500 mt-1">или выберите из списка снизу</p>
+                                    </div>
+                                )}
+
+                                {/* Drag Overlay */}
+                                {isDragging && (
+                                    <div className="absolute inset-0 bg-blue-100/90 flex flex-col items-center justify-center z-20 border-2 border-blue-500 border-dashed rounded-lg animate-fade-in-up">
+                                        <CloudUploadIcon className="w-16 h-16 text-blue-600 mb-2" />
+                                        <span className="text-lg font-bold text-blue-700">Отпустите, чтобы добавить файлы</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Thumbnail Strip */}
+                        <div className="h-24 flex-shrink-0 bg-slate-100 rounded-lg border border-slate-200 p-2 overflow-x-auto flex gap-2 items-center">
+                            {formData.files.map(file => (
+                                <div 
+                                    key={file.id}
+                                    onClick={() => setActiveFileId(file.id)}
+                                    className={`
+                                        relative h-20 w-20 min-w-[5rem] rounded-md border-2 overflow-hidden cursor-pointer group flex-shrink-0
+                                        ${activeFileId === file.id ? 'border-blue-600 ring-2 ring-blue-200' : 'border-slate-300 hover:border-slate-400'}
+                                    `}
+                                >
+                                    {file.type === 'image' ? (
+                                        <img src={file.data} alt="thumb" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full bg-white flex flex-col items-center justify-center p-1">
+                                            <CertificateIcon className="w-8 h-8 text-red-500" />
+                                            <span className="text-[8px] text-slate-600 truncate w-full text-center mt-1">{file.name}</span>
+                                        </div>
+                                    )}
+                                    <div className="absolute top-0 right-0 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button 
+                                            type="button" 
+                                            onClick={(e) => handleDeleteFileClick(e, file.id)}
+                                            className="bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600"
+                                        >
+                                            <CloseIcon className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                            
+                            <button 
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="h-20 w-20 min-w-[5rem] rounded-md border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                                title="Добавить файлы"
+                            >
+                                <PlusIcon className="w-6 h-6 mb-1" />
+                                <span className="text-xs font-medium">Добавить</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* RIGHT COLUMN: Form Fields */}
+                    <div className="w-full md:w-2/5 flex flex-col h-full min-h-0">
+                        <div className="overflow-y-auto pr-2 flex-grow space-y-5 pb-4">
+                            
+                            {/* AI Button */}
+                            {ai && activeFile && (
+                                <div className="flex flex-col">
+                                    <button
+                                        type="button"
+                                        onClick={handleAiScan}
+                                        disabled={isScanning || isPreviewMode}
+                                        className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-4 py-2.5 rounded-lg hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-sm font-medium"
+                                    >
+                                        <SparklesIcon className="w-5 h-5" />
+                                        {isScanning ? 'Анализ текущего файла...' : 'Сканировать (AI)'}
+                                    </button>
+                                    {aiError && <p className="text-red-500 text-xs mt-2">{aiError}</p>}
+                                </div>
+                            )}
+
+                            {/* Number Field */}
+                            <div>
+                                <label className={labelClass}>Номер (тип + №)</label>
+                                <input type="text" name="number" value={formData.number} onChange={handleChange} className={inputClass} required placeholder="Паспорт качества № 123" disabled={isPreviewMode} />
+                                {aiSuggestions?.number && aiSuggestions.number !== formData.number && !isPreviewMode && (
+                                    <div 
+                                        onClick={() => applyAiSuggestion('number', aiSuggestions.number!)}
+                                        className="mt-2 cursor-pointer bg-violet-50 border border-violet-100 p-2 rounded-md hover:bg-violet-100 transition-colors group"
+                                    >
+                                        <p className="text-xs text-violet-600 font-semibold mb-0.5 flex items-center">
+                                            <SparklesIcon className="w-3 h-3 mr-1"/> Предложение AI
+                                        </p>
+                                        <p className="text-sm text-slate-700">{aiSuggestions.number}</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Date Field */}
+                            <div>
+                                <label className={labelClass}>Дата документа</label>
+                                <input type="date" name="validUntil" value={formData.validUntil} onChange={handleChange} className={inputClass} required disabled={isPreviewMode} />
+                                {aiSuggestions?.validUntil && aiSuggestions.validUntil !== formData.validUntil && !isPreviewMode && (
+                                    <div 
+                                        onClick={() => applyAiSuggestion('validUntil', aiSuggestions.validUntil!)}
+                                        className="mt-2 cursor-pointer bg-violet-50 border border-violet-100 p-2 rounded-md hover:bg-violet-100 transition-colors group"
+                                    >
+                                        <p className="text-xs text-violet-600 font-semibold mb-0.5 flex items-center">
+                                            <SparklesIcon className="w-3 h-3 mr-1"/> Предложение AI
+                                        </p>
+                                        <p className="text-sm text-slate-700">{new Date(aiSuggestions.validUntil).toLocaleDateString()}</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Materials Section */}
+                            <div className="border-t pt-4">
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className={labelClass}>Материалы ({formData.materials.length})</label>
+                                    {formData.materials.length > 0 && !isPreviewMode && (
+                                        <button 
+                                            type="button" 
+                                            onClick={handleRemoveAllMaterials}
+                                            className="text-xs text-red-500 hover:text-red-700 underline"
+                                        >
+                                            Удалить все
+                                        </button>
+                                    )}
+                                </div>
+                                
+                                {/* AI Materials Suggestions */}
+                                {aiSuggestions?.materials && aiSuggestions.materials.length > 0 && !areAllSuggestionsAdded && !isPreviewMode && (
+                                    <div className="mb-4 bg-violet-50 border border-violet-100 rounded-md p-3">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <p className="text-xs text-violet-700 font-bold flex items-center"><SparklesIcon className="w-3 h-3 mr-1"/> Найдено в документе</p>
                                             <div className="flex gap-2">
                                                 <button 
-                                                    type="button" 
-                                                    onClick={handleCommitMassEdit}
-                                                    className="flex-1 bg-violet-600 text-white text-xs py-1.5 rounded hover:bg-violet-700"
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (aiSuggestions.materials) {
+                                                            setFormData(prev => ({...prev, materials: [...aiSuggestions.materials!]}));
+                                                        }
+                                                    }}
+                                                    className="text-xs bg-white border border-violet-200 text-violet-700 px-2 py-1 rounded hover:bg-violet-50"
                                                 >
-                                                    Сохранить
+                                                    Заменить все
                                                 </button>
                                                 <button 
-                                                    type="button" 
-                                                    onClick={handleCancelMassEdit}
-                                                    className="flex-1 bg-white border border-slate-300 text-slate-700 text-xs py-1.5 rounded hover:bg-slate-50"
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (aiSuggestions.materials) {
+                                                            const unique = aiSuggestions.materials.filter(m => !formData.materials.includes(m));
+                                                            setFormData(prev => ({...prev, materials: [...prev.materials, ...unique]}));
+                                                        }
+                                                    }}
+                                                    className="text-xs bg-violet-600 text-white px-2 py-1 rounded hover:bg-violet-700"
                                                 >
-                                                    Отменить
+                                                    Добавить все
                                                 </button>
                                             </div>
                                         </div>
-                                    )}
-                                </div>
-                            )}
+                                        <div className="flex flex-wrap gap-2">
+                                            {aiSuggestions.materials.map((mat, idx) => {
+                                                const isDuplicate = formData.materials.includes(mat);
+                                                return (
+                                                    <button
+                                                        key={idx}
+                                                        type="button"
+                                                        onClick={() => !isDuplicate && handleAddMaterial(mat)}
+                                                        disabled={isDuplicate}
+                                                        className={`text-xs border px-2 py-1 rounded-full text-left max-w-full truncate
+                                                            ${isDuplicate 
+                                                                ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-default line-through' 
+                                                                : 'bg-white border-violet-200 text-slate-700 hover:border-violet-400 hover:text-violet-700'
+                                                            }
+                                                        `}
+                                                        title={isDuplicate ? "Уже добавлено" : "Нажмите, чтобы добавить"}
+                                                    >
+                                                        {isDuplicate ? '' : '+ '}{mat}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
 
+                                {/* Manual Add Input */}
+                                <div className="flex gap-2 mt-1 mb-3">
+                                    <input 
+                                        type="text" 
+                                        value={newMaterial} 
+                                        onChange={e => setNewMaterial(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleManualAddMaterial())}
+                                        className={inputClass} 
+                                        placeholder="Введите название и нажмите Enter" 
+                                        disabled={isPreviewMode}
+                                    />
+                                    <button 
+                                        type="button" 
+                                        onClick={handleManualAddMaterial}
+                                        disabled={isPreviewMode}
+                                        className="mt-1 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-300 rounded-md hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <PlusIcon className="w-5 h-5"/>
+                                    </button>
+                                </div>
+                                
+                                {/* Undo Banner */}
+                                {lastDeletedMaterial && !isPreviewMode && (
+                                    <div className="mb-2 p-2 bg-slate-100 text-xs flex justify-between items-center rounded border border-slate-200 animate-fade-in-up">
+                                        <span className="text-slate-600 truncate mr-2">
+                                            Удалено: "{lastDeletedMaterial.value}"
+                                        </span>
+                                        <button 
+                                            type="button"
+                                            onClick={handleUndoDelete}
+                                            className="text-blue-600 font-medium hover:underline flex items-center gap-1 whitespace-nowrap"
+                                        >
+                                            <RestoreIcon className="w-3 h-3" /> Вернуть
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Editable List */}
+                                <div className="flex flex-col gap-1">
+                                    {displayedMaterials.length === 0 && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded">Список материалов пуст</p>}
+                                    {displayedMaterials.map((item, idx) => (
+                                        <div 
+                                            key={idx} 
+                                            className={`flex items-start gap-1 group py-1 px-1 rounded transition-colors 
+                                                ${hoveredDeleteIndex === idx && !isPreviewMode ? 'bg-red-50' : ''}
+                                                ${item.status === 'added' ? 'bg-green-100 border border-green-200' : ''}
+                                                ${item.status === 'removed' ? 'bg-red-100 border border-red-200 opacity-70' : ''}
+                                            `}
+                                        >
+                                            <AutoResizeTextarea
+                                                value={item.text}
+                                                onChange={(e) => handleEditMaterial(idx, e.target.value)}
+                                                disabled={isPreviewMode || item.status === 'removed'}
+                                                className={`block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded focus:bg-white transition-colors py-1 px-2
+                                                    ${item.status !== 'current' ? 'bg-transparent border-transparent' : 'bg-slate-50'}
+                                                `}
+                                            />
+                                            {!isPreviewMode && item.status === 'current' && (
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => handleRemoveMaterial(idx)} 
+                                                    onMouseEnter={() => setHoveredDeleteIndex(idx)}
+                                                    onMouseLeave={() => setHoveredDeleteIndex(null)}
+                                                    className="text-slate-400 hover:text-red-500 p-1.5 rounded hover:bg-red-100 mt-0.5 transition-colors"
+                                                    title="Удалить строку"
+                                                >
+                                                    <CloseIcon className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                            {isPreviewMode && item.status === 'added' && <div className="p-1.5 mt-0.5 text-green-600 font-bold text-xs" title="Будет добавлено">+</div>}
+                                            {isPreviewMode && item.status === 'removed' && <div className="p-1.5 mt-0.5 text-red-600 font-bold text-xs" title="Будет удалено">-</div>}
+                                        </div>
+                                    ))}
+                                </div>
+                                
+                                {/* Mass AI Edit Section */}
+                                {formData.materials.length > 0 && ai && (
+                                    <div className="mt-6 pt-4 border-t border-slate-200">
+                                        {!previewMaterials ? (
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    type="text" 
+                                                    value={massEditPrompt}
+                                                    onChange={e => setMassEditPrompt(e.target.value)}
+                                                    placeholder="AI: 'Удали размеры', 'Исправь...', 'Очистить'..."
+                                                    className="flex-grow text-sm border border-violet-200 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                                    onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAiMassEdit())}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleAiMassEdit}
+                                                    disabled={isMassEditing || !massEditPrompt.trim()}
+                                                    className="bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-3 py-2 rounded-md hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-50 text-sm whitespace-nowrap flex items-center"
+                                                >
+                                                    {isMassEditing ? '...' : <SparklesIcon className="w-4 h-4" />}
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-violet-50 p-3 rounded-md border border-violet-100 animate-fade-in-up">
+                                                <p className="text-xs text-violet-800 mb-2 font-medium">Предварительный просмотр изменений. Сохранить?</p>
+                                                <div className="flex gap-2">
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={handleCommitMassEdit}
+                                                        className="flex-1 bg-violet-600 text-white text-xs py-1.5 rounded hover:bg-violet-700"
+                                                    >
+                                                        Сохранить
+                                                    </button>
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={handleCancelMassEdit}
+                                                        className="flex-1 bg-white border border-slate-300 text-slate-700 text-xs py-1.5 rounded hover:bg-slate-50"
+                                                    >
+                                                        Отменить
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                            </div>
+                        </div>
+                        
+                        {/* Sticky Footer for Buttons within the column */}
+                        <div className="flex justify-end space-x-3 pt-4 border-t border-slate-200 bg-white mt-auto">
+                            <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-md hover:bg-slate-300">Отмена</button>
+                            <button type="submit" disabled={isPreviewMode} className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed">Сохранить</button>
                         </div>
                     </div>
-                    
-                    {/* Sticky Footer for Buttons within the column */}
-                    <div className="flex justify-end space-x-3 pt-4 border-t border-slate-200 bg-white mt-auto">
-                        <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-md hover:bg-slate-300">Отмена</button>
-                        <button type="submit" disabled={isPreviewMode} className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed">Сохранить</button>
-                    </div>
                 </div>
-            </div>
-        </form>
+            </form>
+
+            <ConfirmationModal 
+                isOpen={!!fileToDeleteId} 
+                onClose={() => setFileToDeleteId(null)} 
+                onConfirm={handleConfirmDeleteFile}
+                title="Удаление файла"
+                confirmText="Удалить"
+            >
+                Вы действительно хотите удалить эту страницу/изображение? Это действие нельзя будет отменить.
+            </ConfirmationModal>
+        </>
     );
 };
 
