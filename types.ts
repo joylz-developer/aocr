@@ -136,6 +136,7 @@ export interface ProjectSettings {
     defaultAttachments?: string;
     defaultAdditionalInfo?: string;
     defaultActDate?: string;
+    historyDepth?: number; // Number of undo steps to save
     
     // AI Prompts
     certificatePromptNumber?: string;

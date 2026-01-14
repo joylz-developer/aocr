@@ -22,6 +22,8 @@ interface ActsPageProps {
     onMoveToTrash: (ids: string[]) => void;
     onReorderActs: (newActs: Act[]) => void;
     setCurrentPage: (page: Page) => void;
+    onUndo?: () => void;
+    onRedo?: () => void;
 }
 
 // Helper component for interactive tags in the help modal
@@ -115,7 +117,7 @@ const ColumnPicker: React.FC<{
 };
 
 
-const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, regulations, certificates, template, settings, onSave, onMoveToTrash, onReorderActs, setCurrentPage }) => {
+const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, regulations, certificates, template, settings, onSave, onMoveToTrash, onReorderActs, setCurrentPage, onUndo, onRedo }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
@@ -146,6 +148,38 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
             return true;
         });
     }, [settings]);
+
+    // Handle Global Undo/Redo Shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Ignore if focus is in an input or textarea (native undo/redo takes precedence)
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+                return;
+            }
+
+            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+            const isCtrlKey = isMac ? e.metaKey : e.ctrlKey;
+
+            if (isCtrlKey && e.code === 'KeyZ') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    onRedo?.();
+                } else {
+                    onUndo?.();
+                }
+            } else if (isCtrlKey && e.code === 'KeyY' && !isMac) {
+                // Windows standard Redo: Ctrl+Y
+                e.preventDefault();
+                onRedo?.();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [onUndo, onRedo]);
 
     const createNewActFactory = () => {
          return {

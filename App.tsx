@@ -55,6 +55,7 @@ const App: React.FC = () => {
         showParticipantDetails: true,
         geminiApiKey: '',
         defaultActDate: '{workEndDate}',
+        historyDepth: 20,
         certificatePromptNumber: DEFAULT_PROMPT_NUMBER,
         certificatePromptDate: DEFAULT_PROMPT_DATE,
         certificatePromptMaterials: DEFAULT_PROMPT_MATERIALS
@@ -76,6 +77,10 @@ const App: React.FC = () => {
         onConfirm: (restoreGroups: boolean) => void;
     } | null>(null);
 
+    // History State
+    const [past, setPast] = useState<Act[][]>([]);
+    const [future, setFuture] = useState<Act[][]>([]);
+
     const handleTemplateUpload = async (file: File) => {
         try {
             const isFirstTime = acts.length === 0 && people.length === 0 && organizations.length === 0;
@@ -92,36 +97,67 @@ const App: React.FC = () => {
         }
     };
 
-    const handleSaveAct = useCallback((actToSave: Act, insertAtIndex?: number) => {
-        setActs(prevActs => {
-            let newActs = [...prevActs];
-            const existsIndex = newActs.findIndex(a => a.id === actToSave.id);
-            
-            if (existsIndex !== -1) {
-                newActs[existsIndex] = actToSave;
-            } else {
-                const finalIndex = insertAtIndex === undefined ? newActs.length : insertAtIndex;
-                newActs.splice(finalIndex, 0, actToSave);
-            }
-            
-            // Dynamic Update: Check for other acts that link TO this act and update their text
-            newActs = newActs.map(act => {
-                if (act.nextWorkActId === actToSave.id) {
-                    return {
-                        ...act,
-                        nextWork: `Работы по акту №${actToSave.number || 'б/н'} (${actToSave.workName || '...'})`
-                    };
-                }
-                return act;
-            });
-
-            return newActs;
+    // Wrapper to update acts and push to history
+    const updateActsWithHistory = (newActs: Act[]) => {
+        setPast(prev => {
+            const newPast = [...prev, acts];
+            const limit = settings.historyDepth || 20;
+            if (newPast.length > limit) return newPast.slice(newPast.length - limit);
+            return newPast;
         });
-    }, [setActs]);
+        setFuture([]);
+        setActs(newActs);
+    };
+
+    const undo = useCallback(() => {
+        if (past.length === 0) return;
+        const previous = past[past.length - 1];
+        const newPast = past.slice(0, past.length - 1);
+        setFuture(prev => [acts, ...prev]);
+        setActs(previous);
+        setPast(newPast);
+    }, [acts, past, setActs]);
+
+    const redo = useCallback(() => {
+        if (future.length === 0) return;
+        const next = future[0];
+        const newFuture = future.slice(1);
+        setPast(prev => [...prev, acts]);
+        setActs(next);
+        setFuture(newFuture);
+    }, [acts, future, setActs]);
+
+
+    const handleSaveAct = useCallback((actToSave: Act, insertAtIndex?: number) => {
+        // Calculate new state based on current 'acts'
+        let newActs = [...acts];
+        const existsIndex = newActs.findIndex(a => a.id === actToSave.id);
+        
+        if (existsIndex !== -1) {
+            newActs[existsIndex] = actToSave;
+        } else {
+            const finalIndex = insertAtIndex === undefined ? newActs.length : insertAtIndex;
+            newActs.splice(finalIndex, 0, actToSave);
+        }
+        
+        // Dynamic Update: Check for other acts that link TO this act and update their text
+        newActs = newActs.map(act => {
+            if (act.nextWorkActId === actToSave.id) {
+                return {
+                    ...act,
+                    nextWork: `Работы по акту №${actToSave.number || 'б/н'} (${actToSave.workName || '...'})`
+                };
+            }
+            return act;
+        });
+
+        // Use the history wrapper instead of direct setActs
+        updateActsWithHistory(newActs);
+    }, [acts, settings.historyDepth]); // Depend on acts to calculate next state
 
     const handleReorderActs = useCallback((newActs: Act[]) => {
-        setActs(newActs);
-    }, [setActs]);
+        updateActsWithHistory(newActs);
+    }, [acts, settings.historyDepth]);
 
     const handleMoveActsToTrash = useCallback((actIds: string[]) => {
         const actsToMove = acts.filter(a => actIds.includes(a.id));
@@ -148,8 +184,9 @@ const App: React.FC = () => {
         });
 
         setDeletedActs(prev => [...prev, ...newDeletedEntries].sort((a,b) => new Date(b.deletedOn).getTime() - new Date(a.deletedOn).getTime()));
-        setActs(updatedRemainingActs);
-    }, [acts, groups, setActs, setDeletedActs]);
+        // Use history wrapper
+        updateActsWithHistory(updatedRemainingActs);
+    }, [acts, groups, setDeletedActs, settings.historyDepth]);
 
     const handleRestoreActs = useCallback((entriesToRestore: DeletedActEntry[]) => {
         const uniqueGroupsToRestore = new Map<string, CommissionGroup>();
@@ -176,7 +213,9 @@ const App: React.FC = () => {
                 });
             }
             
-            setActs(prev => [...prev, ...actsToRestore]);
+            // For restore, we also want to push to history
+            const newActs = [...acts, ...actsToRestore];
+            updateActsWithHistory(newActs);
             
             if (restoreAssociatedGroups) {
                 setGroups(prev => [...prev, ...groupsToRestoreList].sort((a, b) => a.name.localeCompare(b.name)));
@@ -196,7 +235,7 @@ const App: React.FC = () => {
         } else {
             performRestore(false);
         }
-    }, [groups, setActs, setGroups, setDeletedActs]);
+    }, [acts, groups, setGroups, setDeletedActs, settings.historyDepth]);
 
     const handlePermanentlyDeleteActs = useCallback((entryIds: string[]) => {
         setDeletedActs(prev => prev.filter(entry => !entryIds.includes(entry.act.id)));
@@ -233,6 +272,10 @@ const App: React.FC = () => {
                     return newReps;
                 };
 
+                // Updating acts here might also benefit from history, but simpler to keep direct setActs for secondary updates
+                // However, since we track act history, significant changes like removing a person should ideally be tracked.
+                // For simplicity, we keep direct updates for side-effect changes, or wrapping them would require more complex refactoring.
+                // Let's keep direct setActs for cascade deletes to avoid complex history state merges.
                 setActs(prevActs => prevActs.map(act => ({
                      ...act, 
                      representatives: updateRepresentatives(act.representatives)
@@ -423,6 +466,8 @@ const App: React.FC = () => {
             }
         };
 
+        // Note: For acts, importing via merge might need a history push if we were strictly following the undo model,
+        // but typically bulk import clears or resets history. For now, we leave it as is (direct setActs).
         mergeOrReplace('acts', setActs, null);
         mergeOrReplace('deletedActs', setDeletedActs, (a, b) => new Date((b as DeletedActEntry).deletedOn).getTime() - new Date((a as DeletedActEntry).deletedOn).getTime());
         mergeOrReplace('people', setPeople, (a,b) => (a as Person).name.localeCompare((b as Person).name));
@@ -431,6 +476,10 @@ const App: React.FC = () => {
         mergeOrReplace('regulations', setRegulations, (a,b) => (a as Regulation).designation.localeCompare((b as Regulation).designation));
         mergeOrReplace('certificates', setCertificates, (a,b) => (a as Certificate).number.localeCompare((b as Certificate).number));
         
+        // Reset history on import to avoid conflicts
+        setPast([]);
+        setFuture([]);
+
         setImportData(null);
         alert('Данные успешно импортированы!');
     };
@@ -480,6 +529,8 @@ const App: React.FC = () => {
                             onMoveToTrash={handleMoveActsToTrash}
                             onReorderActs={handleReorderActs}
                             setCurrentPage={setCurrentPage}
+                            onUndo={undo}
+                            onRedo={redo}
                         />;
             case 'people':
                 return <PeoplePage people={people} organizations={organizations} settings={settings} onSave={handleSavePerson} onDelete={handleDeletePerson} />;

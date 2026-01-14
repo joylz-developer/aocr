@@ -208,6 +208,23 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
                 <fieldset className="space-y-4 pt-4 border-t">
                     <legend className="text-base font-medium text-slate-800">Настройки формы акта</legend>
 
+                    <div>
+                        <label htmlFor="historyDepth" className={labelClass}>
+                            Количество действий для отмены (History Undo/Redo)
+                        </label>
+                        <input
+                            type="number"
+                            id="historyDepth"
+                            name="historyDepth"
+                            value={formData.historyDepth ?? 20}
+                            onChange={handleNumberChange}
+                            className={inputClass}
+                            min="1"
+                            max="500"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">Сколько последних изменений сохранять для возможности отмены (Ctrl+Z).</p>
+                    </div>
+
                     <SettingToggle id="showAdditionalInfo" label='Показывать поле "Дополнительные сведения"' formData={formData} handleChange={handleChange}>
                         <div className="mt-2">
                             <label htmlFor="defaultAdditionalInfo" className="flex items-center text-xs font-medium text-slate-600 mb-1">
