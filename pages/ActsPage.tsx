@@ -20,6 +20,7 @@ interface ActsPageProps {
     settings: ProjectSettings;
     onSave: (act: Act, insertAtIndex?: number) => void;
     onMoveToTrash: (ids: string[]) => void;
+    onPermanentlyDelete: (ids: string[]) => void;
     onReorderActs: (newActs: Act[]) => void;
     setCurrentPage: (page: Page) => void;
     onUndo?: () => void;
@@ -117,7 +118,7 @@ const ColumnPicker: React.FC<{
 };
 
 
-const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, regulations, certificates, template, settings, onSave, onMoveToTrash, onReorderActs, setCurrentPage, onUndo, onRedo }) => {
+const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, regulations, certificates, template, settings, onSave, onMoveToTrash, onPermanentlyDelete, onReorderActs, setCurrentPage, onUndo, onRedo }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
@@ -416,6 +417,10 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     allActs={acts}
                     onConfirm={(finalActIdsToDelete) => {
                         onMoveToTrash(finalActIdsToDelete);
+                        setActsPendingDeletion(null);
+                    }}
+                    onDeletePermanently={(finalActIdsToDelete) => {
+                        onPermanentlyDelete(finalActIdsToDelete);
                         setActsPendingDeletion(null);
                     }}
                 />

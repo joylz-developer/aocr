@@ -212,6 +212,24 @@ const App: React.FC = () => {
         updateActsWithHistory(updatedRemainingActs);
     }, [acts, groups, setDeletedActs, settings.historyDepth]);
 
+    const handleDirectPermanentDelete = useCallback((actIds: string[]) => {
+        const remainingActs = acts.filter(a => !actIds.includes(a.id));
+        
+        const updatedRemainingActs = remainingActs.map(act => {
+            if (act.nextWorkActId && actIds.includes(act.nextWorkActId)) {
+                return {
+                    ...act,
+                    nextWork: `[Удаленный Акт]`,
+                    nextWorkActId: undefined
+                };
+            }
+            return act;
+        });
+
+        // Use history wrapper, but do NOT add to deletedActs (Trash)
+        updateActsWithHistory(updatedRemainingActs);
+    }, [acts, settings.historyDepth]);
+
     const handleRestoreActs = useCallback((entriesToRestore: DeletedActEntry[]) => {
         const uniqueGroupsToRestore = new Map<string, CommissionGroup>();
         
@@ -551,6 +569,7 @@ const App: React.FC = () => {
                             settings={settings}
                             onSave={handleSaveAct} 
                             onMoveToTrash={handleMoveActsToTrash}
+                            onPermanentlyDelete={handleDirectPermanentDelete}
                             onReorderActs={handleReorderActs}
                             setCurrentPage={setCurrentPage}
                             onUndo={undo}

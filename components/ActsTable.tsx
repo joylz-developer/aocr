@@ -1918,7 +1918,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         icon={<DeleteIcon className="w-4 h-4 text-red-600" />}
                         className="text-red-600 hover:bg-red-50"
                         onClick={() => {
-                            const rowIndices = Array.from(selectedRows);
+                            const rowIndices = Array.from(affectedRowsFromSelection);
                             const indicesToDelete = rowIndices.includes(contextMenu.rowIndex) ? rowIndices : [contextMenu.rowIndex];
                             const idsToDelete = indicesToDelete.map(idx => acts[idx].id);
                             onRequestDelete(idsToDelete);
