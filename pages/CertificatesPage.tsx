@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
-import { Certificate, ProjectSettings } from '../types';
+import { Certificate, ProjectSettings, CertificateFile } from '../types';
 import Modal from '../components/Modal';
 import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon } from '../components/Icons';
 import { GoogleGenAI } from '@google/genai';
@@ -49,6 +49,11 @@ const ImageViewer: React.FC<{ src: string; alt: string }> = ({ src, alt }) => {
     const [isDragging, setIsDragging] = useState(false);
     const dragStart = useRef({ x: 0, y: 0 });
     const imgRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setScale(1);
+        setPosition({ x: 0, y: 0 });
+    }, [src]);
 
     const handleWheel = (e: React.WheelEvent) => {
         e.preventDefault();
@@ -136,17 +141,32 @@ const CertificateForm: React.FC<{
     onSave: (cert: Certificate) => void;
     onClose: () => void;
 }> = ({ certificate, settings, onSave, onClose }) => {
-    const [formData, setFormData] = useState<Certificate>(
-        certificate || {
-            id: crypto.randomUUID(),
-            number: '',
-            validUntil: '',
-            fileType: undefined,
-            fileName: '',
-            fileData: '',
-            materials: []
+    // Initial state setup with migration logic
+    const [formData, setFormData] = useState<Certificate>(() => {
+        if (certificate) {
+            // Migration: If we have legacy single file but no files array, convert it
+            const existingFiles = certificate.files || [];
+            if (existingFiles.length === 0 && certificate.fileData) {
+                existingFiles.push({
+                    id: crypto.randomUUID(),
+                    type: certificate.fileType || 'image',
+                    name: certificate.fileName || 'Документ',
+                    data: certificate.fileData
+                });
+            }
+            return { ...certificate, files: existingFiles };
+        } else {
+            return {
+                id: crypto.randomUUID(),
+                number: '',
+                validUntil: '',
+                materials: [],
+                files: []
+            };
         }
-    );
+    });
+
+    const [activeFileId, setActiveFileId] = useState<string | null>(null);
     const [newMaterial, setNewMaterial] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
@@ -165,32 +185,50 @@ const CertificateForm: React.FC<{
     const fileInputRef = useRef<HTMLInputElement>(null);
     const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
 
+    // Set active file on load
+    useEffect(() => {
+        if (formData.files.length > 0 && !activeFileId) {
+            setActiveFileId(formData.files[0].id);
+        }
+    }, [formData.files, activeFileId]);
+
+    const activeFile = useMemo(() => 
+        formData.files.find(f => f.id === activeFileId) || formData.files[0] || null
+    , [formData.files, activeFileId]);
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    const processFile = (file: File) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            if (typeof event.target?.result === 'string') {
-                setFormData(prev => ({
-                    ...prev,
-                    fileName: file.name,
-                    fileType: file.type.includes('pdf') ? 'pdf' : 'image',
-                    fileData: event.target!.result as string
-                }));
-                setAiError(null);
-                setAiSuggestions(null); // Reset suggestions on new file
-            }
-        };
-        reader.readAsDataURL(file);
+    const processFiles = (files: FileList) => {
+        Array.from(files).forEach(file => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                if (typeof event.target?.result === 'string') {
+                    const newFile: CertificateFile = {
+                        id: crypto.randomUUID(),
+                        name: file.name,
+                        type: file.type.includes('pdf') ? 'pdf' : 'image',
+                        data: event.target.result as string
+                    };
+                    
+                    setFormData(prev => ({
+                        ...prev,
+                        files: [...prev.files, newFile]
+                    }));
+                    setActiveFileId(newFile.id);
+                    setAiError(null);
+                }
+            };
+            reader.readAsDataURL(file);
+        });
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        processFile(file);
+        if (e.target.files && e.target.files.length > 0) {
+            processFiles(e.target.files);
+        }
     };
 
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -202,7 +240,6 @@ const CertificateForm: React.FC<{
     const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         e.stopPropagation();
-        // Only disable if we are leaving the main container, not entering a child
         if (e.currentTarget.contains(e.relatedTarget as Node)) return;
         setIsDragging(false);
     };
@@ -211,22 +248,33 @@ const CertificateForm: React.FC<{
         e.preventDefault();
         e.stopPropagation();
         setIsDragging(false);
-        const file = e.dataTransfer.files?.[0];
-        if (file && (file.type.startsWith('image/') || file.type === 'application/pdf')) {
-            processFile(file);
-        } else {
-            alert('Пожалуйста, загрузите изображение или PDF файл.');
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            processFiles(e.dataTransfer.files);
+        }
+    };
+
+    const handleDeleteFile = (e: React.MouseEvent, fileId: string) => {
+        e.stopPropagation();
+        if (confirm("Удалить этот файл?")) {
+            setFormData(prev => {
+                const newFiles = prev.files.filter(f => f.id !== fileId);
+                // If we deleted the active file, switch to another
+                if (fileId === activeFileId) {
+                    setActiveFileId(newFiles.length > 0 ? newFiles[newFiles.length - 1].id : null);
+                }
+                return { ...prev, files: newFiles };
+            });
         }
     };
 
     const handleAiScan = async () => {
-        if (!formData.fileData || !ai) return;
+        if (!activeFile || !ai) return;
         setIsScanning(true);
         setAiError(null);
         setAiSuggestions(null);
 
         try {
-            const [mimeType, base64Data] = formData.fileData.split(',');
+            const [mimeType, base64Data] = activeFile.data.split(',');
             const cleanMimeType = mimeType.match(/:(.*?);/)?.[1];
 
             if (!cleanMimeType || !base64Data) throw new Error("Invalid file data");
@@ -273,7 +321,6 @@ const CertificateForm: React.FC<{
             const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
             const result = JSON.parse(jsonString);
             
-            // Set suggestions instead of overwriting form data immediately
             setAiSuggestions({
                 number: result.number,
                 validUntil: result.validUntil,
@@ -282,7 +329,7 @@ const CertificateForm: React.FC<{
 
         } catch (error) {
             console.error("AI Scan Error:", error);
-            setAiError("Не удалось распознать данные. Убедитесь, что API ключ верен и файл содержит текст.");
+            setAiError("Не удалось распознать данные. Убедитесь, что API ключ верен.");
         } finally {
             setIsScanning(false);
         }
@@ -402,7 +449,15 @@ const CertificateForm: React.FC<{
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(formData);
+        // Update legacy fields for backward compatibility just in case other components use them directly without checking files array
+        const primaryFile = formData.files[0];
+        const finalData = {
+            ...formData,
+            fileData: primaryFile?.data,
+            fileType: primaryFile?.type,
+            fileName: primaryFile?.name
+        };
+        onSave(finalData);
         onClose();
     };
 
@@ -441,79 +496,129 @@ const CertificateForm: React.FC<{
     const isPreviewMode = !!previewMaterials;
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col h-[80vh] md:h-[70vh]">
+        <form onSubmit={handleSubmit} className="flex flex-col h-[85vh]">
             
             <div className="flex flex-col md:flex-row gap-6 h-full min-h-0">
-                {/* LEFT COLUMN: Document Preview */}
-                <div 
-                    className={`w-full md:w-1/2 flex flex-col h-full min-h-0 bg-slate-50 rounded-lg border-2 transition-colors relative
-                        ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}
-                    `}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                >
-                    <div className="p-3 border-b border-slate-200 bg-white rounded-t-lg flex justify-between items-center z-10">
-                        <span className="font-semibold text-slate-700">Документ</span>
-                        <button 
-                            type="button" 
-                            onClick={() => fileInputRef.current?.click()}
-                            className="text-xs text-blue-600 hover:underline"
-                        >
-                            {formData.fileData ? 'Заменить файл' : 'Загрузить файл'}
-                        </button>
-                    </div>
-                    
-                    <div className="flex-grow overflow-hidden relative flex items-center justify-center p-2">
-                        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" />
+                {/* LEFT COLUMN: Document Preview Gallery */}
+                <div className="w-full md:w-3/5 flex flex-col h-full min-h-0 gap-2">
+                    <div 
+                        className={`flex-grow flex flex-col bg-slate-50 rounded-lg border-2 transition-colors relative overflow-hidden
+                            ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}
+                        `}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                    >
+                        <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-center z-10 bg-gradient-to-b from-black/50 to-transparent pointer-events-none">
+                            <span className="font-semibold text-white drop-shadow-md pointer-events-auto">
+                                {activeFile ? activeFile.name : 'Нет файла'}
+                            </span>
+                            {activeFile && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => handleDeleteFile(e, activeFile.id)}
+                                    className="p-1.5 bg-red-600/80 text-white rounded-full hover:bg-red-700 pointer-events-auto shadow-sm"
+                                    title="Удалить текущий файл"
+                                >
+                                    <DeleteIcon className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
                         
-                        {formData.fileData ? (
-                            formData.fileType === 'image' ? (
-                                <ImageViewer src={formData.fileData} alt="Preview" />
+                        <div className="flex-grow overflow-hidden relative flex items-center justify-center p-2 bg-slate-800">
+                            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" multiple />
+                            
+                            {activeFile ? (
+                                activeFile.type === 'image' ? (
+                                    <ImageViewer src={activeFile.data} alt="Preview" />
+                                ) : (
+                                    <object data={activeFile.data} type="application/pdf" className="w-full h-full rounded-md shadow-inner bg-white">
+                                        <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                            <p>PDF Preview не поддерживается.</p>
+                                        </div>
+                                    </object>
+                                )
                             ) : (
-                                <object data={formData.fileData} type="application/pdf" className="w-full h-full rounded-md shadow-inner">
-                                    <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                                        <p>PDF Preview не поддерживается.</p>
-                                    </div>
-                                </object>
-                            )
-                        ) : (
-                            <div className="text-center p-6 pointer-events-none">
-                                <CloudUploadIcon className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                                <p className="text-sm text-slate-500">Перетащите файл сюда</p>
-                            </div>
-                        )}
+                                <div className="text-center p-6 pointer-events-none flex flex-col items-center">
+                                    <CloudUploadIcon className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                                    <p className="text-lg text-slate-400 font-medium">Перетащите файлы сюда</p>
+                                    <p className="text-sm text-slate-500 mt-1">или выберите из списка снизу</p>
+                                </div>
+                            )}
 
-                        {/* Drag Overlay */}
-                        {isDragging && (
-                            <div className="absolute inset-0 bg-blue-100/90 flex flex-col items-center justify-center z-20 border-2 border-blue-500 border-dashed rounded-lg animate-fade-in-up">
-                                <CloudUploadIcon className="w-16 h-16 text-blue-600 mb-2" />
-                                <span className="text-lg font-bold text-blue-700">Отпустите, чтобы заменить файл</span>
+                            {/* Drag Overlay */}
+                            {isDragging && (
+                                <div className="absolute inset-0 bg-blue-100/90 flex flex-col items-center justify-center z-20 border-2 border-blue-500 border-dashed rounded-lg animate-fade-in-up">
+                                    <CloudUploadIcon className="w-16 h-16 text-blue-600 mb-2" />
+                                    <span className="text-lg font-bold text-blue-700">Отпустите, чтобы добавить файлы</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Thumbnail Strip */}
+                    <div className="h-24 flex-shrink-0 bg-slate-100 rounded-lg border border-slate-200 p-2 overflow-x-auto flex gap-2 items-center">
+                        {formData.files.map(file => (
+                            <div 
+                                key={file.id}
+                                onClick={() => setActiveFileId(file.id)}
+                                className={`
+                                    relative h-20 w-20 min-w-[5rem] rounded-md border-2 overflow-hidden cursor-pointer group flex-shrink-0
+                                    ${activeFileId === file.id ? 'border-blue-600 ring-2 ring-blue-200' : 'border-slate-300 hover:border-slate-400'}
+                                `}
+                            >
+                                {file.type === 'image' ? (
+                                    <img src={file.data} alt="thumb" className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full bg-white flex flex-col items-center justify-center p-1">
+                                        <CertificateIcon className="w-8 h-8 text-red-500" />
+                                        <span className="text-[8px] text-slate-600 truncate w-full text-center mt-1">{file.name}</span>
+                                    </div>
+                                )}
+                                <div className="absolute top-0 right-0 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button 
+                                        type="button" 
+                                        onClick={(e) => handleDeleteFile(e, file.id)}
+                                        className="bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600"
+                                    >
+                                        <CloseIcon className="w-3 h-3" />
+                                    </button>
+                                </div>
                             </div>
-                        )}
+                        ))}
+                        
+                        <button 
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="h-20 w-20 min-w-[5rem] rounded-md border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                            title="Добавить файлы"
+                        >
+                            <PlusIcon className="w-6 h-6 mb-1" />
+                            <span className="text-xs font-medium">Добавить</span>
+                        </button>
                     </div>
                 </div>
 
                 {/* RIGHT COLUMN: Form Fields */}
-                <div className="w-full md:w-1/2 flex flex-col h-full min-h-0 overflow-y-auto pr-1">
-                    
-                    {/* AI Button */}
-                    {ai && formData.fileData && (
-                        <div className="mb-6 flex flex-col">
-                            <button
-                                type="button"
-                                onClick={handleAiScan}
-                                disabled={isScanning || isPreviewMode}
-                                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-4 py-2.5 rounded-lg hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-sm font-medium"
-                            >
-                                <SparklesIcon className="w-5 h-5" />
-                                {isScanning ? 'Анализ документа...' : 'Сканировать через AI'}
-                            </button>
-                            {aiError && <p className="text-red-500 text-xs mt-2">{aiError}</p>}
-                        </div>
-                    )}
+                <div className="w-full md:w-2/5 flex flex-col h-full min-h-0">
+                    <div className="overflow-y-auto pr-2 flex-grow space-y-5 pb-4">
+                        
+                        {/* AI Button */}
+                        {ai && activeFile && (
+                            <div className="flex flex-col">
+                                <button
+                                    type="button"
+                                    onClick={handleAiScan}
+                                    disabled={isScanning || isPreviewMode}
+                                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-4 py-2.5 rounded-lg hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-sm font-medium"
+                                >
+                                    <SparklesIcon className="w-5 h-5" />
+                                    {isScanning ? 'Анализ текущего файла...' : 'Сканировать (AI)'}
+                                </button>
+                                {aiError && <p className="text-red-500 text-xs mt-2">{aiError}</p>}
+                            </div>
+                        )}
 
-                    <div className="space-y-5">
                         {/* Number Field */}
                         <div>
                             <label className={labelClass}>Номер (тип + №)</label>
@@ -703,7 +808,7 @@ const CertificateForm: React.FC<{
                                                 type="text" 
                                                 value={massEditPrompt}
                                                 onChange={e => setMassEditPrompt(e.target.value)}
-                                                placeholder="AI: 'Удали размеры', 'Исправь опечатки', 'Очистить список'..."
+                                                placeholder="AI: 'Удали размеры', 'Исправь...', 'Очистить'..."
                                                 className="flex-grow text-sm border border-violet-200 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-violet-500"
                                                 onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAiMassEdit())}
                                             />
@@ -742,12 +847,13 @@ const CertificateForm: React.FC<{
 
                         </div>
                     </div>
+                    
+                    {/* Sticky Footer for Buttons within the column */}
+                    <div className="flex justify-end space-x-3 pt-4 border-t border-slate-200 bg-white mt-auto">
+                        <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-md hover:bg-slate-300">Отмена</button>
+                        <button type="submit" disabled={isPreviewMode} className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed">Сохранить</button>
+                    </div>
                 </div>
-            </div>
-
-            <div className="flex justify-end space-x-3 pt-6 mt-auto border-t border-slate-200 bg-white">
-                <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-md hover:bg-slate-300">Отмена</button>
-                <button type="submit" disabled={isPreviewMode} className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed">Сохранить</button>
             </div>
         </form>
     );
@@ -755,97 +861,161 @@ const CertificateForm: React.FC<{
 
 const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, settings, onSave, onDelete }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingCertificate, setEditingCertificate] = useState<Certificate | null>(null);
+    const [editingCert, setEditingCert] = useState<Certificate | null>(null);
+    const [previewFile, setPreviewFile] = useState<{ type: 'pdf' | 'image', data: string } | null>(null);
 
     const handleOpenModal = (cert: Certificate | null = null) => {
-        setEditingCertificate(cert);
+        setEditingCert(cert);
         setIsModalOpen(true);
     };
 
     const handleCloseModal = () => {
-        setEditingCertificate(null);
+        setEditingCert(null);
         setIsModalOpen(false);
+    };
+
+    const handlePreview = (cert: Certificate) => {
+        // Fallback for legacy certificates that haven't been migrated in the edit form yet
+        const fileData = cert.files?.[0]?.data || cert.fileData;
+        const fileType = cert.files?.[0]?.type || cert.fileType;
+
+        if (fileData && fileType) {
+            setPreviewFile({ type: fileType, data: fileData });
+        } else {
+            alert("Файл не загружен для этого сертификата.");
+        }
+    };
+
+    const openInNewTab = (fileData: string) => {
+        fetch(fileData)
+            .then(res => res.blob())
+            .then(blob => {
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');
+            })
+            .catch(err => {
+                console.error("Error opening file:", err);
+                alert("Не удалось открыть файл.");
+            });
     };
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
             <div className="flex justify-between items-center mb-6 flex-shrink-0">
-                <h1 className="text-2xl font-bold text-slate-800">Сертификаты</h1>
+                <h1 className="text-2xl font-bold text-slate-800">Сертификаты и Паспорта</h1>
                 <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
                     <PlusIcon /> Добавить сертификат
                 </button>
             </div>
 
-            <div className="flex-grow overflow-auto border border-slate-200 rounded-md">
-                <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50 sticky top-0 z-10">
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Номер и дата</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Материалы</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Действия</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-slate-200">
-                        {certificates.length > 0 ? certificates.map(cert => (
-                            <tr key={cert.id} className="hover:bg-slate-50">
-                                <td className="px-6 py-4 whitespace-nowrap align-top">
-                                    <div className="flex items-center">
-                                        <CertificateIcon className="w-5 h-5 text-slate-400 mr-3" />
-                                        <div>
-                                            <div className="text-sm font-medium text-slate-900">{cert.number}</div>
-                                            <div className="text-sm text-slate-500">до {new Date(cert.validUntil).toLocaleDateString('ru-RU')}</div>
-                                            {cert.fileName && (
-                                                <div className="text-xs text-slate-400 mt-1 max-w-[200px] truncate" title={cert.fileName}>
-                                                    📎 {cert.fileName}
+            <div className="flex-grow overflow-auto">
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {certificates.map(cert => {
+                        const hasFiles = (cert.files && cert.files.length > 0) || !!cert.fileData;
+                        const mainFile = cert.files?.[0] || { type: cert.fileType, data: cert.fileData };
+                        const fileCount = cert.files?.length || (cert.fileData ? 1 : 0);
+
+                        return (
+                        <div key={cert.id} className="border border-slate-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col h-full">
+                            {/* Thumbnail Section */}
+                            <div 
+                                className="h-40 bg-slate-100 border-b border-slate-100 flex items-center justify-center cursor-pointer relative overflow-hidden group"
+                                onClick={() => handlePreview(cert)}
+                                onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    if(mainFile.data) openInNewTab(mainFile.data);
+                                }}
+                                title="Нажмите для предпросмотра, дважды для открытия в новой вкладке"
+                            >
+                                {hasFiles ? (
+                                    mainFile.type === 'image' ? (
+                                        <img src={mainFile.data} alt={cert.number} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full relative pointer-events-none">
+                                            {/* Pointer events none to allow clicking the div container */}
+                                            <object data={mainFile.data} type="application/pdf" className="w-full h-full opacity-80" tabIndex={-1}>
+                                                <div className="flex items-center justify-center h-full">
+                                                    <CertificateIcon className="w-12 h-12 text-red-400" />
                                                 </div>
-                                            )}
+                                            </object>
+                                            <div className="absolute inset-0 bg-transparent"></div>
                                         </div>
+                                    )
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center text-slate-400">
+                                        <CertificateIcon className="w-10 h-10 mb-1 opacity-50" />
+                                        <span className="text-xs">Нет файла</span>
                                     </div>
-                                </td>
-                                <td className="px-6 py-4 align-top">
-                                    <div className="flex flex-wrap gap-1">
-                                        {cert.materials.length > 0 ? (
-                                            cert.materials.slice(0, 5).map((mat, idx) => (
-                                                <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                                    {mat}
-                                                </span>
-                                            ))
-                                        ) : (
-                                            <span className="text-sm text-slate-400 italic">Нет материалов</span>
+                                )}
+                                
+                                {fileCount > 1 && (
+                                    <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 shadow-sm">
+                                        <CloudUploadIcon className="w-3 h-3" /> {fileCount}
+                                    </div>
+                                )}
+                                
+                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity flex items-center justify-center">
+                                    <span className="opacity-0 group-hover:opacity-100 bg-white/90 px-3 py-1 rounded-full text-xs font-medium shadow-sm">
+                                        Просмотр
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="p-4 flex flex-col flex-grow">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div>
+                                        <h3 className="font-bold text-slate-800 text-sm leading-tight mb-1">{cert.number}</h3>
+                                        <p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p>
+                                    </div>
+                                    <div className="flex gap-1 ml-2">
+                                        <button onClick={() => handleOpenModal(cert)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
+                                        <button onClick={() => onDelete(cert.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex-grow">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Материалы:</p>
+                                    <ul className="text-xs text-slate-700 space-y-1">
+                                        {cert.materials.slice(0, 3).map((m, i) => (
+                                            <li key={i} className="truncate border-l-2 border-blue-100 pl-2">{m}</li>
+                                        ))}
+                                        {cert.materials.length > 3 && (
+                                            <li className="text-slate-400 pl-2 italic">...и еще {cert.materials.length - 3}</li>
                                         )}
-                                        {cert.materials.length > 5 && (
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
-                                                +{cert.materials.length - 5} еще...
-                                            </span>
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium align-top">
-                                    <div className="flex justify-end space-x-2">
-                                        <button onClick={() => handleOpenModal(cert)} className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full" title="Редактировать"><EditIcon /></button>
-                                        <button onClick={() => onDelete(cert.id)} className="p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full" title="Удалить"><DeleteIcon /></button>
-                                    </div>
-                                </td>
-                            </tr>
-                        )) : (
-                            <tr>
-                                <td colSpan={3} className="text-center py-10 text-slate-500">
-                                    Сертификатов пока нет.
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
+                                        {cert.materials.length === 0 && <li className="text-slate-400 italic pl-2">Список пуст</li>}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    )})}
+                    {certificates.length === 0 && (
+                        <div className="col-span-full flex flex-col items-center justify-center py-20 text-slate-400">
+                             <CertificateIcon className="w-16 h-16 mb-4 opacity-20" />
+                             <p>База сертификатов пуста.</p>
+                        </div>
+                    )}
+                 </div>
             </div>
 
-            {isModalOpen && (
-                <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingCertificate ? 'Редактировать сертификат' : 'Новый сертификат'} maxWidth="max-w-6xl" className="h-[90vh]">
-                    <CertificateForm
-                        certificate={editingCertificate}
-                        settings={settings}
-                        onSave={onSave}
-                        onClose={handleCloseModal}
-                    />
+            <Modal 
+                isOpen={isModalOpen} 
+                onClose={handleCloseModal} 
+                title={editingCert ? 'Редактировать сертификат' : 'Новый сертификат'}
+                maxWidth="max-w-[90vw] lg:max-w-7xl"
+                className="resize-x overflow-hidden"
+            >
+                <CertificateForm certificate={editingCert} settings={settings} onSave={onSave} onClose={handleCloseModal} />
+            </Modal>
+
+            {previewFile && (
+                <Modal isOpen={!!previewFile} onClose={() => setPreviewFile(null)} title="Просмотр документа" maxWidth="max-w-6xl">
+                    <div className="h-[75vh] w-full flex items-center justify-center bg-slate-100 rounded overflow-hidden">
+                        {previewFile.type === 'pdf' ? (
+                            <iframe src={previewFile.data} className="w-full h-full" title="PDF Preview" />
+                        ) : (
+                            <ImageViewer src={previewFile.data} alt="Certificate Preview" />
+                        )}
+                    </div>
                 </Modal>
             )}
         </div>

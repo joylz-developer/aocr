@@ -35,13 +35,26 @@ export interface Regulation {
     embeddedChanges?: Regulation[]; 
 }
 
+export interface CertificateFile {
+    id: string;
+    type: 'pdf' | 'image';
+    name: string;
+    data: string; // Base64 string
+}
+
 export interface Certificate {
     id: string;
     number: string;
-    validUntil: string; // YYYY-MM-DD (In UI this is now treated as "Issue Date/Date")
+    validUntil: string; // YYYY-MM-DD
+    
+    // Multi-file support
+    files: CertificateFile[];
+
+    // Legacy single-file support (deprecated but kept for migration)
     fileType?: 'pdf' | 'image';
     fileName?: string;
-    fileData?: string; // Base64 string of the file
+    fileData?: string; 
+    
     materials: string[]; // List of material names included in this certificate
 }
 
