@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation, Certificate } from '../types';
 import Modal from './Modal';
-import { DeleteIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon, CloseIcon, GripVerticalIcon, DownloadIcon, QuestionMarkCircleIcon, ArrowDownCircleIcon } from './Icons';
+import { DeleteIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon, CloseIcon, GripVerticalIcon, DownloadIcon, QuestionMarkCircleIcon, ArrowDownCircleIcon, PlusIcon } from './Icons';
 import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
 import { ALL_COLUMNS } from './ActsTableConfig';
@@ -319,6 +319,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [fullRegulationDetails, setFullRegulationDetails] = useState<Regulation | null>(null);
 
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; rowIndex: number; colIndex: number } | null>(null);
+    
+    // Add multiple acts state
+    const [numRowsToAdd, setNumRowsToAdd] = useState(1);
 
     const tableContainerRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1437,6 +1440,32 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setContextMenu({ x: e.clientX, y: e.clientY, rowIndex, colIndex });
     };
 
+    const handleAddRows = (count: number) => {
+        if (count <= 0) return;
+        
+        const newActsToAdd = [];
+        for (let i = 0; i < count; i++) {
+            newActsToAdd.push(createNewAct());
+        }
+        
+        // Use applyTemplatesToAct on each to resolve defaults if needed (though createNewAct usually handles raw defaults)
+        const finalizedNewActs = newActsToAdd.map(act => applyTemplatesToAct(act));
+        
+        // Append to current acts and save via bulk update
+        const updatedActs = [...acts, ...finalizedNewActs];
+        onReorderActs(updatedActs);
+        
+        // Reset counter
+        setNumRowsToAdd(1);
+        
+        // Scroll to bottom after state update
+        setTimeout(() => {
+            if (scrollContainerRef.current) {
+                scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+            }
+        }, 100);
+    };
+
     return (
         <div 
             className="h-full flex flex-col relative outline-none" 
@@ -1501,209 +1530,241 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         </tr>
                     </thead>
                     <tbody>
-                        {acts.length > 0 ? (
-                            acts.map((act, rowIndex) => {
-                                const isRowSelected = selectedRows.has(rowIndex);
-                                const isRowDragged = draggedRowIndices?.includes(rowIndex);
-                                
-                                return (
-                                    <tr 
-                                        key={act.id} 
+                        {acts.map((act, rowIndex) => {
+                            const isRowSelected = selectedRows.has(rowIndex);
+                            const isRowDragged = draggedRowIndices?.includes(rowIndex);
+                            
+                            return (
+                                <tr 
+                                    key={act.id} 
+                                    className={`
+                                        group
+                                        ${isRowSelected ? 'bg-blue-50' : 'hover:bg-slate-50'}
+                                        ${isRowDragged ? 'opacity-40' : ''}
+                                        ${actPickerState?.sourceRowIndex === rowIndex ? 'act-picker-source-row' : ''}
+                                    `}
+                                    draggable={!editingCell}
+                                    onDragStart={(e) => handleRowDragStart(e, rowIndex)}
+                                    onDragOver={(e) => handleRowDragOver(e, rowIndex)}
+                                    onDrop={handleRowDrop}
+                                    onDragEnd={handleDragEnd}
+                                >
+                                    <td 
                                         className={`
-                                            group
-                                            ${isRowSelected ? 'bg-blue-50' : 'hover:bg-slate-50'}
-                                            ${isRowDragged ? 'opacity-40' : ''}
-                                            ${actPickerState?.sourceRowIndex === rowIndex ? 'act-picker-source-row' : ''}
+                                            row-drag-handle border border-slate-300 px-1 py-1 text-center text-xs select-none relative group/handle cursor-grab active:cursor-grabbing
+                                            ${isRowSelected ? 'bg-blue-100 border-blue-200 z-20' : 'bg-slate-50 text-slate-400'}
                                         `}
-                                        draggable={!editingCell}
-                                        onDragStart={(e) => handleRowDragStart(e, rowIndex)}
-                                        onDragOver={(e) => handleRowDragOver(e, rowIndex)}
-                                        onDrop={handleRowDrop}
-                                        onDragEnd={handleDragEnd}
+                                        onMouseDown={(e) => handleRowHeaderMouseDown(e, rowIndex)}
+                                        onMouseUp={handleRowHeaderMouseUp}
                                     >
-                                        <td 
-                                            className={`
-                                                row-drag-handle border border-slate-300 px-1 py-1 text-center text-xs select-none relative group/handle cursor-grab active:cursor-grabbing
-                                                ${isRowSelected ? 'bg-blue-100 border-blue-200 z-20' : 'bg-slate-50 text-slate-400'}
-                                            `}
-                                            onMouseDown={(e) => handleRowHeaderMouseDown(e, rowIndex)}
-                                            onMouseUp={handleRowHeaderMouseUp}
-                                        >
-                                           <div className="pointer-events-none flex items-center justify-between h-full w-full pl-1">
-                                                <div className={`p-0.5 rounded flex-shrink-0 ${isRowSelected ? 'text-blue-500' : 'text-slate-300 group-hover:text-slate-500'}`}>
-                                                    <GripVerticalIcon className="w-4 h-4" />
+                                       <div className="pointer-events-none flex items-center justify-between h-full w-full pl-1">
+                                            <div className={`p-0.5 rounded flex-shrink-0 ${isRowSelected ? 'text-blue-500' : 'text-slate-300 group-hover:text-slate-500'}`}>
+                                                <GripVerticalIcon className="w-4 h-4" />
+                                            </div>
+                                            <span className={`flex-grow text-center ${isRowSelected ? 'font-semibold text-blue-700' : ''}`}>{rowIndex + 1}</span>
+                                       </div>
+                                    </td>
+                                    {columns.map((col, colIndex) => {
+                                        const cellId = getCellId(rowIndex, colIndex);
+                                        const isSelected = selectedCells.has(cellId);
+                                        const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colIndex === colIndex;
+                                        const isCopied = copiedCells?.has(cellId);
+                                        
+                                        // Dynamic display logic for 'nextWork' column
+                                        let displayContent: React.ReactNode = String(act[col.key as keyof Act] || '');
+                                        
+                                        if (col.key === 'workDates') {
+                                            displayContent = (
+                                                <span className={!act.workStartDate || !act.workEndDate ? 'text-slate-400' : ''}>
+                                                    {act.workStartDate && act.workEndDate 
+                                                        ? `${formatDateForDisplay(act.workStartDate)} - ${formatDateForDisplay(act.workEndDate)}`
+                                                        : 'Укажите даты'}
+                                                </span>
+                                            );
+                                        } else if (col.key === 'commissionGroup') {
+                                            displayContent = groups.find(g => g.id === act.commissionGroupId)?.name || <span className="text-slate-300 italic">Не выбрано</span>;
+                                        } else if (col.type === 'date') {
+                                            displayContent = formatDateForDisplay(act[col.key as keyof Act] as string);
+                                        } else if (col.key === 'regulations') {
+                                            displayContent = (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {(act.regulations || '').split(';').map(s => s.trim()).filter(Boolean).map((item, idx) => {
+                                                        const reg = regulations.find(r => r.designation === item);
+                                                        let chipClass = "bg-slate-100 text-slate-800 border-slate-300";
+                                                        if (reg) {
+                                                             if (reg.status.toLowerCase().includes('действует')) chipClass = "bg-green-100 text-green-800 border-green-200";
+                                                             else if (reg.status.toLowerCase().includes('заменен')) chipClass = "bg-red-100 text-red-800 border-red-200";
+                                                             else chipClass = "bg-blue-100 text-blue-800 border-blue-200";
+                                                        }
+                                                        return (
+                                                            <span 
+                                                                                key={idx} 
+                                                                                className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs border ${chipClass} cursor-pointer hover:underline`}
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleShowRegulationInfo(item, e.currentTarget);
+                                                                                }}
+                                                                            >
+                                                                                {item}
+                                                                            </span>
+                                                        );
+                                                    })}
                                                 </div>
-                                                <span className={`flex-grow text-center ${isRowSelected ? 'font-semibold text-blue-700' : ''}`}>{rowIndex + 1}</span>
-                                           </div>
-                                        </td>
-                                        {columns.map((col, colIndex) => {
-                                            const cellId = getCellId(rowIndex, colIndex);
-                                            const isSelected = selectedCells.has(cellId);
-                                            const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colIndex === colIndex;
-                                            const isCopied = copiedCells?.has(cellId);
-                                            
-                                            // Dynamic display logic for 'nextWork' column
-                                            let displayContent: React.ReactNode = String(act[col.key as keyof Act] || '');
-                                            
-                                            if (col.key === 'workDates') {
+                                            );
+                                        } else if (col.key === 'nextWork' && act.nextWorkActId === AUTO_NEXT_ID) {
+                                            const nextAct = acts[rowIndex + 1];
+                                            if (nextAct) {
                                                 displayContent = (
-                                                    <span className={!act.workStartDate || !act.workEndDate ? 'text-slate-400' : ''}>
-                                                        {act.workStartDate && act.workEndDate 
-                                                            ? `${formatDateForDisplay(act.workStartDate)} - ${formatDateForDisplay(act.workEndDate)}`
-                                                            : 'Укажите даты'}
+                                                    <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1.5 inline-flex max-w-full">
+                                                        <ArrowDownCircleIcon className="w-3 h-3 flex-shrink-0" />
+                                                        <span className="truncate">
+                                                            Акт №{nextAct.number || 'б/н'} ({nextAct.workName || '...'})
+                                                        </span>
                                                     </span>
                                                 );
-                                            } else if (col.key === 'commissionGroup') {
-                                                displayContent = groups.find(g => g.id === act.commissionGroupId)?.name || <span className="text-slate-300 italic">Не выбрано</span>;
-                                            } else if (col.type === 'date') {
-                                                displayContent = formatDateForDisplay(act[col.key as keyof Act] as string);
-                                            } else if (col.key === 'regulations') {
-                                                displayContent = (
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {(act.regulations || '').split(';').map(s => s.trim()).filter(Boolean).map((item, idx) => {
-                                                            const reg = regulations.find(r => r.designation === item);
-                                                            let chipClass = "bg-slate-100 text-slate-800 border-slate-300";
-                                                            if (reg) {
-                                                                 if (reg.status.toLowerCase().includes('действует')) chipClass = "bg-green-100 text-green-800 border-green-200";
-                                                                 else if (reg.status.toLowerCase().includes('заменен')) chipClass = "bg-red-100 text-red-800 border-red-200";
-                                                                 else chipClass = "bg-blue-100 text-blue-800 border-blue-200";
-                                                            }
-                                                            return (
-                                                                <span 
-                                                                                    key={idx} 
-                                                                                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs border ${chipClass} cursor-pointer hover:underline`}
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        handleShowRegulationInfo(item, e.currentTarget);
-                                                                                    }}
-                                                                                >
-                                                                                    {item}
-                                                                                </span>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                );
-                                            } else if (col.key === 'nextWork' && act.nextWorkActId === AUTO_NEXT_ID) {
-                                                const nextAct = acts[rowIndex + 1];
-                                                if (nextAct) {
-                                                    displayContent = (
-                                                        <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1.5 inline-flex max-w-full">
-                                                            <ArrowDownCircleIcon className="w-3 h-3 flex-shrink-0" />
-                                                            <span className="truncate">
-                                                                Акт №{nextAct.number || 'б/н'} ({nextAct.workName || '...'})
-                                                            </span>
-                                                        </span>
-                                                    );
-                                                } else {
-                                                    displayContent = <span className="text-slate-300 italic text-xs">Конец списка</span>;
-                                                }
+                                            } else {
+                                                displayContent = <span className="text-slate-300 italic text-xs">Конец списка</span>;
                                             }
+                                        }
 
-                                            return (
-                                                <td
-                                                    key={col.key}
-                                                    data-row-index={rowIndex}
-                                                    data-col-index={colIndex}
-                                                    className={`
-                                                        border border-slate-300 px-2 py-1 relative align-top transition-colors
-                                                        ${isSelected ? 'bg-blue-100 outline outline-2 outline-blue-500 z-10' : ''}
-                                                        ${isCopied ? 'relative' : ''}
-                                                        ${getHighlightClass(rowIndex, colIndex)}
-                                                        ${col.key === 'id' ? 'text-xs text-slate-400 select-all' : ''}
-                                                        ${col.key === 'commissionGroup' ? 'text-slate-600' : ''}
-                                                        cursor-default
-                                                    `}
-                                                    onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
-                                                    onDoubleClick={(e) => handleCellDoubleClick(e, rowIndex, colIndex)}
-                                                    onContextMenu={(e) => handleContextMenu(e, rowIndex, colIndex)}
-                                                    style={{ height: '1px' }} 
-                                                >
-                                                    {isCopied && <div className="copied-cell-overlay" />}
-                                                    
-                                                    {isEditing ? (
-                                                        <div ref={editorContainerRef} className="h-full w-full min-h-[1.5em] bg-transparent">
-                                                           {col.key === 'commissionGroup' ? (
-                                                                <CustomSelect
-                                                                    options={groupOptions}
-                                                                    value={editorValue}
-                                                                    onChange={(val) => {
-                                                                        handleGroupChange(act, val);
-                                                                        closeEditor();
-                                                                    }}
-                                                                    startOpen={true}
-                                                                    onCreateNew={handleCreateNewGroup}
-                                                                    allowClear
-                                                                    className="w-full"
-                                                                />
-                                                            ) : col.key === 'regulations' ? (
-                                                                <RegulationsInput 
-                                                                    value={editorValue}
-                                                                    onChange={setEditorValue}
-                                                                    regulations={regulations}
-                                                                    onOpenDictionary={() => setRegulationsModalOpen(true)}
-                                                                    onInfoClick={(des, target) => handleShowRegulationInfo(des, target)}
-                                                                />
-                                                            ) : col.key === 'materials' ? (
-                                                                <MaterialsInput
-                                                                    value={editorValue}
-                                                                    onChange={setEditorValue}
-                                                                    certificates={certificates}
-                                                                />
-                                                            ) : (
-                                                                <textarea
-                                                                    ref={editorRef as React.RefObject<HTMLTextAreaElement>}
-                                                                    value={editorValue}
-                                                                    onChange={handleEditorChange}
-                                                                    onKeyDown={handleEditorKeyDown}
-                                                                    className="w-full h-full resize-none bg-transparent outline-none overflow-hidden"
-                                                                    rows={1}
-                                                                    placeholder={col.key === 'workDates' ? 'ДД.ММ.ГГГГ - ДД.ММ.ГГГГ' : ''}
-                                                                />
-                                                            )}
-                                                            {dateError && col.key === 'workDates' && (
-                                                                <div className="absolute top-full left-0 z-50 bg-red-100 text-red-700 text-xs px-2 py-1 rounded shadow-md mt-1 border border-red-200">
-                                                                    {dateError}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    ) : (
-                                                        <div className="w-full h-full min-h-[1.5em] whitespace-pre-wrap flex items-center justify-between group/cell">
-                                                            <span className="flex-grow">
-                                                                {displayContent}
-                                                            </span>
-                                                            
-                                                            {col.key === 'workDates' && (
-                                                                <button
-                                                                    className="opacity-0 group-hover/cell:opacity-100 text-slate-400 hover:text-blue-600 ml-2 transition-opacity"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleDateClick(act, e.currentTarget);
-                                                                    }}
-                                                                >
-                                                                    <CalendarIcon className="w-4 h-4" />
-                                                                </button>
-                                                            )}
-                                                            
-                                                             {col.key === 'nextWork' && act.nextWorkActId && act.nextWorkActId !== AUTO_NEXT_ID && (
-                                                                <div className="ml-2 text-blue-600" title="Связано с другим актом">
-                                                                    <LinkIcon className="w-4 h-4" />
-                                                                </div>
-                                                             )}
-                                                        </div>
-                                                    )}
-                                                </td>
-                                            );
-                                        })}
-                                    </tr>
-                                );
-                            })
-                        ) : (
-                            <tr>
-                                <td colSpan={columns.length + 1} className="text-center py-10 text-slate-500">
-                                    Нет актов. Нажмите "Создать акт", чтобы добавить новую запись.
-                                </td>
-                            </tr>
-                        )}
+                                        return (
+                                            <td
+                                                key={col.key}
+                                                data-row-index={rowIndex}
+                                                data-col-index={colIndex}
+                                                className={`
+                                                    border border-slate-300 px-2 py-1 relative align-top transition-colors
+                                                    ${isSelected ? 'bg-blue-100 outline outline-2 outline-blue-500 z-10' : ''}
+                                                    ${isCopied ? 'relative' : ''}
+                                                    ${getHighlightClass(rowIndex, colIndex)}
+                                                    ${col.key === 'id' ? 'text-xs text-slate-400 select-all' : ''}
+                                                    ${col.key === 'commissionGroup' ? 'text-slate-600' : ''}
+                                                    cursor-default
+                                                `}
+                                                onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
+                                                onDoubleClick={(e) => handleCellDoubleClick(e, rowIndex, colIndex)}
+                                                onContextMenu={(e) => handleContextMenu(e, rowIndex, colIndex)}
+                                                style={{ height: '1px' }} 
+                                            >
+                                                {isCopied && <div className="copied-cell-overlay" />}
+                                                
+                                                {isEditing ? (
+                                                    <div ref={editorContainerRef} className="h-full w-full min-h-[1.5em] bg-transparent">
+                                                       {col.key === 'commissionGroup' ? (
+                                                            <CustomSelect
+                                                                options={groupOptions}
+                                                                value={editorValue}
+                                                                onChange={(val) => {
+                                                                    handleGroupChange(act, val);
+                                                                    closeEditor();
+                                                                }}
+                                                                startOpen={true}
+                                                                onCreateNew={handleCreateNewGroup}
+                                                                allowClear
+                                                                className="w-full"
+                                                            />
+                                                        ) : col.key === 'regulations' ? (
+                                                            <RegulationsInput 
+                                                                value={editorValue}
+                                                                onChange={setEditorValue}
+                                                                regulations={regulations}
+                                                                onOpenDictionary={() => setRegulationsModalOpen(true)}
+                                                                onInfoClick={(des, target) => handleShowRegulationInfo(des, target)}
+                                                            />
+                                                        ) : col.key === 'materials' ? (
+                                                            <MaterialsInput
+                                                                value={editorValue}
+                                                                onChange={setEditorValue}
+                                                                certificates={certificates}
+                                                            />
+                                                        ) : (
+                                                            <textarea
+                                                                ref={editorRef as React.RefObject<HTMLTextAreaElement>}
+                                                                value={editorValue}
+                                                                onChange={handleEditorChange}
+                                                                onKeyDown={handleEditorKeyDown}
+                                                                className="w-full h-full resize-none bg-transparent outline-none overflow-hidden"
+                                                                rows={1}
+                                                                placeholder={col.key === 'workDates' ? 'ДД.ММ.ГГГГ - ДД.ММ.ГГГГ' : ''}
+                                                            />
+                                                        )}
+                                                        {dateError && col.key === 'workDates' && (
+                                                            <div className="absolute top-full left-0 z-50 bg-red-100 text-red-700 text-xs px-2 py-1 rounded shadow-md mt-1 border border-red-200">
+                                                                {dateError}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div className="w-full h-full min-h-[1.5em] whitespace-pre-wrap flex items-center justify-between group/cell">
+                                                        <span className="flex-grow">
+                                                            {displayContent}
+                                                        </span>
+                                                        
+                                                        {col.key === 'workDates' && (
+                                                            <button
+                                                                className="opacity-0 group-hover/cell:opacity-100 text-slate-400 hover:text-blue-600 ml-2 transition-opacity"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDateClick(act, e.currentTarget);
+                                                                }}
+                                                            >
+                                                                <CalendarIcon className="w-4 h-4" />
+                                                            </button>
+                                                        )}
+                                                        
+                                                         {col.key === 'nextWork' && act.nextWorkActId && act.nextWorkActId !== AUTO_NEXT_ID && (
+                                                            <div className="ml-2 text-blue-600" title="Связано с другим актом">
+                                                                <LinkIcon className="w-4 h-4" />
+                                                            </div>
+                                                         )}
+                                                    </div>
+                                                )}
+                                            </td>
+                                        );
+                                    })}
+                                </tr>
+                            );
+                        })}
+                        {/* New Act Row Indicator */}
+                        <tr 
+                            className="h-10 group cursor-pointer"
+                            onClick={() => handleAddRows(1)}
+                        >
+                            <td 
+                                colSpan={columns.length + 1} 
+                                className="p-0 border border-t-0 border-slate-300 border-dashed bg-slate-50 hover:bg-blue-50 transition-colors"
+                            >
+                                <div className="flex items-center justify-between px-4 py-2 text-slate-500 group-hover:text-blue-600 select-none">
+                                    <div className="flex items-center gap-2 font-medium">
+                                        <PlusIcon className="w-5 h-5"/>
+                                        <span>Добавить новый акт</span>
+                                    </div>
+                                    <div 
+                                        className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <span className="text-xs">Добавить сразу:</span>
+                                        <input 
+                                            type="number" 
+                                            min="1" 
+                                            max="50" 
+                                            value={numRowsToAdd}
+                                            onChange={(e) => setNumRowsToAdd(Math.max(1, parseInt(e.target.value) || 1))}
+                                            className="w-12 h-7 px-1 text-center border border-slate-300 rounded text-sm focus:outline-none focus:border-blue-500"
+                                        />
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleAddRows(numRowsToAdd);
+                                            }}
+                                            className="bg-white border border-slate-300 px-3 py-1 rounded text-xs hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors"
+                                        >
+                                            Добавить
+                                        </button>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
                 

@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation, Certificate } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import Modal from '../components/Modal';
-import { PlusIcon, HelpIcon, ColumnsIcon, SparklesIcon } from '../components/Icons';
+import { HelpIcon, ColumnsIcon, SparklesIcon } from '../components/Icons';
 import ActsTable from '../components/ActsTable';
 import DeleteActsConfirmationModal from '../components/DeleteActsConfirmationModal';
 import { ALL_COLUMNS } from '../components/ActsTableConfig';
@@ -206,12 +206,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         };
     };
 
-    const handleCreateNewAct = () => {
-        const newAct = createNewActFactory();
-        const insertIndex = activeCell ? activeCell.rowIndex + 1 : acts.length;
-        onSave(newAct, insertIndex);
-    };
-
     const handleRequestDelete = (actIds: string[]) => {
         const actsToDelete = acts.filter(a => actIds.includes(a.id));
         setActsPendingDeletion(actsToDelete);
@@ -386,9 +380,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                         visibleColumns={visibleColumns} 
                         setVisibleColumns={setVisibleColumns} 
                     />
-                    <button onClick={handleCreateNewAct} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
-                        <PlusIcon /> Создать акт
-                    </button>
                 </div>
             </div>
             
