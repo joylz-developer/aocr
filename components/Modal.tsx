@@ -8,9 +8,10 @@ interface ModalProps {
     children: ReactNode;
     maxWidth?: string; // Allow overriding the default width
     className?: string; // Allow passing extra classes like 'resize'
+    hideHeader?: boolean; // New prop to hide the header
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, maxWidth, className }) => {
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, maxWidth, className, hideHeader = false }) => {
     if (!isOpen) return null;
     
     // Мы используем ref, чтобы отслеживать, началось ли событие mousedown на фоне.
@@ -42,13 +43,15 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, maxWidt
             onMouseUp={handleMouseUp}
         >
             <div className={`bg-white rounded-lg shadow-xl w-full mx-4 flex flex-col max-h-[95vh] ${maxWidth || 'max-w-2xl'} ${className || ''}`}>
-                <div className="flex justify-between items-center p-4 border-b flex-shrink-0">
-                    <h2 className="text-xl font-semibold">{title}</h2>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    </button>
-                </div>
-                <div className="p-6 overflow-y-auto">
+                {!hideHeader && (
+                    <div className="flex justify-between items-center p-4 border-b flex-shrink-0">
+                        <h2 className="text-xl font-semibold">{title}</h2>
+                        <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                    </div>
+                )}
+                <div className={`${hideHeader ? 'p-0 h-full' : 'p-6'} overflow-y-auto`}>
                     {children}
                 </div>
             </div>

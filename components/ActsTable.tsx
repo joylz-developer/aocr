@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation, Certificate } from '../types';
 import Modal from './Modal';
-import { DeleteIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon, CloseIcon, GripVerticalIcon, DownloadIcon } from './Icons';
+import { DeleteIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon, CloseIcon, GripVerticalIcon, DownloadIcon, QuestionMarkCircleIcon, ArrowDownCircleIcon } from './Icons';
 import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
 import { ALL_COLUMNS } from './ActsTableConfig';
@@ -11,6 +11,8 @@ import RegulationsModal from './RegulationsModal';
 import RegulationsInput from './RegulationsInput';
 import RegulationDetails from './RegulationDetails';
 import MaterialsInput from './MaterialsInput';
+
+const AUTO_NEXT_ID = 'AUTO_NEXT';
 
 // Props for the main table component
 interface ActsTableProps {
@@ -189,7 +191,7 @@ const RegulationPopover: React.FC<{
 const NextWorkPopover: React.FC<{
     acts: Act[];
     currentActId: string;
-    onSelect: (act: Act | null) => void;
+    onSelect: (act: Act | null | string) => void;
     onClose: () => void;
     position: { top: number, left: number, width: number };
 }> = ({ acts, currentActId, onSelect, onClose, position }) => {
@@ -225,6 +227,13 @@ const NextWorkPopover: React.FC<{
                     onClick={() => onSelect(null)}
                 >
                     -- Очистить / Нет связи --
+                </button>
+                <button 
+                    className="w-full text-left px-3 py-2 text-sm text-blue-700 bg-blue-50 hover:bg-blue-100 border-b border-blue-100 font-medium flex items-center gap-2"
+                    onClick={() => onSelect(AUTO_NEXT_ID)}
+                >
+                    <ArrowDownCircleIcon className="w-4 h-4"/> 
+                    Следующий по списку (Автоматически)
                 </button>
                 {filteredActs.length > 0 ? filteredActs.map(act => (
                     <button
@@ -507,7 +516,16 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             (updatedAct as any)[columnKey] = editorValue;
             if (col.key === 'nextWork') {
                 updatedAct.nextWork = editorValue;
-                updatedAct.nextWorkActId = undefined; // Clear link if manually edited
+                // Only clear the link if the user manually types something different than what 'AUTO_NEXT' would produce, or explicitly edits it.
+                // For simplicity, manual edit breaks the link unless it was already AUTO_NEXT and we are just closing.
+                // However, handleEditorSave is called on close. If value is same, don't change.
+                if (act.nextWorkActId === AUTO_NEXT_ID) {
+                     // Keep AUTO_NEXT if the text matches what's expected, OR if the user is just closing without changes?
+                     // Actually, if user types manually, we usually want to overwrite 'AUTO_NEXT'.
+                     updatedAct.nextWorkActId = undefined;
+                } else {
+                     updatedAct.nextWorkActId = undefined;
+                }
             }
         }
 
@@ -560,6 +578,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 initialValue = formatDateForDisplay(act[columnKey] as string || '');
             } else if (col.key === 'regulations') {
                 initialValue = act.regulations || '';
+            } else if (col.key === 'nextWork' && act.nextWorkActId === AUTO_NEXT_ID) {
+                // When editing an auto-next cell, show the resolved text so user can edit it if they want (breaking the link)
+                const nextAct = acts[rowIndex + 1];
+                if (nextAct) {
+                    initialValue = `Работы по акту №${nextAct.number || 'б/н'} (${nextAct.workName || '...'})`;
+                } else {
+                    initialValue = '';
+                }
             } else {
                 const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                 initialValue = act[columnKey] || '';
@@ -927,7 +953,17 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         Array.from(selectedRows).forEach(rowIndex => {
             const act = acts[rowIndex];
             if (act) {
-                generateDocument(template, act, people);
+                // If the act has auto-next, resolve it before generation
+                const actToGenerate = { ...act };
+                if (act.nextWorkActId === AUTO_NEXT_ID) {
+                    const nextAct = acts[rowIndex + 1];
+                    if (nextAct) {
+                        actToGenerate.nextWork = `Работы по акту №${nextAct.number || 'б/н'} (${nextAct.workName || '...'})`;
+                    } else {
+                        actToGenerate.nextWork = '';
+                    }
+                }
+                generateDocument(template, actToGenerate, people);
             }
         });
     };
@@ -1365,7 +1401,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         ${col.widthClass}
                                         ${selectedColumns.has(index) ? 'bg-blue-100' : ''}
                                         ${draggedColKey === col.key ? 'opacity-50' : ''}
-                                        grabbable
+                                        grabbable group/th
                                     `}
                                     draggable={!editingCell}
                                     onDragStart={(e) => handleColumnDragStart(e, col.key)}
@@ -1374,7 +1410,17 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                     onDragEnd={handleDragEnd}
                                     onClick={(e) => handleColumnHeaderClick(e, index)}
                                 >
-                                    {col.label}
+                                    <div className="flex items-center justify-between">
+                                        <span>{col.label}</span>
+                                        {col.helpText && (
+                                            <span 
+                                                title={col.helpText} 
+                                                className="text-slate-400 hover:text-blue-600 cursor-help ml-2 opacity-50 group-hover/th:opacity-100 transition-opacity"
+                                            >
+                                                <QuestionMarkCircleIcon className="w-4 h-4" />
+                                            </span>
+                                        )}
+                                    </div>
                                 </th>
                             ))}
                         </tr>
@@ -1421,6 +1467,63 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                             const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colIndex === colIndex;
                                             const isCopied = copiedCells?.has(cellId);
                                             
+                                            // Dynamic display logic for 'nextWork' column
+                                            let displayContent: React.ReactNode = String(act[col.key as keyof Act] || '');
+                                            
+                                            if (col.key === 'workDates') {
+                                                displayContent = (
+                                                    <span className={!act.workStartDate || !act.workEndDate ? 'text-slate-400' : ''}>
+                                                        {act.workStartDate && act.workEndDate 
+                                                            ? `${formatDateForDisplay(act.workStartDate)} - ${formatDateForDisplay(act.workEndDate)}`
+                                                            : 'Укажите даты'}
+                                                    </span>
+                                                );
+                                            } else if (col.key === 'commissionGroup') {
+                                                displayContent = groups.find(g => g.id === act.commissionGroupId)?.name || <span className="text-slate-300 italic">Не выбрано</span>;
+                                            } else if (col.type === 'date') {
+                                                displayContent = formatDateForDisplay(act[col.key as keyof Act] as string);
+                                            } else if (col.key === 'regulations') {
+                                                displayContent = (
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {(act.regulations || '').split(';').map(s => s.trim()).filter(Boolean).map((item, idx) => {
+                                                            const reg = regulations.find(r => r.designation === item);
+                                                            let chipClass = "bg-slate-100 text-slate-800 border-slate-300";
+                                                            if (reg) {
+                                                                 if (reg.status.toLowerCase().includes('действует')) chipClass = "bg-green-100 text-green-800 border-green-200";
+                                                                 else if (reg.status.toLowerCase().includes('заменен')) chipClass = "bg-red-100 text-red-800 border-red-200";
+                                                                 else chipClass = "bg-blue-100 text-blue-800 border-blue-200";
+                                                            }
+                                                            return (
+                                                                <span 
+                                                                                    key={idx} 
+                                                                                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs border ${chipClass} cursor-pointer hover:underline`}
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        handleShowRegulationInfo(item, e.currentTarget);
+                                                                                    }}
+                                                                                >
+                                                                                    {item}
+                                                                                </span>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                );
+                                            } else if (col.key === 'nextWork' && act.nextWorkActId === AUTO_NEXT_ID) {
+                                                const nextAct = acts[rowIndex + 1];
+                                                if (nextAct) {
+                                                    displayContent = (
+                                                        <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1.5 inline-flex max-w-full">
+                                                            <ArrowDownCircleIcon className="w-3 h-3 flex-shrink-0" />
+                                                            <span className="truncate">
+                                                                Акт №{nextAct.number || 'б/н'} ({nextAct.workName || '...'})
+                                                            </span>
+                                                        </span>
+                                                    );
+                                                } else {
+                                                    displayContent = <span className="text-slate-300 italic text-xs">Конец списка</span>;
+                                                }
+                                            }
+
                                             return (
                                                 <td
                                                     key={col.key}
@@ -1491,43 +1594,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                     ) : (
                                                         <div className="w-full h-full min-h-[1.5em] whitespace-pre-wrap flex items-center justify-between group/cell">
                                                             <span className="flex-grow">
-                                                                {col.key === 'workDates' ? (
-                                                                    <span className={!act.workStartDate || !act.workEndDate ? 'text-slate-400' : ''}>
-                                                                        {act.workStartDate && act.workEndDate 
-                                                                            ? `${formatDateForDisplay(act.workStartDate)} - ${formatDateForDisplay(act.workEndDate)}`
-                                                                            : 'Укажите даты'}
-                                                                    </span>
-                                                                ) : col.key === 'commissionGroup' ? (
-                                                                    groups.find(g => g.id === act.commissionGroupId)?.name || <span className="text-slate-300 italic">Не выбрано</span>
-                                                                ) : col.type === 'date' ? (
-                                                                     formatDateForDisplay(act[col.key as keyof Act] as string)
-                                                                ) : col.key === 'regulations' ? (
-                                                                    <div className="flex flex-wrap gap-1">
-                                                                        {(act.regulations || '').split(';').map(s => s.trim()).filter(Boolean).map((item, idx) => {
-                                                                            const reg = regulations.find(r => r.designation === item);
-                                                                            let chipClass = "bg-slate-100 text-slate-800 border-slate-300";
-                                                                            if (reg) {
-                                                                                 if (reg.status.toLowerCase().includes('действует')) chipClass = "bg-green-100 text-green-800 border-green-200";
-                                                                                 else if (reg.status.toLowerCase().includes('заменен')) chipClass = "bg-red-100 text-red-800 border-red-200";
-                                                                                 else chipClass = "bg-blue-100 text-blue-800 border-blue-200";
-                                                                            }
-                                                                            return (
-                                                                                <span 
-                                                                                    key={idx} 
-                                                                                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs border ${chipClass} cursor-pointer hover:underline`}
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        handleShowRegulationInfo(item, e.currentTarget);
-                                                                                    }}
-                                                                                >
-                                                                                    {item}
-                                                                                </span>
-                                                                            );
-                                                                        })}
-                                                                    </div>
-                                                                ) : (
-                                                                    String(act[col.key as keyof Act] || '')
-                                                                )}
+                                                                {displayContent}
                                                             </span>
                                                             
                                                             {col.key === 'workDates' && (
@@ -1542,7 +1609,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                                 </button>
                                                             )}
                                                             
-                                                             {col.key === 'nextWork' && act.nextWorkActId && (
+                                                             {col.key === 'nextWork' && act.nextWorkActId && act.nextWorkActId !== AUTO_NEXT_ID && (
                                                                 <div className="ml-2 text-blue-600" title="Связано с другим актом">
                                                                     <LinkIcon className="w-4 h-4" />
                                                                 </div>
@@ -1637,11 +1704,16 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     currentActId={acts[nextWorkPopoverState.rowIndex].id}
                     position={nextWorkPopoverState.position}
                     onClose={() => setNextWorkPopoverState(null)}
-                    onSelect={(selectedAct) => {
+                    onSelect={(selectedActOrId) => {
                          const sourceAct = acts[nextWorkPopoverState.rowIndex];
                          if (sourceAct) {
                             const updatedAct = { ...sourceAct };
-                            if (selectedAct) {
+                            
+                            if (selectedActOrId === AUTO_NEXT_ID) {
+                                updatedAct.nextWorkActId = AUTO_NEXT_ID;
+                                updatedAct.nextWork = ''; // Will be dynamic
+                            } else if (selectedActOrId && typeof selectedActOrId === 'object') {
+                                const selectedAct = selectedActOrId as Act;
                                 updatedAct.nextWork = `Работы по акту №${selectedAct.number || 'б/н'} (${selectedAct.workName || '...'})`;
                                 updatedAct.nextWorkActId = selectedAct.id;
                             } else {
@@ -1726,7 +1798,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             )}
             
             {fullRegulationDetails && (
-                <Modal isOpen={!!fullRegulationDetails} onClose={() => setFullRegulationDetails(null)} title="">
+                <Modal 
+                    isOpen={!!fullRegulationDetails} 
+                    onClose={() => setFullRegulationDetails(null)} 
+                    title=""
+                    hideHeader={true} // Hide redundant header
+                >
                     <RegulationDetails regulation={fullRegulationDetails} onClose={() => setFullRegulationDetails(null)} />
                 </Modal>
             )}
