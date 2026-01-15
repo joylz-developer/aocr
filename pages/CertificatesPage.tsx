@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 're
 import { Certificate, ProjectSettings, CertificateFile, Act } from '../types';
 import Modal from '../components/Modal';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon, LayoutListIcon, LayoutGridIcon, ColumnsIcon, LinkIcon, ChevronDownIcon } from '../components/Icons';
+import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon, LayoutListIcon, LayoutGridIcon, ColumnsIcon, LinkIcon, ChevronDownIcon, MinimizeIcon, MaximizeIcon, ArrowRightIcon, CheckIcon, XIcon } from '../components/Icons';
 import { GoogleGenAI } from '@google/genai';
 
 interface CertificatesPageProps {
@@ -24,8 +24,126 @@ interface AiSuggestions {
     materials?: string[];
 }
 
+// Diff Types
+type DiffStatus = 'unchanged' | 'modified' | 'added' | 'removed';
+
+interface DiffItem {
+    id: string; // Unique ID for keying
+    status: DiffStatus;
+    original?: string;
+    new?: string;
+    selected: boolean; // Whether the user accepts this change
+}
+
 type ViewMode = 'card' | 'list';
 type ColumnCount = 1 | 2 | 3;
+
+// --- Helper Functions ---
+
+// Basic Levenshtein distance for fuzzy matching
+const levenshteinDistance = (a: string, b: string): number => {
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j] + 1
+                );
+            }
+        }
+    }
+    return matrix[b.length][a.length];
+};
+
+const calculateDiff = (oldList: string[], newList: string[]): DiffItem[] => {
+    const diffs: DiffItem[] = [];
+    const usedNewIndices = new Set<number>();
+    const usedOldIndices = new Set<number>();
+
+    // 1. Exact Matches (Unchanged)
+    oldList.forEach((oldItem, oldIdx) => {
+        if (usedOldIndices.has(oldIdx)) return;
+        const newIdx = newList.findIndex((newItem, idx) => !usedNewIndices.has(idx) && newItem === oldItem);
+        if (newIdx !== -1) {
+            diffs.push({ id: `unchanged-${oldIdx}`, status: 'unchanged', original: oldItem, new: oldItem, selected: true });
+            usedOldIndices.add(oldIdx);
+            usedNewIndices.add(newIdx);
+        }
+    });
+
+    // 2. Fuzzy Matches (Modified)
+    // We try to find the best match for each remaining old item
+    oldList.forEach((oldItem, oldIdx) => {
+        if (usedOldIndices.has(oldIdx)) return;
+
+        let bestMatchIdx = -1;
+        let bestScore = Infinity; // Lower is better
+
+        newList.forEach((newItem, newIdx) => {
+            if (usedNewIndices.has(newIdx)) return;
+            
+            // Optimization: Skip if lengths differ drastically
+            if (Math.abs(oldItem.length - newItem.length) > oldItem.length * 0.5) return;
+
+            const score = levenshteinDistance(oldItem, newItem);
+            // Threshold: change must be less than 60% of string length to be considered an edit
+            if (score < bestScore && score < Math.max(oldItem.length, newItem.length) * 0.6) {
+                bestScore = score;
+                bestMatchIdx = newIdx;
+            }
+        });
+
+        if (bestMatchIdx !== -1) {
+            diffs.push({ 
+                id: `mod-${oldIdx}`, 
+                status: 'modified', 
+                original: oldItem, 
+                new: newList[bestMatchIdx], 
+                selected: true 
+            });
+            usedOldIndices.add(oldIdx);
+            usedNewIndices.add(bestMatchIdx);
+        }
+    });
+
+    // 3. Remaining Old -> Removed
+    oldList.forEach((oldItem, oldIdx) => {
+        if (!usedOldIndices.has(oldIdx)) {
+            diffs.push({ id: `del-${oldIdx}`, status: 'removed', original: oldItem, selected: true });
+        }
+    });
+
+    // 4. Remaining New -> Added
+    newList.forEach((newItem, newIdx) => {
+        if (!usedNewIndices.has(newIdx)) {
+            diffs.push({ id: `add-${newIdx}`, status: 'added', new: newItem, selected: true });
+        }
+    });
+
+    // Sort to keep original order somewhat, though edits/adds make it tricky. 
+    // We'll just group them: Modified, Added, Removed, Unchanged (or keep fuzzy order).
+    // For simpler UI, let's sort by status priority: Modified > Added > Removed > Unchanged
+    const score = (d: DiffItem) => {
+        switch(d.status) {
+            case 'modified': return 0;
+            case 'added': return 1;
+            case 'removed': return 2;
+            case 'unchanged': return 3;
+            default: return 4;
+        }
+    };
+    diffs.sort((a, b) => score(a) - score(b));
+
+    return diffs;
+};
+
 
 // --- Helper Components ---
 
@@ -185,6 +303,7 @@ const CertificateForm: React.FC<{
     const [lastDeletedMaterial, setLastDeletedMaterial] = useState<{index: number, value: string} | null>(null);
     const [hoveredDeleteIndex, setHoveredDeleteIndex] = useState<number | null>(null);
     const [fileToDeleteId, setFileToDeleteId] = useState<string | null>(null);
+    const [isGalleryCollapsed, setIsGalleryCollapsed] = useState(false);
     
     // Suggestion Visibility State
     const [showAiMaterials, setShowAiMaterials] = useState(true);
@@ -192,7 +311,7 @@ const CertificateForm: React.FC<{
     // Mass Edit AI States
     const [massEditPrompt, setMassEditPrompt] = useState('');
     const [isMassEditing, setIsMassEditing] = useState(false);
-    const [previewMaterials, setPreviewMaterials] = useState<string[] | null>(null);
+    const [diffResult, setDiffResult] = useState<DiffItem[] | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
@@ -367,8 +486,8 @@ const CertificateForm: React.FC<{
     const handleAiMassEdit = async () => {
         if (!ai || !massEditPrompt.trim() || formData.materials.length === 0) return;
         setIsMassEditing(true);
-        setPreviewMaterials(null);
-
+        setDiffResult(null);
+        
         try {
             const prompt = `
                 Current materials list: ${JSON.stringify(formData.materials)}
@@ -393,31 +512,56 @@ const CertificateForm: React.FC<{
 
             const text = response.text;
             if(!text) throw new Error("No response");
-            const result = JSON.parse(text);
+            const newList = JSON.parse(text);
 
-            if (Array.isArray(result)) {
-                setPreviewMaterials(result);
+            if (Array.isArray(newList)) {
+                // Determine Diff
+                const calculatedDiff = calculateDiff(formData.materials, newList);
+                setDiffResult(calculatedDiff);
             }
         } catch (e) {
             alert("Ошибка при обработке AI. Попробуйте другой запрос.");
             console.error(e);
-            setPreviewMaterials(null);
+            setDiffResult(null);
         } finally {
             setIsMassEditing(false);
         }
     };
 
     const handleCancelMassEdit = () => {
-        setPreviewMaterials(null);
+        setDiffResult(null);
         setMassEditPrompt('');
     };
 
     const handleCommitMassEdit = () => {
-        if (previewMaterials) {
-            setFormData(prev => ({ ...prev, materials: previewMaterials }));
-            setPreviewMaterials(null);
+        if (diffResult) {
+            const finalMaterials: string[] = [];
+            
+            diffResult.forEach(item => {
+                if (item.status === 'unchanged') {
+                    if (item.original) finalMaterials.push(item.original);
+                } else if (item.status === 'modified') {
+                    if (item.selected && item.new) finalMaterials.push(item.new);
+                    else if (!item.selected && item.original) finalMaterials.push(item.original);
+                } else if (item.status === 'added') {
+                    if (item.selected && item.new) finalMaterials.push(item.new);
+                } else if (item.status === 'removed') {
+                    if (!item.selected && item.original) finalMaterials.push(item.original);
+                    // If selected, it's removed, so don't push
+                }
+            });
+
+            setFormData(prev => ({ ...prev, materials: finalMaterials }));
+            setDiffResult(null);
             setMassEditPrompt('');
         }
+    };
+    
+    const handleToggleDiffSelection = (id: string) => {
+        setDiffResult(prev => {
+            if (!prev) return null;
+            return prev.map(item => item.id === id ? { ...item, selected: !item.selected } : item);
+        });
     };
 
     // --- Material List Logic ---
@@ -492,145 +636,151 @@ const CertificateForm: React.FC<{
         onClose();
     };
 
-    // --- Computed Views for AI Diff ---
-    
-    const displayedMaterials = useMemo(() => {
-        if (!previewMaterials) return formData.materials.map(m => ({ text: m, status: 'current' }));
-
-        const result: { text: string, status: 'current' | 'added' | 'removed' }[] = [];
-        
-        // Items in preview (either kept or added)
-        previewMaterials.forEach(item => {
-            if (formData.materials.includes(item)) {
-                result.push({ text: item, status: 'current' });
-            } else {
-                result.push({ text: item, status: 'added' });
-            }
-        });
-
-        // Items in original but not in preview (deleted)
-        formData.materials.forEach(item => {
-            if (!previewMaterials.includes(item)) {
-                result.push({ text: item, status: 'removed' });
-            }
-        });
-
-        return result;
-    }, [formData.materials, previewMaterials]);
-
-
     const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900";
     const labelClass = "block text-sm font-medium text-slate-700";
 
-    const isPreviewMode = !!previewMaterials;
+    const isPreviewMode = !!diffResult;
 
     return (
         <>
             <form onSubmit={handleSubmit} className="flex flex-col h-[75vh]">
                 
-                <div className="flex flex-col md:flex-row gap-6 h-full min-h-0">
+                <div className="flex flex-row gap-6 h-full min-h-0 relative">
                     {/* LEFT COLUMN: Document Preview Gallery */}
-                    <div className="w-full md:w-3/5 flex flex-col h-full min-h-0 gap-2">
-                        <div 
-                            className={`flex-grow flex flex-col bg-slate-50 rounded-lg border-2 transition-colors relative overflow-hidden
-                                ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}
-                            `}
-                            onDragOver={handleDragOver}
-                            onDragLeave={handleDragLeave}
-                            onDrop={handleDrop}
+                    <div 
+                        className={`flex flex-col h-full min-h-0 gap-2 transition-all duration-300 ease-in-out relative
+                            ${isGalleryCollapsed ? 'w-12' : 'w-full md:w-3/5'}
+                        `}
+                    >
+                        {/* Collapse Toggle */}
+                        <button 
+                            type="button"
+                            onClick={() => setIsGalleryCollapsed(!isGalleryCollapsed)}
+                            className="absolute -right-3 top-2 z-30 bg-white border border-slate-300 rounded-full p-1 shadow-md hover:bg-slate-50 text-slate-600"
+                            title={isGalleryCollapsed ? "Развернуть превью" : "Свернуть превью"}
                         >
-                            <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-center z-10 bg-gradient-to-b from-black/50 to-transparent pointer-events-none">
-                                <span className="font-semibold text-white drop-shadow-md pointer-events-auto">
-                                    {activeFile ? activeFile.name : 'Нет файла'}
-                                </span>
-                                {activeFile && (
-                                    <button
-                                        type="button"
-                                        onClick={(e) => handleDeleteFileClick(e, activeFile.id)}
-                                        className="p-1.5 bg-red-600/80 text-white rounded-full hover:bg-red-700 pointer-events-auto shadow-sm"
-                                        title="Удалить текущий файл"
-                                    >
-                                        <DeleteIcon className="w-4 h-4" />
-                                    </button>
-                                )}
-                            </div>
-                            
-                            <div className="flex-grow overflow-hidden relative flex items-center justify-center p-2 bg-slate-800">
-                                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" multiple />
-                                
-                                {activeFile ? (
-                                    activeFile.type === 'image' ? (
-                                        <ImageViewer src={activeFile.data} alt="Preview" />
-                                    ) : (
-                                        <object data={activeFile.data} type="application/pdf" className="w-full h-full rounded-md shadow-inner bg-white">
-                                            <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                                                <p>PDF Preview не поддерживается.</p>
-                                            </div>
-                                        </object>
-                                    )
-                                ) : (
-                                    <div className="text-center p-6 pointer-events-none flex flex-col items-center">
-                                        <CloudUploadIcon className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                                        <p className="text-lg text-slate-400 font-medium">Перетащите файлы сюда</p>
-                                        <p className="text-sm text-slate-500 mt-1">или выберите из списка снизу</p>
-                                    </div>
-                                )}
+                            {isGalleryCollapsed ? <MaximizeIcon className="w-4 h-4"/> : <MinimizeIcon className="w-4 h-4"/>}
+                        </button>
 
-                                {/* Drag Overlay */}
-                                {isDragging && (
-                                    <div className="absolute inset-0 bg-blue-100/90 flex flex-col items-center justify-center z-20 border-2 border-blue-500 border-dashed rounded-lg animate-fade-in-up">
-                                        <CloudUploadIcon className="w-16 h-16 text-blue-600 mb-2" />
-                                        <span className="text-lg font-bold text-blue-700">Отпустите, чтобы добавить файлы</span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Thumbnail Strip */}
-                        <div className="h-24 flex-shrink-0 bg-slate-100 rounded-lg border border-slate-200 p-2 overflow-x-auto flex gap-2 items-center">
-                            {formData.files.map(file => (
+                        {!isGalleryCollapsed ? (
+                            <>
                                 <div 
-                                    key={file.id}
-                                    onClick={() => setActiveFileId(file.id)}
-                                    className={`
-                                        relative h-20 w-20 min-w-[5rem] rounded-md border-2 overflow-hidden cursor-pointer group flex-shrink-0
-                                        ${activeFileId === file.id ? 'border-blue-600 ring-2 ring-blue-200' : 'border-slate-300 hover:border-slate-400'}
+                                    className={`flex-grow flex flex-col bg-slate-50 rounded-lg border-2 transition-colors relative overflow-hidden
+                                        ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}
                                     `}
+                                    onDragOver={handleDragOver}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={handleDrop}
                                 >
-                                    {file.type === 'image' ? (
-                                        <img src={file.data} alt="thumb" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <div className="w-full h-full bg-white flex flex-col items-center justify-center p-1">
-                                            <CertificateIcon className="w-8 h-8 text-red-500" />
-                                            <span className="text-[8px] text-slate-600 truncate w-full text-center mt-1">{file.name}</span>
-                                        </div>
-                                    )}
-                                    <div className="absolute top-0 right-0 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button 
-                                            type="button" 
-                                            onClick={(e) => handleDeleteFileClick(e, file.id)}
-                                            className="bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600"
-                                        >
-                                            <CloseIcon className="w-3 h-3" />
-                                        </button>
+                                    <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-center z-10 bg-gradient-to-b from-black/50 to-transparent pointer-events-none">
+                                        <span className="font-semibold text-white drop-shadow-md pointer-events-auto truncate pr-2">
+                                            {activeFile ? activeFile.name : 'Нет файла'}
+                                        </span>
+                                        {activeFile && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => handleDeleteFileClick(e, activeFile.id)}
+                                                className="p-1.5 bg-red-600/80 text-white rounded-full hover:bg-red-700 pointer-events-auto shadow-sm flex-shrink-0"
+                                                title="Удалить текущий файл"
+                                            >
+                                                <DeleteIcon className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="flex-grow overflow-hidden relative flex items-center justify-center p-2 bg-slate-800">
+                                        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" multiple />
+                                        
+                                        {activeFile ? (
+                                            activeFile.type === 'image' ? (
+                                                <ImageViewer src={activeFile.data} alt="Preview" />
+                                            ) : (
+                                                <object data={activeFile.data} type="application/pdf" className="w-full h-full rounded-md shadow-inner bg-white">
+                                                    <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                                        <p>PDF Preview не поддерживается.</p>
+                                                    </div>
+                                                </object>
+                                            )
+                                        ) : (
+                                            <div className="text-center p-6 pointer-events-none flex flex-col items-center">
+                                                <CloudUploadIcon className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                                                <p className="text-lg text-slate-400 font-medium">Перетащите файлы сюда</p>
+                                                <p className="text-sm text-slate-500 mt-1">или выберите из списка снизу</p>
+                                            </div>
+                                        )}
+
+                                        {/* Drag Overlay */}
+                                        {isDragging && (
+                                            <div className="absolute inset-0 bg-blue-100/90 flex flex-col items-center justify-center z-20 border-2 border-blue-500 border-dashed rounded-lg animate-fade-in-up">
+                                                <CloudUploadIcon className="w-16 h-16 text-blue-600 mb-2" />
+                                                <span className="text-lg font-bold text-blue-700">Отпустите, чтобы добавить файлы</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
-                            ))}
-                            
-                            <button 
-                                type="button"
-                                onClick={() => fileInputRef.current?.click()}
-                                className="h-20 w-20 min-w-[5rem] rounded-md border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-colors"
-                                title="Добавить файлы"
-                            >
-                                <PlusIcon className="w-6 h-6 mb-1" />
-                                <span className="text-xs font-medium">Добавить</span>
-                            </button>
-                        </div>
+
+                                {/* Thumbnail Strip */}
+                                <div className="h-24 flex-shrink-0 bg-slate-100 rounded-lg border border-slate-200 p-2 overflow-x-auto flex gap-2 items-center">
+                                    {formData.files.map(file => (
+                                        <div 
+                                            key={file.id}
+                                            onClick={() => setActiveFileId(file.id)}
+                                            className={`
+                                                relative h-20 w-20 min-w-[5rem] rounded-md border-2 overflow-hidden cursor-pointer group flex-shrink-0
+                                                ${activeFileId === file.id ? 'border-blue-600 ring-2 ring-blue-200' : 'border-slate-300 hover:border-slate-400'}
+                                            `}
+                                        >
+                                            {file.type === 'image' ? (
+                                                <img src={file.data} alt="thumb" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full bg-white flex flex-col items-center justify-center p-1">
+                                                    <CertificateIcon className="w-8 h-8 text-red-500" />
+                                                    <span className="text-[8px] text-slate-600 truncate w-full text-center mt-1">{file.name}</span>
+                                                </div>
+                                            )}
+                                            <div className="absolute top-0 right-0 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button 
+                                                    type="button" 
+                                                    onClick={(e) => handleDeleteFileClick(e, file.id)}
+                                                    className="bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600"
+                                                >
+                                                    <CloseIcon className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    
+                                    <button 
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="h-20 w-20 min-w-[5rem] rounded-md border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                                        title="Добавить файлы"
+                                    >
+                                        <PlusIcon className="w-6 h-6 mb-1" />
+                                        <span className="text-xs font-medium">Добавить</span>
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="h-full bg-slate-100 rounded-lg border border-slate-200 flex flex-col items-center pt-8 gap-4 overflow-hidden">
+                                {activeFile && (
+                                    <div className="w-8 h-8 rounded overflow-hidden shadow border border-white" title={activeFile.name}>
+                                        {activeFile.type === 'image' ? (
+                                            <img src={activeFile.data} className="w-full h-full object-cover"/>
+                                        ) : (
+                                            <CertificateIcon className="w-full h-full text-slate-400 bg-white p-1"/>
+                                        )}
+                                    </div>
+                                )}
+                                <span className="vertical-rl text-xs text-slate-400 font-medium tracking-wider uppercase" style={{writingMode: 'vertical-rl'}}>
+                                    Превью скрыто
+                                </span>
+                            </div>
+                        )}
                     </div>
 
                     {/* RIGHT COLUMN: Form Fields */}
-                    <div className="w-full md:w-2/5 flex flex-col h-full min-h-0">
+                    <div className={`flex flex-col h-full min-h-0 transition-all duration-300 ${isGalleryCollapsed ? 'w-full pl-2' : 'w-full md:w-2/5'}`}>
                         <div className="overflow-y-auto pr-2 flex-grow space-y-5 pb-4">
                             
                             {/* AI Button */}
@@ -827,38 +977,28 @@ const CertificateForm: React.FC<{
 
                                 {/* Editable List */}
                                 <div className="flex flex-col gap-1">
-                                    {displayedMaterials.length === 0 && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded">Список материалов пуст</p>}
-                                    {displayedMaterials.map((item, idx) => (
+                                    {formData.materials.length === 0 && !isPreviewMode && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded">Список материалов пуст</p>}
+                                    
+                                    {!isPreviewMode && formData.materials.map((item, idx) => (
                                         <div 
                                             key={idx} 
-                                            className={`flex items-start gap-1 group py-1 px-1 rounded transition-colors 
-                                                ${hoveredDeleteIndex === idx && !isPreviewMode ? 'bg-red-50' : ''}
-                                                ${item.status === 'added' ? 'bg-green-100 border border-green-200' : ''}
-                                                ${item.status === 'removed' ? 'bg-red-100 border border-red-200 opacity-70' : ''}
-                                            `}
+                                            className={`flex items-start gap-1 group py-1 px-1 rounded transition-colors ${hoveredDeleteIndex === idx ? 'bg-red-50' : ''}`}
                                         >
                                             <AutoResizeTextarea
-                                                value={item.text}
+                                                value={item}
                                                 onChange={(e) => handleEditMaterial(idx, e.target.value)}
-                                                disabled={isPreviewMode || item.status === 'removed'}
-                                                className={`block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded focus:bg-white transition-colors py-1 px-2
-                                                    ${item.status !== 'current' ? 'bg-transparent border-transparent' : 'bg-slate-50'}
-                                                `}
+                                                className="block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded focus:bg-white transition-colors py-1 px-2 bg-slate-50"
                                             />
-                                            {!isPreviewMode && item.status === 'current' && (
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => handleRemoveMaterial(idx)} 
-                                                    onMouseEnter={() => setHoveredDeleteIndex(idx)}
-                                                    onMouseLeave={() => setHoveredDeleteIndex(null)}
-                                                    className="text-slate-400 hover:text-red-500 p-1.5 rounded hover:bg-red-100 mt-0.5 transition-colors"
-                                                    title="Удалить строку"
-                                                >
-                                                    <CloseIcon className="w-4 h-4" />
-                                                </button>
-                                            )}
-                                            {isPreviewMode && item.status === 'added' && <div className="p-1.5 mt-0.5 text-green-600 font-bold text-xs" title="Будет добавлено">+</div>}
-                                            {isPreviewMode && item.status === 'removed' && <div className="p-1.5 mt-0.5 text-red-600 font-bold text-xs" title="Будет удалено">-</div>}
+                                            <button 
+                                                type="button" 
+                                                onClick={() => handleRemoveMaterial(idx)} 
+                                                onMouseEnter={() => setHoveredDeleteIndex(idx)}
+                                                onMouseLeave={() => setHoveredDeleteIndex(null)}
+                                                className="text-slate-400 hover:text-red-500 p-1.5 rounded hover:bg-red-100 mt-0.5 transition-colors"
+                                                title="Удалить строку"
+                                            >
+                                                <CloseIcon className="w-4 h-4" />
+                                            </button>
                                         </div>
                                     ))}
                                 </div>
@@ -866,7 +1006,7 @@ const CertificateForm: React.FC<{
                                 {/* Mass AI Edit Section */}
                                 {formData.materials.length > 0 && ai && (
                                     <div className="mt-6 pt-4 border-t border-slate-200">
-                                        {!previewMaterials ? (
+                                        {!diffResult ? (
                                             <div className="flex gap-2">
                                                 <input 
                                                     type="text" 
@@ -887,19 +1027,69 @@ const CertificateForm: React.FC<{
                                             </div>
                                         ) : (
                                             <div className="bg-violet-50 p-3 rounded-md border border-violet-100 animate-fade-in-up">
-                                                <p className="text-xs text-violet-800 mb-2 font-medium">Предварительный просмотр изменений. Сохранить?</p>
+                                                <p className="text-xs text-violet-800 mb-3 font-medium border-b border-violet-200 pb-1">Проверьте изменения:</p>
+                                                
+                                                <div className="max-h-60 overflow-y-auto mb-3 space-y-2 pr-1">
+                                                    {diffResult.length === 0 && <p className="text-xs text-slate-500 italic">Нет изменений</p>}
+                                                    {diffResult.map((item) => (
+                                                        <div key={item.id} className="flex items-center gap-2 text-xs bg-white p-2 rounded border border-slate-200 shadow-sm">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={item.selected}
+                                                                onChange={() => handleToggleDiffSelection(item.id)}
+                                                                className="h-4 w-4 form-checkbox-custom flex-shrink-0"
+                                                            />
+                                                            
+                                                            <div className="flex-grow min-w-0">
+                                                                {item.status === 'modified' && (
+                                                                    <div className="flex flex-col gap-1">
+                                                                        <div className="line-through text-red-600 opacity-60 truncate" title={item.original}>{item.original}</div>
+                                                                        <div className="flex items-center gap-1 text-green-700 font-medium">
+                                                                            <ArrowRightIcon className="w-3 h-3 flex-shrink-0 text-slate-400" />
+                                                                            <span className="break-all">{item.new}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {item.status === 'added' && (
+                                                                    <div className="text-green-700 font-medium flex items-center gap-1">
+                                                                        <PlusIcon className="w-3 h-3 flex-shrink-0" />
+                                                                        <span className="break-all">{item.new}</span>
+                                                                    </div>
+                                                                )}
+                                                                {item.status === 'removed' && (
+                                                                    <div className="text-red-600 line-through opacity-70 flex items-center gap-1">
+                                                                        <span className="break-all">{item.original}</span>
+                                                                    </div>
+                                                                )}
+                                                                {item.status === 'unchanged' && (
+                                                                    <div className="text-slate-500 truncate" title="Без изменений">{item.original}</div>
+                                                                )}
+                                                            </div>
+                                                            
+                                                            <div className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded
+                                                                ${item.status === 'modified' ? 'bg-amber-100 text-amber-700' : ''}
+                                                                ${item.status === 'added' ? 'bg-green-100 text-green-700' : ''}
+                                                                ${item.status === 'removed' ? 'bg-red-100 text-red-700' : ''}
+                                                                ${item.status === 'unchanged' ? 'bg-slate-100 text-slate-500' : ''}
+                                                            `}>
+                                                                {item.status === 'modified' ? 'ИЗМ' : item.status === 'added' ? 'НОВ' : item.status === 'removed' ? 'УДЛ' : 'ОК'}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
                                                 <div className="flex gap-2">
                                                     <button 
                                                         type="button" 
                                                         onClick={handleCommitMassEdit}
-                                                        className="flex-1 bg-violet-600 text-white text-xs py-1.5 rounded hover:bg-violet-700"
+                                                        className="flex-1 bg-violet-600 text-white text-xs py-2 rounded hover:bg-violet-700 font-medium"
                                                     >
-                                                        Сохранить
+                                                        Применить выбранное
                                                     </button>
                                                     <button 
                                                         type="button" 
                                                         onClick={handleCancelMassEdit}
-                                                        className="flex-1 bg-white border border-slate-300 text-slate-700 text-xs py-1.5 rounded hover:bg-slate-50"
+                                                        className="flex-1 bg-white border border-slate-300 text-slate-700 text-xs py-2 rounded hover:bg-slate-50 font-medium"
                                                     >
                                                         Отменить
                                                     </button>
