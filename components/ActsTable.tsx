@@ -11,6 +11,7 @@ import RegulationsModal from './RegulationsModal';
 import RegulationsInput from './RegulationsInput';
 import RegulationDetails from './RegulationDetails';
 import MaterialsInput from './MaterialsInput';
+import MaterialPopover from './MaterialPopover'; // Import the new popover
 
 const AUTO_NEXT_ID = 'AUTO_NEXT';
 const AUTO_NEXT_LABEL = '⬇️ Следующий по списку (Автоматически)';
@@ -316,6 +317,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         position: { top: number; left: number };
     } | null>(null);
     
+    // NEW state for Material Popover
+    const [materialPopoverState, setMaterialPopoverState] = useState<{
+        certificate: Certificate;
+        materialName: string;
+        position: { top: number; left: number };
+    } | null>(null);
+    
     const [fullRegulationDetails, setFullRegulationDetails] = useState<Regulation | null>(null);
 
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; rowIndex: number; colIndex: number } | null>(null);
@@ -573,7 +581,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (!editingCell) return;
     
         const handleClickOutside = (event: MouseEvent) => {
-            if (datePopoverState || regulationsModalOpen || regulationPopoverState) return;
+            if (datePopoverState || regulationsModalOpen || regulationPopoverState || materialPopoverState) return;
             if (editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
                 const isModalClick = (event.target as HTMLElement).closest('.fixed.inset-0.z-50');
                 if (isModalClick) return;
@@ -591,7 +599,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             clearTimeout(timerId);
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [editingCell, datePopoverState, handleEditorSave, closeEditor, regulationsModalOpen, regulationPopoverState]);
+    }, [editingCell, datePopoverState, handleEditorSave, closeEditor, regulationsModalOpen, regulationPopoverState, materialPopoverState]);
 
 
     useEffect(() => {
@@ -610,6 +618,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 initialValue = formatDateForDisplay(act[columnKey] as string || '');
             } else if (col.key === 'regulations') {
                 initialValue = act.regulations || '';
+            } else if (col.key === 'materials') {
+                initialValue = act.materials || '';
             } else if (col.key === 'nextWork' && act.nextWorkActId === AUTO_NEXT_ID) {
                 // When editing an auto-next cell, show the resolved text so user can edit it if they want (breaking the link)
                 const nextAct = acts[rowIndex + 1];
@@ -696,6 +706,28 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     };
 
+    // Helper for material lookup
+    const findCertByText = (text: string) => {
+        const match = text.match(/№\s*([^\s,]+)/);
+        if (match) {
+            const certNum = match[1];
+            return certificates?.find(c => c.number.includes(certNum));
+        }
+        return null;
+    };
+
+    const handleShowMaterialInfo = (text: string, target: HTMLElement) => {
+        const cert = findCertByText(text);
+        if (cert) {
+            const coords = getRelativeCoords(target);
+            setMaterialPopoverState({ 
+                certificate: cert, 
+                materialName: text,
+                position: { top: coords.top, left: coords.left } 
+            });
+        }
+    };
+
     const normalizeSelection = (start: Coords, end: Coords): { minRow: number, maxRow: number, minCol: number, maxCol: number } => {
         const minRow = Math.min(start.rowIndex, end.rowIndex);
         const maxRow = Math.max(start.rowIndex, end.rowIndex);
@@ -724,6 +756,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         
         setDatePopoverState(null);
         setRegulationPopoverState(null);
+        setMaterialPopoverState(null);
         setNextWorkPopoverState(null);
 
         if (e.button === 2) {
@@ -828,6 +861,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         
         setDatePopoverState(null);
         setRegulationPopoverState(null);
+        setMaterialPopoverState(null);
         setNextWorkPopoverState(null);
         
         setSelectedCells(new Set());
@@ -1039,6 +1073,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             e.currentTarget.blur();
             setDatePopoverState(null);
             setRegulationPopoverState(null);
+            setMaterialPopoverState(null);
             setNextWorkPopoverState(null);
             return;
         }
@@ -1611,6 +1646,35 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                     })}
                                                 </div>
                                             );
+                                        } else if (col.key === 'materials') {
+                                            displayContent = (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {(act.materials || '').split(';').map(s => s.trim()).filter(Boolean).map((item, idx) => {
+                                                        const cert = findCertByText(item);
+                                                        let chipClass = "bg-slate-100 text-slate-800 border-slate-300";
+                                                        if (cert) {
+                                                            const isExpired = new Date(cert.validUntil) < new Date();
+                                                            chipClass = isExpired 
+                                                                ? "bg-red-100 text-red-800 border-red-200" 
+                                                                : "bg-green-100 text-green-800 border-green-200";
+                                                        }
+                                                        
+                                                        return (
+                                                            <span 
+                                                                key={idx} 
+                                                                className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs border ${chipClass} cursor-pointer hover:underline max-w-full`}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleShowMaterialInfo(item, e.currentTarget);
+                                                                }}
+                                                                title={item}
+                                                            >
+                                                                <span className="truncate max-w-[200px] block">{item.split('(')[0]}</span>
+                                                            </span>
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
                                         } else if (col.key === 'nextWork' && act.nextWorkActId === AUTO_NEXT_ID) {
                                             const nextAct = acts[rowIndex + 1];
                                             if (nextAct) {
@@ -1831,6 +1895,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         setFullRegulationDetails(regulationPopoverState.regulation);
                         setRegulationPopoverState(null);
                     }}
+                />
+            )}
+            
+            {materialPopoverState && (
+                <MaterialPopover 
+                    certificate={materialPopoverState.certificate}
+                    materialName={materialPopoverState.materialName}
+                    position={materialPopoverState.position}
+                    onClose={() => setMaterialPopoverState(null)}
                 />
             )}
             
