@@ -11,7 +11,7 @@ interface MaterialsInputProps {
     onNavigateToCertificate?: (id: string) => void;
 }
 
-// Basic Levenshtein distance for fuzzy matching (Ranking)
+// Basic Levenshtein distance for fuzzy matching
 const levenshteinDistance = (a: string, b: string): number => {
     const matrix = [];
     for (let i = 0; i <= b.length; i++) matrix[i] = [i];
@@ -33,84 +33,84 @@ const levenshteinDistance = (a: string, b: string): number => {
     return matrix[b.length][a.length];
 };
 
-// Advanced Highlighter using Longest Common Subsequence (LCS)
-// This highlights characters that match the sequence, skipping typos.
+// Advanced Highlighter using LCS for multiple tokens
+// Highlights characters that match ANY of the tokens in the query
 const HighlightMatch: React.FC<{ text: string; query: string }> = ({ text, query }) => {
     if (!query || !text) return <>{text}</>;
 
     const t = text.toLowerCase();
-    const q = query.toLowerCase();
+    const tokens = query.toLowerCase().split(/\s+/).filter(tk => tk.length > 0);
     const n = t.length;
-    const m = q.length;
+    
+    if (tokens.length === 0) return <>{text}</>;
 
-    // Build LCS DP table
-    // dp[i][j] = length of LCS of text[0..i-1] and query[0..j-1]
-    const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
+    // Global set of matched indices
+    const matchedIndices = new Set<number>();
 
-    for (let i = 1; i <= n; i++) {
-        for (let j = 1; j <= m; j++) {
-            if (t[i - 1] === q[j - 1]) {
-                dp[i][j] = dp[i - 1][j - 1] + 1;
-            } else {
-                dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+    // Helper to compute LCS indices for one token and add to set
+    const computeLCSIndices = (token: string) => {
+        const m = token.length;
+        if (m === 0) return;
+        
+        // dp[i][j] = length of LCS of text[0..i-1] and token[0..j-1]
+        const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
+
+        for (let i = 1; i <= n; i++) {
+            for (let j = 1; j <= m; j++) {
+                if (t[i - 1] === token[j - 1]) {
+                    dp[i][j] = dp[i - 1][j - 1] + 1;
+                } else {
+                    dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+                }
             }
         }
-    }
 
-    // Backtrack to find which indices in 'text' are part of the match
-    const matchedIndices = new Set<number>();
-    let i = n, j = m;
-    while (i > 0 && j > 0) {
-        if (t[i - 1] === q[j - 1]) {
-            matchedIndices.add(i - 1);
-            i--;
-            j--;
-        } else if (dp[i - 1][j] > dp[i][j - 1]) {
-            i--;
-        } else {
-            j--;
+        // Backtrack to find which indices in 'text' are part of the match
+        let i = n, j = m;
+        while (i > 0 && j > 0) {
+            if (t[i - 1] === token[j - 1]) {
+                matchedIndices.add(i - 1);
+                i--;
+                j--;
+            } else if (dp[i - 1][j] > dp[i][j - 1]) {
+                i--;
+            } else {
+                j--;
+            }
         }
-    }
+    };
+
+    // Compute matches for all tokens
+    tokens.forEach(token => computeLCSIndices(token));
 
     // Render segments
     const elements: React.ReactNode[] = [];
     let lastIdx = 0;
     let isHighlighting = false;
 
-    // Iterate through text to create chunks of highlighted/normal text
     for (let k = 0; k < n; k++) {
         const isMatch = matchedIndices.has(k);
         if (isMatch !== isHighlighting) {
-            // Status changed, push previous chunk
             if (k > lastIdx) {
                 const chunk = text.substring(lastIdx, k);
-                if (isHighlighting) {
-                    elements.push(
-                        <span key={lastIdx} className="font-extrabold text-blue-600 bg-blue-50 rounded-[1px] px-0">
-                            {chunk}
-                        </span>
-                    );
-                } else {
-                    elements.push(<span key={lastIdx}>{chunk}</span>);
-                }
+                elements.push(
+                    isHighlighting 
+                        ? <span key={lastIdx} className="font-extrabold text-blue-600 bg-blue-50 rounded-[1px] px-0">{chunk}</span>
+                        : <span key={lastIdx}>{chunk}</span>
+                );
             }
             lastIdx = k;
             isHighlighting = isMatch;
         }
     }
     
-    // Push the remaining chunk
     if (lastIdx < n) {
         const chunk = text.substring(lastIdx);
-        if (isHighlighting) {
-            elements.push(
-                <span key={lastIdx} className="font-extrabold text-blue-600 bg-blue-50 rounded-[1px] px-0">
-                    {chunk}
-                </span>
-            );
-        } else {
-            elements.push(<span key={lastIdx}>{chunk}</span>);
-        }
+        elements.push(
+            isHighlighting 
+                ? <span key={lastIdx} className="font-extrabold text-blue-600 bg-blue-50 rounded-[1px] px-0">{chunk}</span>
+                : <span key={lastIdx}>{chunk}</span>
+        );
     }
 
     return <>{elements}</>;
@@ -119,74 +119,91 @@ const HighlightMatch: React.FC<{ text: string; query: string }> = ({ text, query
 const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certificates, onNavigateToCertificate }) => {
     const [inputValue, setInputValue] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
-    
-    // Default to -1 so nothing is selected automatically. 
-    // User must press ArrowDown to select the first item.
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editIndex, setEditIndex] = useState<number | null>(null);
-    
-    // State for safe deletion
     const [itemToDeleteIndex, setItemToDeleteIndex] = useState<number | null>(null);
     
     const inputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Parse current value into chips
     const selectedItems = useMemo(() => {
         if (!value) return [];
         return value.split(';').map(s => s.trim()).filter(Boolean);
     }, [value]);
 
-    // Flatten certificates to searchable items with Fuzzy Search
+    // Enhanced Multi-Token Fuzzy Search
     const suggestions = useMemo(() => {
         if (!inputValue.trim()) return [];
-        const lowerInput = inputValue.toLowerCase();
         
-        // Threshold for fuzzy matching
-        const threshold = lowerInput.length < 3 ? 0 : Math.floor(lowerInput.length / 3);
+        // Split input into tokens (e.g., "трайник 219" -> ["трайник", "219"])
+        const tokens = inputValue.toLowerCase().split(/\s+/).filter(t => t.length > 0);
+        if (tokens.length === 0) return [];
 
         const candidates: { label: string; cert: Certificate; fullString: string; score: number }[] = [];
 
         certificates.forEach(cert => {
             cert.materials.forEach(mat => {
                 const lowerMat = mat.toLowerCase();
-                let score = 1000; // Lower is better
+                let totalScore = 0;
+                let allTokensMatch = true;
                 
-                // 1. Exact match (Best)
-                if (lowerMat === lowerInput) {
-                    score = 0;
-                }
-                // 2. Starts with match
-                else if (lowerMat.startsWith(lowerInput)) {
-                    score = 10;
-                }
-                // 3. Contains match
-                else if (lowerMat.includes(lowerInput)) {
-                    score = 20 + lowerMat.indexOf(lowerInput); // Prefer matches closer to start
-                } 
-                // 4. Fuzzy Match logic
-                else if (threshold > 0) {
-                    // A. Prefix Fuzzy Match (e.g. "трайник" -> "Тройник")
-                    if (lowerMat.length >= lowerInput.length) {
-                        const matPrefix = lowerMat.substring(0, lowerInput.length);
-                        const dist = levenshteinDistance(lowerInput, matPrefix);
-                        if (dist <= threshold) {
-                            score = 50 + dist; 
+                // Split material name into words for fuzzy context
+                // e.g. "Тройник стальной 219x6" -> ["тройник", "стальной", "219x6"]
+                const matWords = lowerMat.split(/[\s,.\(\)]+/).filter(w => w.length > 0);
+
+                for (const token of tokens) {
+                    let tokenMatched = false;
+                    let bestTokenScore = 1000;
+
+                    // 1. Exact Substring Match (Strongest)
+                    const idx = lowerMat.indexOf(token);
+                    if (idx !== -1) {
+                        tokenMatched = true;
+                        bestTokenScore = 0;
+                        // Boost score if matches start of the string or a word
+                        if (idx === 0 || /[\s,.\(\)]/.test(lowerMat[idx - 1])) {
+                            bestTokenScore = -10;
+                        }
+                    } else {
+                        // 2. Fuzzy Match against individual words
+                        const threshold = token.length < 3 ? 0 : Math.floor(token.length / 3);
+                        
+                        for (const word of matWords) {
+                            // Skip comparison if length diff is too big
+                            if (Math.abs(word.length - token.length) > 3 && token.length < word.length) {
+                                // Check Prefix Match (e.g. "трай" -> "Тройник")
+                                if (word.length >= token.length) {
+                                    const prefix = word.substring(0, token.length);
+                                    const dist = levenshteinDistance(token, prefix);
+                                    if (dist <= threshold) {
+                                        tokenMatched = true;
+                                        bestTokenScore = Math.min(bestTokenScore, 20 + dist);
+                                    }
+                                }
+                                continue;
+                            }
+
+                            // Full Word Fuzzy Match
+                            if (Math.abs(word.length - token.length) <= 3) {
+                                const dist = levenshteinDistance(token, word);
+                                if (dist <= threshold) {
+                                    tokenMatched = true;
+                                    bestTokenScore = Math.min(bestTokenScore, 10 + dist);
+                                }
+                            }
                         }
                     }
 
-                    // B. Full String Fuzzy Match (if lengths are close)
-                    if (score === 1000 && Math.abs(lowerMat.length - lowerInput.length) <= 3) {
-                        const dist = levenshteinDistance(lowerInput, lowerMat);
-                        if (dist <= threshold) {
-                            score = 60 + dist;
-                        }
+                    if (!tokenMatched) {
+                        allTokensMatch = false;
+                        break;
                     }
+                    totalScore += bestTokenScore;
                 }
 
-                if (score < 1000) {
+                if (allTokensMatch) {
                     const dateObj = new Date(cert.validUntil);
                     const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString('ru-RU') : cert.validUntil;
                     const fullString = `${mat} (сертификат № ${cert.number}, до ${dateStr})`;
@@ -195,19 +212,16 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                         label: mat,
                         cert: cert,
                         fullString: fullString,
-                        score: score
+                        score: totalScore
                     });
                 }
             });
         });
 
-        // Sort by score (ascending), then by label length (shortest match first usually better)
-        candidates.sort((a, b) => {
-            if (a.score !== b.score) return a.score - b.score;
-            return a.label.length - b.label.length;
-        });
+        // Sort by score (ascending)
+        candidates.sort((a, b) => a.score - b.score);
 
-        // Deduplicate by fullString to avoid identical entries if data is messy
+        // Deduplicate
         const uniqueCandidates = [];
         const seen = new Set();
         for (const c of candidates) {
@@ -220,7 +234,6 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
         return uniqueCandidates.slice(0, 15);
     }, [inputValue, certificates]);
 
-    // Reset highlight when suggestions change
     useEffect(() => {
         setHighlightedIndex(-1);
     }, [suggestions]);
@@ -230,14 +243,14 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
         onChange(newItems.join('; '));
         setInputValue('');
         setShowSuggestions(false);
-        setItemToDeleteIndex(null); // Reset delete state
+        setItemToDeleteIndex(null);
         inputRef.current?.focus();
     };
 
     const handleRemoveItem = (indexToRemove: number) => {
         const newItems = selectedItems.filter((_, index) => index !== indexToRemove);
         onChange(newItems.join('; '));
-        setItemToDeleteIndex(null); // Reset delete state
+        setItemToDeleteIndex(null);
     };
 
     const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
@@ -245,7 +258,6 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
         const clipboardData = e.clipboardData.getData('text');
         if (!clipboardData) return;
 
-        // Split by newlines (Excel rows) or semicolons
         const newItems = clipboardData
             .split(/[\n\r;]+/)
             .map(s => s.trim())
@@ -261,7 +273,6 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Backspace' && !inputValue && selectedItems.length > 0) {
-            // Safety logic: require two backspaces to delete a chip
             const lastIndex = selectedItems.length - 1;
             if (itemToDeleteIndex === lastIndex) {
                 handleRemoveItem(lastIndex);
@@ -270,7 +281,6 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             }
         } else if (e.key === 'ArrowDown') {
             e.preventDefault();
-            // Allow moving from input (-1) to first item (0)
             setHighlightedIndex(prev => {
                 if (suggestions.length === 0) return -1;
                 return Math.min(prev + 1, suggestions.length - 1);
@@ -278,13 +288,10 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             setItemToDeleteIndex(null);
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
-            setHighlightedIndex(prev => Math.max(prev - 1, -1)); // Allow going back to -1 (input focus)
+            setHighlightedIndex(prev => Math.max(prev - 1, -1));
             setItemToDeleteIndex(null);
         } else if (e.key === 'Enter') {
             e.preventDefault();
-            
-            // Logic: If an item is highlighted, add it.
-            // If NO item is highlighted (index -1), add raw text.
             if (showSuggestions && highlightedIndex >= 0 && suggestions[highlightedIndex]) {
                 handleAddItem(suggestions[highlightedIndex].fullString);
             } else if (inputValue.trim()) {
@@ -295,7 +302,6 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             setShowSuggestions(false);
             setItemToDeleteIndex(null);
         } else {
-            // Any other key clears the "ready to delete" state
             setItemToDeleteIndex(null);
         }
     };
@@ -314,8 +320,6 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
     }, []);
 
     const findCertByText = (text: string) => {
-        // Try to match strict certificate number pattern inside the text
-        // Looks for "№ XXXXX"
         const match = text.match(/№\s*([^\s,]+)/);
         if (match) {
             const certNum = match[1];
@@ -343,12 +347,10 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             >
                 {selectedItems.map((item, index) => {
                     const cert = findCertByText(item);
-                    // Green if found in DB, Red if manual text (not found)
                     let chipClass = cert 
                         ? "bg-green-50 text-green-800 border-green-200" 
                         : "bg-red-50 text-red-800 border-red-200";
 
-                    // Apply warning style if marked for deletion
                     if (index === itemToDeleteIndex) {
                         chipClass = "bg-red-100 text-red-900 border-red-400 ring-2 ring-red-300";
                     }
@@ -364,7 +366,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                                     setIsModalOpen(true);
                                 }}
                             >
-                                {item.split('(')[0]} {/* Show mostly just name in chip */}
+                                {item.split('(')[0]}
                             </span>
                             <button
                                 type="button"
@@ -383,7 +385,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                     onChange={(e) => {
                         setInputValue(e.target.value);
                         setShowSuggestions(true);
-                        setItemToDeleteIndex(null); // Typing clears delete selection
+                        setItemToDeleteIndex(null);
                     }}
                     onKeyDown={handleKeyDown}
                     onPaste={handlePaste}
@@ -433,7 +435,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                                     Сертификат № {item.cert.number} (до {new Date(item.cert.validUntil).toLocaleDateString()})
                                 </span>
                                 <button
-                                    onMouseDown={(e) => handleNavigate(e, item.cert.id)} // Use onMouseDown to prevent losing focus/blur issues
+                                    onMouseDown={(e) => handleNavigate(e, item.cert.id)} 
                                     className="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-100 rounded transition-colors"
                                     title="Открыть сертификат в новой вкладке"
                                 >
@@ -457,12 +459,10 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                     editingMaterialTitle={editIndex !== null ? selectedItems[editIndex].split('(')[0] : undefined}
                     onSelect={(text) => {
                         if (editIndex !== null) {
-                            // Replace existing
                             const newItems = [...selectedItems];
                             newItems[editIndex] = text;
                             onChange(newItems.join('; '));
                         } else {
-                            // Add new
                             const newValue = value ? `${value}; ${text}` : text;
                             onChange(newValue);
                         }
