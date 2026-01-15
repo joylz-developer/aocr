@@ -17,6 +17,9 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editIndex, setEditIndex] = useState<number | null>(null);
     
+    // State for safe deletion
+    const [itemToDeleteIndex, setItemToDeleteIndex] = useState<number | null>(null);
+    
     const inputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -63,23 +66,52 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
         onChange(newItems.join('; '));
         setInputValue('');
         setShowSuggestions(false);
+        setItemToDeleteIndex(null); // Reset delete state
         inputRef.current?.focus();
     };
 
     const handleRemoveItem = (indexToRemove: number) => {
         const newItems = selectedItems.filter((_, index) => index !== indexToRemove);
         onChange(newItems.join('; '));
+        setItemToDeleteIndex(null); // Reset delete state
+    };
+
+    const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+        e.preventDefault();
+        const clipboardData = e.clipboardData.getData('text');
+        if (!clipboardData) return;
+
+        // Split by newlines (Excel rows) or semicolons
+        const newItems = clipboardData
+            .split(/[\n\r;]+/)
+            .map(s => s.trim())
+            .filter(Boolean);
+
+        if (newItems.length > 0) {
+            const updatedItems = [...selectedItems, ...newItems];
+            onChange(updatedItems.join('; '));
+            setInputValue('');
+            setShowSuggestions(false);
+        }
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Backspace' && !inputValue && selectedItems.length > 0) {
-            handleRemoveItem(selectedItems.length - 1);
+            // Safety logic: require two backspaces to delete a chip
+            const lastIndex = selectedItems.length - 1;
+            if (itemToDeleteIndex === lastIndex) {
+                handleRemoveItem(lastIndex);
+            } else {
+                setItemToDeleteIndex(lastIndex);
+            }
         } else if (e.key === 'ArrowDown') {
             e.preventDefault();
             setHighlightedIndex(prev => (prev + 1) % suggestions.length);
+            setItemToDeleteIndex(null);
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             setHighlightedIndex(prev => (prev - 1 + suggestions.length) % suggestions.length);
+            setItemToDeleteIndex(null);
         } else if (e.key === 'Enter') {
             e.preventDefault();
             if (showSuggestions && suggestions.length > 0) {
@@ -87,8 +119,13 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             } else if (inputValue.trim()) {
                 handleAddItem(inputValue.trim());
             }
+            setItemToDeleteIndex(null);
         } else if (e.key === 'Escape') {
             setShowSuggestions(false);
+            setItemToDeleteIndex(null);
+        } else {
+            // Any other key clears the "ready to delete" state
+            setItemToDeleteIndex(null);
         }
     };
 
@@ -96,6 +133,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
         const handleClickOutside = (event: MouseEvent) => {
             if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
                 setShowSuggestions(false);
+                setItemToDeleteIndex(null);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -128,12 +166,17 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                 {selectedItems.map((item, index) => {
                     const cert = findCertByText(item);
                     // Green if found in DB, Red if manual text (not found)
-                    const chipClass = cert 
+                    let chipClass = cert 
                         ? "bg-green-50 text-green-800 border-green-200" 
                         : "bg-red-50 text-red-800 border-red-200";
 
+                    // Apply warning style if marked for deletion
+                    if (index === itemToDeleteIndex) {
+                        chipClass = "bg-red-100 text-red-900 border-red-400 ring-2 ring-red-300";
+                    }
+
                     return (
-                        <div key={index} className={`inline-flex items-center rounded text-xs border ${chipClass} select-none max-w-full`}>
+                        <div key={index} className={`inline-flex items-center rounded text-xs border ${chipClass} select-none max-w-full transition-all`}>
                             <span 
                                 className="px-2 py-0.5 truncate max-w-[200px] cursor-pointer hover:underline" 
                                 title={cert ? item : "Нажмите, чтобы выбрать сертификат"}
@@ -162,11 +205,14 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                     onChange={(e) => {
                         setInputValue(e.target.value);
                         setShowSuggestions(true);
+                        setItemToDeleteIndex(null); // Typing clears delete selection
                     }}
                     onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
                     onFocus={() => {
                          if(inputValue) setShowSuggestions(true);
                     }}
+                    onBlur={() => setItemToDeleteIndex(null)}
                     className="flex-grow min-w-[100px] outline-none text-sm bg-transparent py-0.5"
                     placeholder={selectedItems.length === 0 ? "Материал..." : ""}
                 />
@@ -211,6 +257,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                     }}
                     certificates={certificates}
                     initialSearch={editIndex !== null ? selectedItems[editIndex].split('(')[0] : undefined}
+                    editingMaterialTitle={editIndex !== null ? selectedItems[editIndex].split('(')[0] : undefined}
                     onSelect={(text) => {
                         if (editIndex !== null) {
                             // Replace existing

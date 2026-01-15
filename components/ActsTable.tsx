@@ -332,6 +332,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         actId: string;
         itemIndex: number;
         initialSearch: string;
+        editingMaterialTitle?: string;
     } | null>(null);
 
     
@@ -1682,7 +1683,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                                             isOpen: true,
                                                                             actId: act.id,
                                                                             itemIndex: idx,
-                                                                            initialSearch: item
+                                                                            initialSearch: item,
+                                                                            editingMaterialTitle: item
                                                                         });
                                                                     }
                                                                 }}
@@ -1785,7 +1787,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                         
                                                         {col.key === 'workDates' && (
                                                             <button
-                                                                className="opacity-0 group-hover/cell:opacity-100 text-slate-400 hover:text-blue-600 ml-2 transition-opacity"
+                                                                className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-blue-600 ml-2 transition-opacity"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     handleDateClick(act, e.currentTarget);
@@ -1936,6 +1938,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     onClose={() => setLinkMaterialModalState(null)}
                     certificates={certificates}
                     initialSearch={linkMaterialModalState.initialSearch}
+                    editingMaterialTitle={linkMaterialModalState.editingMaterialTitle}
                     onSelect={(text) => {
                         const act = acts.find(a => a.id === linkMaterialModalState.actId);
                         if (act) {

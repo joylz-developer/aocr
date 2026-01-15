@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Modal from './Modal';
 import { Certificate } from '../types';
-import { CertificateIcon, PlusIcon } from './Icons';
+import { CertificateIcon, PlusIcon, CloseIcon } from './Icons';
 
 interface MaterialsModalProps {
     isOpen: boolean;
@@ -10,9 +10,10 @@ interface MaterialsModalProps {
     certificates: Certificate[];
     onSelect: (selectedString: string) => void;
     initialSearch?: string;
+    editingMaterialTitle?: string; // New prop to show what we are editing
 }
 
-const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certificates, onSelect, initialSearch }) => {
+const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certificates, onSelect, initialSearch, editingMaterialTitle }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedCertId, setExpandedCertId] = useState<string | null>(null);
 
@@ -47,18 +48,37 @@ const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certif
         setExpandedCertId(prev => prev === id ? null : id);
     };
 
+    const handleClearSearch = () => {
+        setSearchTerm('');
+    };
+
+    const modalTitle = editingMaterialTitle 
+        ? `Привязка к сертификату: "${editingMaterialTitle}"`
+        : "Выбор материала из сертификатов";
+
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Выбор материала из сертификатов">
+        <Modal isOpen={isOpen} onClose={onClose} title={modalTitle}>
             <div className="flex flex-col h-[60vh]">
-                <div className="mb-4">
+                <div className="mb-4 relative">
                     <input 
                         type="text" 
                         placeholder="Поиск по номеру сертификата или названию материала..." 
-                        className="w-full px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2 pr-10 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
+                        onKeyDown={e => e.stopPropagation()} 
                         autoFocus
                     />
+                    {searchTerm && (
+                        <button
+                            type="button"
+                            onClick={handleClearSearch}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100"
+                            title="Очистить поиск"
+                        >
+                            <CloseIcon className="w-4 h-4" />
+                        </button>
+                    )}
                 </div>
 
                 <div className="flex-grow overflow-y-auto border border-slate-200 rounded-md bg-slate-50 p-2 space-y-2">
