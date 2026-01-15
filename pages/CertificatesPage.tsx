@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 're
 import { Certificate, ProjectSettings, CertificateFile, Act } from '../types';
 import Modal from '../components/Modal';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon, LayoutListIcon, LayoutGridIcon, ColumnsIcon, LinkIcon } from '../components/Icons';
+import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon, LayoutListIcon, LayoutGridIcon, ColumnsIcon, LinkIcon, ChevronDownIcon } from '../components/Icons';
 import { GoogleGenAI } from '@google/genai';
 
 interface CertificatesPageProps {
@@ -17,10 +17,10 @@ interface CertificatesPageProps {
     onClearInitialOpenId?: () => void;
 }
 
-// Type for AI Suggestions
+// Updated Type for AI Suggestions to support multiple options
 interface AiSuggestions {
-    number?: string;
-    validUntil?: string;
+    numbers?: string[];
+    dates?: string[];
     materials?: string[];
 }
 
@@ -186,6 +186,9 @@ const CertificateForm: React.FC<{
     const [hoveredDeleteIndex, setHoveredDeleteIndex] = useState<number | null>(null);
     const [fileToDeleteId, setFileToDeleteId] = useState<string | null>(null);
     
+    // Suggestion Visibility State
+    const [showAiMaterials, setShowAiMaterials] = useState(true);
+    
     // Mass Edit AI States
     const [massEditPrompt, setMassEditPrompt] = useState('');
     const [isMassEditing, setIsMassEditing] = useState(false);
@@ -287,6 +290,7 @@ const CertificateForm: React.FC<{
         setIsScanning(true);
         setAiError(null);
         setAiSuggestions(null);
+        setShowAiMaterials(true); // Auto-expand when scanning
 
         try {
             const [mimeType, base64Data] = activeFile.data.split(',');
@@ -302,11 +306,13 @@ const CertificateForm: React.FC<{
                 Analyze the provided document image/PDF.
                 Extract the following fields and return ONLY valid JSON:
                 {
-                    "number": "${promptNumber}",
-                    "validUntil": "${promptDate}",
-                    "materials": ["${promptMaterials}"]
+                    "numbers": ["${promptNumber}"], // Array of possible document numbers, sorted by probability (most likely first)
+                    "dates": ["${promptDate}"], // Array of possible dates YYYY-MM-DD, sorted by probability
+                    "materials": ["${promptMaterials}"] // Array of materials found (NO duplicates)
                 }
                 
+                If you are unsure about the number or date, provide up to 3 most likely options.
+                Ensure "materials" list does not contain duplicates.
                 IMPORTANT: Return valid JSON only. Do not add markdown code blocks.
             `;
 
@@ -336,10 +342,17 @@ const CertificateForm: React.FC<{
             const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
             const result = JSON.parse(jsonString);
             
+            // Normalize result to arrays even if AI returns single strings (backward compat)
+            const numbers = Array.isArray(result.numbers) ? result.numbers : (result.number ? [result.number] : []);
+            const dates = Array.isArray(result.dates) ? result.dates : (result.validUntil ? [result.validUntil] : []);
+            // Dedup AI materials immediately
+            const rawMaterials = Array.isArray(result.materials) ? result.materials : [];
+            const uniqueMaterials = Array.from(new Set(rawMaterials)) as string[];
+
             setAiSuggestions({
-                number: result.number,
-                validUntil: result.validUntil,
-                materials: Array.isArray(result.materials) ? result.materials : []
+                numbers: numbers,
+                dates: dates,
+                materials: uniqueMaterials
             });
 
         } catch (error) {
@@ -412,6 +425,9 @@ const CertificateForm: React.FC<{
     const handleAddMaterial = (materialName: string) => {
         const nameToAdd = materialName.trim();
         if (!nameToAdd) return;
+        // Check duplicates
+        if (formData.materials.includes(nameToAdd)) return;
+
         setFormData(prev => ({
             ...prev,
             materials: [...prev.materials, nameToAdd]
@@ -506,8 +522,6 @@ const CertificateForm: React.FC<{
     const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900";
     const labelClass = "block text-sm font-medium text-slate-700";
 
-    // Helper to check if AI suggestions are already all added
-    const areAllSuggestionsAdded = aiSuggestions?.materials?.every(m => formData.materials.includes(m));
     const isPreviewMode = !!previewMaterials;
 
     return (
@@ -639,15 +653,25 @@ const CertificateForm: React.FC<{
                             <div>
                                 <label className={labelClass}>Номер (тип + №)</label>
                                 <input type="text" name="number" value={formData.number} onChange={handleChange} className={inputClass} required placeholder="Паспорт качества № 123" disabled={isPreviewMode} />
-                                {aiSuggestions?.number && aiSuggestions.number !== formData.number && !isPreviewMode && (
-                                    <div 
-                                        onClick={() => applyAiSuggestion('number', aiSuggestions.number!)}
-                                        className="mt-2 cursor-pointer bg-violet-50 border border-violet-100 p-2 rounded-md hover:bg-violet-100 transition-colors group"
-                                    >
-                                        <p className="text-xs text-violet-600 font-semibold mb-0.5 flex items-center">
-                                            <SparklesIcon className="w-3 h-3 mr-1"/> Предложение AI
-                                        </p>
-                                        <p className="text-sm text-slate-700">{aiSuggestions.number}</p>
+                                {aiSuggestions?.numbers && aiSuggestions.numbers.length > 0 && !isPreviewMode && (
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        <span className="text-xs text-violet-600 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
+                                        {aiSuggestions.numbers.map((suggestion, idx) => (
+                                            <button
+                                                key={idx}
+                                                type="button"
+                                                onClick={() => applyAiSuggestion('number', suggestion)}
+                                                className={`text-xs px-2 py-1 rounded border transition-colors max-w-full truncate
+                                                    ${formData.number === suggestion 
+                                                        ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' 
+                                                        : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300'
+                                                    }
+                                                `}
+                                                title={`Нажмите, чтобы выбрать: ${suggestion}`}
+                                            >
+                                                {suggestion}
+                                            </button>
+                                        ))}
                                     </div>
                                 )}
                             </div>
@@ -656,15 +680,28 @@ const CertificateForm: React.FC<{
                             <div>
                                 <label className={labelClass}>Дата документа</label>
                                 <input type="date" name="validUntil" value={formData.validUntil} onChange={handleChange} className={inputClass} required disabled={isPreviewMode} />
-                                {aiSuggestions?.validUntil && aiSuggestions.validUntil !== formData.validUntil && !isPreviewMode && (
-                                    <div 
-                                        onClick={() => applyAiSuggestion('validUntil', aiSuggestions.validUntil!)}
-                                        className="mt-2 cursor-pointer bg-violet-50 border border-violet-100 p-2 rounded-md hover:bg-violet-100 transition-colors group"
-                                    >
-                                        <p className="text-xs text-violet-600 font-semibold mb-0.5 flex items-center">
-                                            <SparklesIcon className="w-3 h-3 mr-1"/> Предложение AI
-                                        </p>
-                                        <p className="text-sm text-slate-700">{new Date(aiSuggestions.validUntil).toLocaleDateString()}</p>
+                                {aiSuggestions?.dates && aiSuggestions.dates.length > 0 && !isPreviewMode && (
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        <span className="text-xs text-violet-600 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
+                                        {aiSuggestions.dates.map((dateStr, idx) => {
+                                            const formatted = new Date(dateStr).toLocaleDateString();
+                                            return (
+                                                <button
+                                                    key={idx}
+                                                    type="button"
+                                                    onClick={() => applyAiSuggestion('validUntil', dateStr)}
+                                                    className={`text-xs px-2 py-1 rounded border transition-colors
+                                                        ${formData.validUntil === dateStr 
+                                                            ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' 
+                                                            : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300'
+                                                        }
+                                                    `}
+                                                    title={`Нажмите, чтобы выбрать: ${formatted}`}
+                                                >
+                                                    {formatted}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -684,59 +721,70 @@ const CertificateForm: React.FC<{
                                     )}
                                 </div>
                                 
-                                {/* AI Materials Suggestions */}
-                                {aiSuggestions?.materials && aiSuggestions.materials.length > 0 && !areAllSuggestionsAdded && !isPreviewMode && (
+                                {/* AI Materials Suggestions with Hide/Show */}
+                                {aiSuggestions?.materials && aiSuggestions.materials.length > 0 && !isPreviewMode && (
                                     <div className="mb-4 bg-violet-50 border border-violet-100 rounded-md p-3">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <p className="text-xs text-violet-700 font-bold flex items-center"><SparklesIcon className="w-3 h-3 mr-1"/> Найдено в документе</p>
-                                            <div className="flex gap-2">
-                                                <button 
-                                                    type="button"
-                                                    onClick={() => {
-                                                        if (aiSuggestions.materials) {
-                                                            setFormData(prev => ({...prev, materials: [...aiSuggestions.materials!]}));
-                                                        }
-                                                    }}
-                                                    className="text-xs bg-white border border-violet-200 text-violet-700 px-2 py-1 rounded hover:bg-violet-50"
-                                                >
-                                                    Заменить все
-                                                </button>
-                                                <button 
-                                                    type="button"
-                                                    onClick={() => {
-                                                        if (aiSuggestions.materials) {
-                                                            const unique = aiSuggestions.materials.filter(m => !formData.materials.includes(m));
-                                                            setFormData(prev => ({...prev, materials: [...prev.materials, ...unique]}));
-                                                        }
-                                                    }}
-                                                    className="text-xs bg-violet-600 text-white px-2 py-1 rounded hover:bg-violet-700"
-                                                >
-                                                    Добавить все
-                                                </button>
+                                        <div className="flex justify-between items-center mb-2 cursor-pointer select-none" onClick={() => setShowAiMaterials(!showAiMaterials)}>
+                                            <p className="text-xs text-violet-700 font-bold flex items-center">
+                                                <SparklesIcon className="w-3 h-3 mr-1"/> 
+                                                Найдено в документе ({aiSuggestions.materials.length})
+                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <ChevronDownIcon className={`w-4 h-4 text-violet-500 transition-transform ${showAiMaterials ? 'rotate-180' : ''}`} />
                                             </div>
                                         </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {aiSuggestions.materials.map((mat, idx) => {
-                                                const isDuplicate = formData.materials.includes(mat);
-                                                return (
-                                                    <button
-                                                        key={idx}
+                                        
+                                        {showAiMaterials && (
+                                            <div className="animate-fade-in-up">
+                                                <div className="flex gap-2 mb-3 justify-end border-b border-violet-100 pb-2">
+                                                    <button 
                                                         type="button"
-                                                        onClick={() => !isDuplicate && handleAddMaterial(mat)}
-                                                        disabled={isDuplicate}
-                                                        className={`text-xs border px-2 py-1 rounded-full text-left max-w-full truncate
-                                                            ${isDuplicate 
-                                                                ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-default line-through' 
-                                                                : 'bg-white border-violet-200 text-slate-700 hover:border-violet-400 hover:text-violet-700'
+                                                        onClick={() => {
+                                                            if (aiSuggestions.materials) {
+                                                                setFormData(prev => ({...prev, materials: [...aiSuggestions.materials!]}));
                                                             }
-                                                        `}
-                                                        title={isDuplicate ? "Уже добавлено" : "Нажмите, чтобы добавить"}
+                                                        }}
+                                                        className="text-xs bg-white border border-violet-200 text-violet-700 px-2 py-1 rounded hover:bg-violet-50"
                                                     >
-                                                        {isDuplicate ? '' : '+ '}{mat}
+                                                        Заменить все
                                                     </button>
-                                                );
-                                            })}
-                                        </div>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if (aiSuggestions.materials) {
+                                                                const unique = aiSuggestions.materials.filter(m => !formData.materials.includes(m));
+                                                                setFormData(prev => ({...prev, materials: [...prev.materials, ...unique]}));
+                                                            }
+                                                        }}
+                                                        className="text-xs bg-violet-600 text-white px-2 py-1 rounded hover:bg-violet-700"
+                                                    >
+                                                        Добавить уникальные
+                                                    </button>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
+                                                    {aiSuggestions.materials.map((mat, idx) => {
+                                                        const isDuplicate = formData.materials.includes(mat);
+                                                        return (
+                                                            <button
+                                                                key={idx}
+                                                                type="button"
+                                                                onClick={() => !isDuplicate && handleAddMaterial(mat)}
+                                                                disabled={isDuplicate}
+                                                                className={`text-xs border px-2 py-1 rounded-full text-left max-w-full truncate
+                                                                    ${isDuplicate 
+                                                                        ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-default line-through' 
+                                                                        : 'bg-white border-violet-200 text-slate-700 hover:border-violet-400 hover:text-violet-700'
+                                                                    }
+                                                                `}
+                                                                title={isDuplicate ? "Уже добавлено" : "Нажмите, чтобы добавить"}
+                                                            >
+                                                                {isDuplicate ? '' : '+ '}{mat}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
