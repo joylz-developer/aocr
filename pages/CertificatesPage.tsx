@@ -671,6 +671,23 @@ const CertificateForm: React.FC<{
 
                         {!isGalleryCollapsed ? (
                             <>
+                                {/* New Header Area */}
+                                <div className="flex justify-between items-center mb-2 px-1 min-h-[1.75rem]">
+                                    <span className="font-semibold text-slate-700 truncate pr-2" title={activeFile ? activeFile.name : ''}>
+                                        {activeFile ? activeFile.name : 'Нет файла'}
+                                    </span>
+                                    {activeFile && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => handleDeleteFileClick(e, activeFile.id)}
+                                            className="text-slate-400 hover:text-red-600 p-1 hover:bg-red-50 rounded transition-colors"
+                                            title="Удалить текущий файл"
+                                        >
+                                            <DeleteIcon className="w-5 h-5" />
+                                        </button>
+                                    )}
+                                </div>
+
                                 <div 
                                     className={`flex-grow flex flex-col bg-slate-50 rounded-lg border-2 transition-colors relative overflow-hidden
                                         ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}
@@ -679,21 +696,6 @@ const CertificateForm: React.FC<{
                                     onDragLeave={handleDragLeave}
                                     onDrop={handleDrop}
                                 >
-                                    <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-center z-10 bg-gradient-to-b from-black/50 to-transparent pointer-events-none">
-                                        <span className="font-semibold text-white drop-shadow-md pointer-events-auto truncate pr-2">
-                                            {activeFile ? activeFile.name : 'Нет файла'}
-                                        </span>
-                                        {activeFile && (
-                                            <button
-                                                type="button"
-                                                onClick={(e) => handleDeleteFileClick(e, activeFile.id)}
-                                                className="p-1.5 bg-red-600/80 text-white rounded-full hover:bg-red-700 pointer-events-auto shadow-sm flex-shrink-0"
-                                                title="Удалить текущий файл"
-                                            >
-                                                <DeleteIcon className="w-4 h-4" />
-                                            </button>
-                                        )}
-                                    </div>
                                     
                                     <div className="flex-grow overflow-hidden relative flex items-center justify-center p-2 bg-slate-800">
                                         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" multiple />
