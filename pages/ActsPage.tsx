@@ -25,6 +25,7 @@ interface ActsPageProps {
     setCurrentPage: (page: Page) => void;
     onUndo?: () => void;
     onRedo?: () => void;
+    onNavigateToCertificate?: (id: string) => void;
 }
 
 // Helper component for interactive tags in the help modal
@@ -118,7 +119,7 @@ const ColumnPicker: React.FC<{
 };
 
 
-const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, regulations, certificates, template, settings, onSave, onMoveToTrash, onPermanentlyDelete, onReorderActs, setCurrentPage, onUndo, onRedo }) => {
+const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, regulations, certificates, template, settings, onSave, onMoveToTrash, onPermanentlyDelete, onReorderActs, setCurrentPage, onUndo, onRedo, onNavigateToCertificate }) => {
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
@@ -406,6 +407,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     onRequestDelete={handleRequestDelete}
                     onReorderActs={onReorderActs}
                     setCurrentPage={setCurrentPage}
+                    onNavigateToCertificate={onNavigateToCertificate}
                 />
             </div>
             

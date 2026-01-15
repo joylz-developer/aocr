@@ -126,13 +126,10 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             >
                 {selectedItems.map((item, index) => {
                     const cert = findCertByText(item);
-                    let chipClass = "bg-slate-100 text-slate-800 border-slate-300";
-                    if (cert) {
-                        const isExpired = new Date(cert.validUntil) < new Date();
-                        chipClass = isExpired 
-                            ? "bg-red-50 text-red-800 border-red-200" 
-                            : "bg-green-50 text-green-800 border-green-200";
-                    }
+                    // Green if found in DB, Red if manual text (not found)
+                    const chipClass = cert 
+                        ? "bg-green-50 text-green-800 border-green-200" 
+                        : "bg-red-50 text-red-800 border-red-200";
 
                     return (
                         <div key={index} className={`inline-flex items-center rounded text-xs border ${chipClass} select-none max-w-full`}>

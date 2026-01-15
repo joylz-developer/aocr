@@ -40,6 +40,7 @@ interface ActsTableProps {
     onReorderActs: (newActs: Act[]) => void;
     setCurrentPage: (page: Page) => void;
     createNewAct: () => Act; // Factory for context menu insertions
+    onNavigateToCertificate?: (id: string) => void; // Callback for navigating to cert page
 }
 
 const formatDateForDisplay = (dateString: string): string => {
@@ -268,7 +269,7 @@ const NextWorkPopover: React.FC<{
 
 
 // Main Table Component
-const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, certificates = [], template, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, selectedCells, setSelectedCells, onSave, onRequestDelete, onReorderActs, setCurrentPage, createNewAct }) => {
+const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, certificates = [], template, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, selectedCells, setSelectedCells, onSave, onRequestDelete, onReorderActs, setCurrentPage, createNewAct, onNavigateToCertificate }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [dateError, setDateError] = useState<string | null>(null);
@@ -878,6 +879,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         
         setEditingCell({ rowIndex, colIndex });
     };
+
+    // ... [Copy, Paste, Drag logic remains same] ...
 
     const handleCopy = useCallback(async () => {
         if (selectedCells.size === 0) return;
@@ -1651,13 +1654,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 <div className="flex flex-wrap gap-1">
                                                     {(act.materials || '').split(';').map(s => s.trim()).filter(Boolean).map((item, idx) => {
                                                         const cert = findCertByText(item);
-                                                        let chipClass = "bg-slate-100 text-slate-800 border-slate-300";
-                                                        if (cert) {
-                                                            const isExpired = new Date(cert.validUntil) < new Date();
-                                                            chipClass = isExpired 
-                                                                ? "bg-red-100 text-red-800 border-red-200" 
-                                                                : "bg-green-100 text-green-800 border-green-200";
-                                                        }
+                                                        // Green if found in DB, Red if manual text (not found)
+                                                        const chipClass = cert 
+                                                            ? "bg-green-100 text-green-800 border-green-200" 
+                                                            : "bg-red-100 text-red-800 border-red-200";
                                                         
                                                         return (
                                                             <span 
@@ -1665,7 +1665,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                                 className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs border ${chipClass} cursor-pointer hover:underline max-w-full`}
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    handleShowMaterialInfo(item, e.currentTarget);
+                                                                    if (cert) {
+                                                                        handleShowMaterialInfo(item, e.currentTarget);
+                                                                    }
                                                                 }}
                                                                 title={item}
                                                             >
@@ -1904,6 +1906,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     materialName={materialPopoverState.materialName}
                     position={materialPopoverState.position}
                     onClose={() => setMaterialPopoverState(null)}
+                    onNavigate={(certId) => {
+                        onNavigateToCertificate?.(certId);
+                        setMaterialPopoverState(null);
+                    }}
                 />
             )}
             

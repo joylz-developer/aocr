@@ -11,6 +11,8 @@ interface CertificatesPageProps {
     settings: ProjectSettings;
     onSave: (cert: Certificate) => void;
     onDelete: (id: string) => void;
+    initialOpenId?: string | null;
+    onClearInitialOpenId?: () => void;
 }
 
 // Type for AI Suggestions
@@ -879,10 +881,23 @@ const CertificateForm: React.FC<{
     );
 };
 
-const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, settings, onSave, onDelete }) => {
+const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, settings, onSave, onDelete, initialOpenId, onClearInitialOpenId }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingCert, setEditingCert] = useState<Certificate | null>(null);
     const [previewFile, setPreviewFile] = useState<{ type: 'pdf' | 'image', data: string } | null>(null);
+
+    // Effect to handle initial opening from external navigation
+    useEffect(() => {
+        if (initialOpenId) {
+            const certToOpen = certificates.find(c => c.id === initialOpenId);
+            if (certToOpen) {
+                setEditingCert(certToOpen);
+                setIsModalOpen(true);
+            }
+            // Clear the ID so it doesn't re-open if the user closes it
+            if(onClearInitialOpenId) onClearInitialOpenId();
+        }
+    }, [initialOpenId, certificates, onClearInitialOpenId]);
 
     const handleOpenModal = (cert: Certificate | null = null) => {
         setEditingCert(cert);

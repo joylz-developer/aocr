@@ -65,6 +65,9 @@ const App: React.FC = () => {
     const [theme, setTheme] = useLocalStorage<Theme>('app_theme', 'light');
 
     const [currentPage, setCurrentPage] = useState<Page>('acts');
+    // State to handle cross-page navigation to a specific certificate
+    const [targetCertificateId, setTargetCertificateId] = useState<string | null>(null);
+
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const importInputRef = useRef<HTMLInputElement>(null);
     const [importData, setImportData] = useState<ImportData | null>(null);
@@ -417,6 +420,11 @@ const App: React.FC = () => {
         });
     }, [setCertificates]);
 
+    const handleNavigateToCertificate = (id: string) => {
+        setTargetCertificateId(id);
+        setCurrentPage('certificates');
+    };
+
     const handleSaveSettings = useCallback((newSettings: ProjectSettings) => {
         setSettings(newSettings);
     }, [setSettings]);
@@ -574,6 +582,7 @@ const App: React.FC = () => {
                             setCurrentPage={setCurrentPage}
                             onUndo={undo}
                             onRedo={redo}
+                            onNavigateToCertificate={handleNavigateToCertificate}
                         />;
             case 'people':
                 return <PeoplePage people={people} organizations={organizations} settings={settings} onSave={handleSavePerson} onDelete={handleDeletePerson} />;
@@ -591,7 +600,14 @@ const App: React.FC = () => {
             case 'regulations':
                 return <RegulationsPage regulations={regulations} onSaveRegulations={setRegulations} />;
             case 'certificates':
-                return <CertificatesPage certificates={certificates} settings={settings} onSave={handleSaveCertificate} onDelete={handleDeleteCertificate} />;
+                return <CertificatesPage 
+                            certificates={certificates} 
+                            settings={settings} 
+                            onSave={handleSaveCertificate} 
+                            onDelete={handleDeleteCertificate}
+                            initialOpenId={targetCertificateId}
+                            onClearInitialOpenId={() => setTargetCertificateId(null)}
+                        />;
             case 'settings':
                 return <SettingsPage settings={settings} onSave={handleSaveSettings} />;
             default:
