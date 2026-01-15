@@ -11,7 +11,7 @@ interface MaterialsInputProps {
     onNavigateToCertificate?: (id: string) => void;
 }
 
-// Basic Levenshtein distance for fuzzy matching
+// Basic Levenshtein distance for fuzzy matching (Ranking)
 const levenshteinDistance = (a: string, b: string): number => {
     const matrix = [];
     for (let i = 0; i <= b.length; i++) matrix[i] = [i];
@@ -33,29 +33,87 @@ const levenshteinDistance = (a: string, b: string): number => {
     return matrix[b.length][a.length];
 };
 
-// Helper component to highlight matched text
+// Advanced Highlighter using Longest Common Subsequence (LCS)
+// This highlights characters that match the sequence, skipping typos.
 const HighlightMatch: React.FC<{ text: string; query: string }> = ({ text, query }) => {
-    if (!query.trim()) return <>{text}</>;
+    if (!query || !text) return <>{text}</>;
 
-    // Escape regex characters in query
-    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`(${escapedQuery})`, 'gi');
-    const parts = text.split(regex);
+    const t = text.toLowerCase();
+    const q = query.toLowerCase();
+    const n = t.length;
+    const m = q.length;
 
-    // If no split happened (fuzzy match), return text as is
-    if (parts.length === 1) return <>{text}</>;
+    // Build LCS DP table
+    // dp[i][j] = length of LCS of text[0..i-1] and query[0..j-1]
+    const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
 
-    return (
-        <>
-            {parts.map((part, i) => 
-                regex.test(part) ? (
-                    <span key={i} className="font-extrabold text-blue-600 bg-blue-50 rounded-sm px-0.5 mx-[-2px]">{part}</span>
-                ) : (
-                    part
-                )
-            )}
-        </>
-    );
+    for (let i = 1; i <= n; i++) {
+        for (let j = 1; j <= m; j++) {
+            if (t[i - 1] === q[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1] + 1;
+            } else {
+                dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+            }
+        }
+    }
+
+    // Backtrack to find which indices in 'text' are part of the match
+    const matchedIndices = new Set<number>();
+    let i = n, j = m;
+    while (i > 0 && j > 0) {
+        if (t[i - 1] === q[j - 1]) {
+            matchedIndices.add(i - 1);
+            i--;
+            j--;
+        } else if (dp[i - 1][j] > dp[i][j - 1]) {
+            i--;
+        } else {
+            j--;
+        }
+    }
+
+    // Render segments
+    const elements: React.ReactNode[] = [];
+    let lastIdx = 0;
+    let isHighlighting = false;
+
+    // Iterate through text to create chunks of highlighted/normal text
+    for (let k = 0; k < n; k++) {
+        const isMatch = matchedIndices.has(k);
+        if (isMatch !== isHighlighting) {
+            // Status changed, push previous chunk
+            if (k > lastIdx) {
+                const chunk = text.substring(lastIdx, k);
+                if (isHighlighting) {
+                    elements.push(
+                        <span key={lastIdx} className="font-extrabold text-blue-600 bg-blue-50 rounded-[1px] px-0">
+                            {chunk}
+                        </span>
+                    );
+                } else {
+                    elements.push(<span key={lastIdx}>{chunk}</span>);
+                }
+            }
+            lastIdx = k;
+            isHighlighting = isMatch;
+        }
+    }
+    
+    // Push the remaining chunk
+    if (lastIdx < n) {
+        const chunk = text.substring(lastIdx);
+        if (isHighlighting) {
+            elements.push(
+                <span key={lastIdx} className="font-extrabold text-blue-600 bg-blue-50 rounded-[1px] px-0">
+                    {chunk}
+                </span>
+            );
+        } else {
+            elements.push(<span key={lastIdx}>{chunk}</span>);
+        }
+    }
+
+    return <>{elements}</>;
 };
 
 const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certificates, onNavigateToCertificate }) => {
