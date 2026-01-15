@@ -60,6 +60,11 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
         if (!inputValue.trim()) return [];
         const lowerInput = inputValue.toLowerCase();
         
+        // Dynamic threshold: 0 errors for short words (<3), 
+        // 1 error for len 3-5, 2 errors for len 6-8, etc.
+        // Approx 1 error per 3 characters.
+        const threshold = lowerInput.length < 3 ? 0 : Math.floor(lowerInput.length / 3);
+
         const candidates: { label: string; cert: Certificate; fullString: string; score: number }[] = [];
 
         certificates.forEach(cert => {
@@ -72,15 +77,26 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                     score = 0; 
                     // Prioritize startsWith
                     if (lowerMat.startsWith(lowerInput)) score = -1;
-                } else {
-                    // 2. Fuzzy Match
-                    // Only calculate distance if lengths are somewhat close to avoid heavy calc on unrelated strings
-                    if (Math.abs(lowerMat.length - lowerInput.length) < 5) {
-                        const dist = levenshteinDistance(lowerInput, lowerMat);
-                        // Threshold: Allow 1 error per 3 characters approx, max 3 errors total
-                        const threshold = Math.min(3, Math.floor(lowerInput.length / 3) + 1);
+                } else if (threshold > 0) {
+                    // 2. Fuzzy Match logic
+                    
+                    // A. Prefix Fuzzy Match
+                    // Check if the input matches the *beginning* of the material name with typos.
+                    // This helps finding "Тройник ..." when user types "трайник" (input length matches prefix length)
+                    if (lowerMat.length >= lowerInput.length) {
+                        const matPrefix = lowerMat.substring(0, lowerInput.length);
+                        const dist = levenshteinDistance(lowerInput, matPrefix);
                         if (dist <= threshold) {
-                            score = dist;
+                            score = dist + 1; // Score > 0 to rank lower than exact matches
+                        }
+                    }
+
+                    // B. Full String Fuzzy Match (if lengths are close)
+                    // This handles cases where input is almost the full word
+                    if (score === 100 && Math.abs(lowerMat.length - lowerInput.length) <= 3) {
+                        const dist = levenshteinDistance(lowerInput, lowerMat);
+                        if (dist <= threshold) {
+                            score = dist + 1;
                         }
                     }
                 }
