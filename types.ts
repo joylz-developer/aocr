@@ -176,6 +176,7 @@ export interface ImportData {
     regulations?: Regulation[];
     certificates?: Certificate[];
     deletedActs?: DeletedActEntry[];
+    deletedCertificates?: DeletedCertificateEntry[];
 }
 
 // Defines which fields from the Act can be columns in the table
@@ -194,6 +195,11 @@ export interface DeletedActEntry {
   act: Act;
   deletedOn: string; // ISO string
   associatedGroup?: CommissionGroup; // Snapshot of the group at time of deletion
+}
+
+export interface DeletedCertificateEntry {
+    certificate: Certificate;
+    deletedOn: string;
 }
 
 export type Theme = 'light' | 'dark' | 'eye-protection';

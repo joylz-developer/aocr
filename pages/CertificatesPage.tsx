@@ -1,16 +1,18 @@
 
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
-import { Certificate, ProjectSettings, CertificateFile } from '../types';
+import { Certificate, ProjectSettings, CertificateFile, Act } from '../types';
 import Modal from '../components/Modal';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon } from '../components/Icons';
+import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon, LayoutListIcon, LayoutGridIcon, ColumnsIcon, LinkIcon } from '../components/Icons';
 import { GoogleGenAI } from '@google/genai';
 
 interface CertificatesPageProps {
     certificates: Certificate[];
+    acts: Act[]; // Passed to check usage/links
     settings: ProjectSettings;
     onSave: (cert: Certificate) => void;
     onDelete: (id: string) => void;
+    onUnlink: (cert: Certificate) => void;
     initialOpenId?: string | null;
     onClearInitialOpenId?: () => void;
 }
@@ -21,6 +23,9 @@ interface AiSuggestions {
     validUntil?: string;
     materials?: string[];
 }
+
+type ViewMode = 'card' | 'list';
+type ColumnCount = 1 | 2 | 3;
 
 // --- Helper Components ---
 
@@ -881,10 +886,18 @@ const CertificateForm: React.FC<{
     );
 };
 
-const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, settings, onSave, onDelete, initialOpenId, onClearInitialOpenId }) => {
+const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts, settings, onSave, onDelete, onUnlink, initialOpenId, onClearInitialOpenId }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingCert, setEditingCert] = useState<Certificate | null>(null);
     const [previewFile, setPreviewFile] = useState<{ type: 'pdf' | 'image', data: string } | null>(null);
+    
+    // View Controls State
+    const [searchQuery, setSearchQuery] = useState('');
+    const [viewMode, setViewMode] = useState<ViewMode>('card');
+    const [columnCount, setColumnCount] = useState<ColumnCount>(3);
+    
+    // Delete Confirmation State
+    const [deleteWarning, setDeleteWarning] = useState<{ cert: Certificate, usedInActs: string[] } | null>(null);
 
     // Effect to handle initial opening from external navigation
     useEffect(() => {
@@ -898,6 +911,15 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, setti
             if(onClearInitialOpenId) onClearInitialOpenId();
         }
     }, [initialOpenId, certificates, onClearInitialOpenId]);
+
+    const filteredCertificates = useMemo(() => {
+        if (!searchQuery) return certificates;
+        const lower = searchQuery.toLowerCase();
+        return certificates.filter(c => 
+            c.number.toLowerCase().includes(lower) || 
+            c.materials.some(m => m.toLowerCase().includes(lower))
+        );
+    }, [certificates, searchQuery]);
 
     const handleOpenModal = (cert: Certificate | null = null) => {
         setEditingCert(cert);
@@ -933,23 +955,132 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, setti
                 alert("Не удалось открыть файл.");
             });
     };
+    
+    // Smart Delete Logic
+    const handleClickDelete = (cert: Certificate) => {
+        // Check for usage in acts
+        const usedInActs: string[] = [];
+        
+        acts.forEach(act => {
+            if (act.materials.includes(`(сертификат № ${cert.number}`)) {
+                usedInActs.push(act.number || 'б/н');
+            }
+        });
+
+        if (usedInActs.length > 0) {
+            setDeleteWarning({ cert, usedInActs });
+        } else {
+            onDelete(cert.id);
+        }
+    };
+    
+    const handleConfirmDelete = () => {
+        if (deleteWarning) {
+            onDelete(deleteWarning.cert.id);
+            setDeleteWarning(null);
+        }
+    };
+
+    const handleUnlink = () => {
+        if (deleteWarning) {
+            onUnlink(deleteWarning.cert);
+            setDeleteWarning(null);
+        }
+    };
+
+    const gridColsClass = columnCount === 1 ? 'grid-cols-1' : columnCount === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
-            <div className="flex justify-between items-center mb-6 flex-shrink-0">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0 gap-4">
                 <h1 className="text-2xl font-bold text-slate-800">Сертификаты и Паспорта</h1>
-                <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 whitespace-nowrap">
                     <PlusIcon /> Добавить сертификат
                 </button>
             </div>
 
+            {/* Toolbar: Search and View Controls */}
+            <div className="flex flex-col md:flex-row gap-4 mb-4 pb-4 border-b border-slate-100 items-center justify-between">
+                <input
+                    type="text"
+                    placeholder="Поиск по номеру, материалам..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                
+                <div className="flex items-center gap-4 text-slate-500">
+                    <div className="flex items-center gap-1 border rounded-md p-0.5">
+                         <button 
+                            onClick={() => setViewMode('card')} 
+                            className={`p-1.5 rounded ${viewMode === 'card' ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-100'}`}
+                            title="Карточки"
+                        >
+                            <LayoutGridIcon className="w-5 h-5"/>
+                         </button>
+                         <button 
+                            onClick={() => setViewMode('list')} 
+                            className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-100'}`}
+                            title="Список"
+                        >
+                            <LayoutListIcon className="w-5 h-5"/>
+                         </button>
+                    </div>
+
+                    <div className="w-px h-6 bg-slate-200 mx-1"></div>
+
+                    <div className="flex items-center gap-1 border rounded-md p-0.5">
+                         <button 
+                            onClick={() => setColumnCount(1)} 
+                            className={`px-3 py-1 rounded text-xs font-medium ${columnCount === 1 ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-100'}`}
+                        >
+                            1
+                         </button>
+                         <button 
+                            onClick={() => setColumnCount(2)} 
+                            className={`px-3 py-1 rounded text-xs font-medium ${columnCount === 2 ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-100'}`}
+                        >
+                            2
+                         </button>
+                         <button 
+                            onClick={() => setColumnCount(3)} 
+                            className={`px-3 py-1 rounded text-xs font-medium ${columnCount === 3 ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-100'}`}
+                        >
+                            3
+                         </button>
+                    </div>
+                </div>
+            </div>
+
             <div className="flex-grow overflow-auto">
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {certificates.map(cert => {
+                 <div className={`grid ${gridColsClass} gap-4`}>
+                    {filteredCertificates.map(cert => {
                         const hasFiles = (cert.files && cert.files.length > 0) || !!cert.fileData;
                         const mainFile = cert.files?.[0] || { type: cert.fileType, data: cert.fileData };
                         const fileCount = cert.files?.length || (cert.fileData ? 1 : 0);
 
+                        if (viewMode === 'list') {
+                            return (
+                                <div key={cert.id} className="border border-slate-200 rounded-lg p-3 hover:shadow-md transition-shadow bg-white flex items-center gap-4">
+                                    <div className="p-2 bg-slate-100 rounded text-slate-500 cursor-pointer" onClick={() => handlePreview(cert)}>
+                                        <CertificateIcon className="w-6 h-6" />
+                                    </div>
+                                    <div className="flex-grow min-w-0">
+                                         <h3 className="font-bold text-slate-800 text-sm truncate">{cert.number}</h3>
+                                         <p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p>
+                                    </div>
+                                    <div className="text-xs text-slate-500 truncate w-1/4">
+                                        {cert.materials.join(', ')}
+                                    </div>
+                                    <div className="flex gap-1 flex-shrink-0">
+                                        <button onClick={() => handleOpenModal(cert)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
+                                        <button onClick={() => handleClickDelete(cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
+                                    </div>
+                                </div>
+                            );
+                        }
+
+                        // Card View (Default)
                         return (
                         <div key={cert.id} className="border border-slate-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col h-full">
                             {/* Thumbnail Section */}
@@ -1004,7 +1135,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, setti
                                     </div>
                                     <div className="flex gap-1 ml-2">
                                         <button onClick={() => handleOpenModal(cert)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
-                                        <button onClick={() => onDelete(cert.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
+                                        <button onClick={() => handleClickDelete(cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
                                     </div>
                                 </div>
                                 
@@ -1023,10 +1154,10 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, setti
                             </div>
                         </div>
                     )})}
-                    {certificates.length === 0 && (
+                    {filteredCertificates.length === 0 && (
                         <div className="col-span-full flex flex-col items-center justify-center py-20 text-slate-400">
                              <CertificateIcon className="w-16 h-16 mb-4 opacity-20" />
-                             <p>База сертификатов пуста.</p>
+                             <p>Ничего не найдено.</p>
                         </div>
                     )}
                  </div>
@@ -1041,6 +1172,49 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, setti
             >
                 <CertificateForm certificate={editingCert} settings={settings} onSave={onSave} onClose={handleCloseModal} />
             </Modal>
+            
+            {/* Delete Warning Modal */}
+            {deleteWarning && (
+                <Modal 
+                    isOpen={true} 
+                    onClose={() => setDeleteWarning(null)} 
+                    title="Сертификат используется"
+                >
+                    <div className="space-y-4">
+                        <p className="text-slate-700">
+                            Сертификат <strong>{deleteWarning.cert.number}</strong> используется в следующих актах ({deleteWarning.usedInActs.length}):
+                        </p>
+                        <div className="bg-slate-50 border border-slate-200 rounded p-2 text-sm max-h-32 overflow-y-auto">
+                            {deleteWarning.usedInActs.join(', ')}
+                        </div>
+                        <p className="text-slate-600 text-sm">
+                            Выберите действие:
+                        </p>
+                        <div className="flex flex-col gap-2 pt-2">
+                             <button 
+                                onClick={handleConfirmDelete} 
+                                className="w-full flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2.5 rounded-md hover:bg-red-700 transition-colors"
+                            >
+                                <DeleteIcon /> Удалить сертификат (в корзину)
+                                <span className="text-red-200 text-xs font-normal ml-auto">Ссылка в актах станет неактивной</span>
+                            </button>
+                             <button 
+                                onClick={handleUnlink} 
+                                className="w-full flex items-center justify-center gap-2 bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-md hover:bg-slate-50 transition-colors"
+                            >
+                                <LinkIcon /> Удалить только связь
+                                <span className="text-slate-400 text-xs font-normal ml-auto">Убрать упоминание из актов</span>
+                            </button>
+                            <button 
+                                onClick={() => setDeleteWarning(null)} 
+                                className="w-full text-slate-500 hover:text-slate-800 text-sm py-2"
+                            >
+                                Отмена
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
 
             {previewFile && (
                 <Modal isOpen={!!previewFile} onClose={() => setPreviewFile(null)} title="Просмотр документа" maxWidth="max-w-6xl">

@@ -1,7 +1,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme } from './types';
+import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry } from './types';
 import TemplateUploader from './components/TemplateUploader';
 import ImportModal from './components/ImportModal';
 import ConfirmationModal from './components/ConfirmationModal';
@@ -45,6 +45,7 @@ const App: React.FC = () => {
     const [groups, setGroups] = useLocalStorage<CommissionGroup[]>('commission_groups', []);
     const [regulations, setRegulations] = useLocalStorage<Regulation[]>('regulations_data', []);
     const [certificates, setCertificates] = useLocalStorage<Certificate[]>('certificates_data', []);
+    const [deletedCertificates, setDeletedCertificates] = useLocalStorage<DeletedCertificateEntry[]>('deleted_certificates', []);
     const [settings, setSettings] = useLocalStorage<ProjectSettings>('project_settings', {
         objectName: '',
         defaultCopiesCount: 2,
@@ -317,10 +318,6 @@ const App: React.FC = () => {
                     return newReps;
                 };
 
-                // Updating acts here might also benefit from history, but simpler to keep direct setActs for secondary updates
-                // However, since we track act history, significant changes like removing a person should ideally be tracked.
-                // For simplicity, we keep direct updates for side-effect changes, or wrapping them would require more complex refactoring.
-                // Let's keep direct setActs for cascade deletes to avoid complex history state merges.
                 setActs(prevActs => prevActs.map(act => ({
                      ...act, 
                      representatives: updateRepresentatives(act.representatives)
@@ -409,16 +406,49 @@ const App: React.FC = () => {
         });
     }, [setCertificates]);
 
-    const handleDeleteCertificate = useCallback((id: string) => {
-        setConfirmation({
-            title: 'Удаление сертификата',
-            message: 'Вы уверены, что хотите удалить этот сертификат?',
-            onConfirm: () => {
-                setCertificates(prev => prev.filter(c => c.id !== id));
-                setConfirmation(null);
+    const handleMoveCertificateToTrash = useCallback((id: string) => {
+         const certToDelete = certificates.find(c => c.id === id);
+         if (!certToDelete) return;
+
+         const newDeletedEntry: DeletedCertificateEntry = {
+             certificate: certToDelete,
+             deletedOn: new Date().toISOString()
+         };
+
+         setDeletedCertificates(prev => [newDeletedEntry, ...prev]);
+         setCertificates(prev => prev.filter(c => c.id !== id));
+    }, [certificates, setCertificates, setDeletedCertificates]);
+
+    const handleRemoveCertificateLinksFromActs = useCallback((cert: Certificate) => {
+        const updatedActs = acts.map(act => {
+            let materials = act.materials;
+            // Filter out strings that look like "Material Name (сертификат № XXXXX...)"
+            // This is rudimentary text matching based on how MaterialsModal constructs the string.
+            // A more robust system would track IDs, but here we work with text.
+            const regex = new RegExp(`\\(сертификат №\\s*${cert.number}.*?\\)`, 'i');
+            
+            if (regex.test(materials)) {
+                // We split by semicolon, filter out the matching parts
+                const parts = materials.split(';').map(s => s.trim());
+                const cleanParts = parts.filter(part => !part.includes(`сертификат № ${cert.number}`));
+                return { ...act, materials: cleanParts.join('; ') };
             }
+            return act;
         });
-    }, [setCertificates]);
+        
+        // This updates acts without moving the cert to trash (used for "Delete Only Link")
+        updateActsWithHistory(updatedActs);
+    }, [acts, updateActsWithHistory]);
+
+    const handleRestoreCertificate = useCallback((entries: DeletedCertificateEntry[]) => {
+        const certsToRestore = entries.map(e => e.certificate);
+        setCertificates(prev => [...prev, ...certsToRestore]);
+        setDeletedCertificates(prev => prev.filter(e => !entries.some(re => re.certificate.id === e.certificate.id)));
+    }, [setCertificates, setDeletedCertificates]);
+
+    const handlePermanentDeleteCertificate = useCallback((ids: string[]) => {
+        setDeletedCertificates(prev => prev.filter(e => !ids.includes(e.certificate.id)));
+    }, [setDeletedCertificates]);
 
     const handleNavigateToCertificate = (id: string) => {
         setTargetCertificateId(id);
@@ -441,6 +471,7 @@ const App: React.FC = () => {
                 certificates,
                 projectSettings: settings,
                 deletedActs,
+                deletedCertificates,
             };
             const jsonString = JSON.stringify(dataToExport, null, 2);
             const blob = new Blob([jsonString], { type: 'application/json' });
@@ -493,22 +524,30 @@ const App: React.FC = () => {
             setSettings(importData.projectSettings);
         }
         
-        const mergeOrReplace = <T extends {id: string} | DeletedActEntry>(
-            key: 'acts' | 'people' | 'organizations' | 'groups' | 'deletedActs' | 'regulations' | 'certificates',
+        const mergeOrReplace = <T extends {id: string} | DeletedActEntry | DeletedCertificateEntry>(
+            key: 'acts' | 'people' | 'organizations' | 'groups' | 'deletedActs' | 'regulations' | 'certificates' | 'deletedCertificates',
             setData: React.Dispatch<React.SetStateAction<any>>,
             sortFn: ((a: T, b: T) => number) | null
         ) => {
-            if (importSettings[key]?.import && importData[key]) {
-                 if (importSettings[key].mode === 'replace') {
+            // @ts-ignore dynamic access
+            if ((importSettings[key]?.import || (key === 'deletedCertificates' && importSettings['deletedActs']?.import)) && importData[key]) { // Lazy handle deletedCertificates import setting based on general or auto
+                 // @ts-ignore
+                 const mode = importSettings[key]?.mode || 'merge';
+                 // @ts-ignore
+                 const selectedIds = importSettings[key]?.selectedIds;
+
+                 if (mode === 'replace') {
+                    // @ts-ignore
                     setData(importData[key]);
                 } else {
+                     // @ts-ignore
                     const selectedItems = (importData[key] as T[]).filter(item => {
-                        const id = 'act' in item ? item.act.id : item.id;
-                        return importSettings[key].selectedIds?.includes(id)
+                        const id = 'act' in item ? item.act.id : 'certificate' in item ? item.certificate.id : item.id;
+                        return selectedIds?.includes(id)
                     });
                     setData((prev: T[]) => {
-                        const itemMap = new Map(prev.map(item => ['act' in item ? item.act.id : item.id, item]));
-                        selectedItems.forEach(item => itemMap.set('act' in item ? item.act.id : item.id, item));
+                        const itemMap = new Map(prev.map(item => ['act' in item ? item.act.id : 'certificate' in item ? item.certificate.id : item.id, item]));
+                        selectedItems.forEach(item => itemMap.set('act' in item ? item.act.id : 'certificate' in item ? item.certificate.id : item.id, item));
                         const newArray = Array.from(itemMap.values());
                         return sortFn ? newArray.sort(sortFn) : newArray;
                     });
@@ -516,8 +555,6 @@ const App: React.FC = () => {
             }
         };
 
-        // Note: For acts, importing via merge might need a history push if we were strictly following the undo model,
-        // but typically bulk import clears or resets history. For now, we leave it as is (direct setActs).
         mergeOrReplace('acts', setActs, null);
         mergeOrReplace('deletedActs', setDeletedActs, (a, b) => new Date((b as DeletedActEntry).deletedOn).getTime() - new Date((a as DeletedActEntry).deletedOn).getTime());
         mergeOrReplace('people', setPeople, (a,b) => (a as Person).name.localeCompare((b as Person).name));
@@ -525,6 +562,10 @@ const App: React.FC = () => {
         mergeOrReplace('groups', setGroups, (a,b) => (a as CommissionGroup).name.localeCompare((b as CommissionGroup).name));
         mergeOrReplace('regulations', setRegulations, (a,b) => (a as Regulation).designation.localeCompare((b as Regulation).designation));
         mergeOrReplace('certificates', setCertificates, (a,b) => (a as Certificate).number.localeCompare((b as Certificate).number));
+        // Simple merge for deleted certs for now, assuming if user imports data they want trash too if present
+        if (importData.deletedCertificates) {
+             setDeletedCertificates(prev => [...prev, ...importData.deletedCertificates!]);
+        }
         
         // Reset history on import to avoid conflicts
         setPast([]);
@@ -593,8 +634,11 @@ const App: React.FC = () => {
             case 'trash':
                 return <TrashPage 
                             deletedActs={deletedActs}
-                            onRestore={handleRestoreActs}
-                            onPermanentlyDelete={handlePermanentlyDeleteActs}
+                            deletedCertificates={deletedCertificates}
+                            onRestoreActs={handleRestoreActs}
+                            onRestoreCertificates={handleRestoreCertificate}
+                            onPermanentlyDeleteActs={handlePermanentlyDeleteActs}
+                            onPermanentlyDeleteCertificates={handlePermanentDeleteCertificate}
                             requestConfirmation={requestConfirmation}
                         />;
             case 'regulations':
@@ -602,9 +646,11 @@ const App: React.FC = () => {
             case 'certificates':
                 return <CertificatesPage 
                             certificates={certificates} 
+                            acts={acts}
                             settings={settings} 
                             onSave={handleSaveCertificate} 
-                            onDelete={handleDeleteCertificate}
+                            onDelete={(id) => handleMoveCertificateToTrash(id)}
+                            onUnlink={(cert) => handleRemoveCertificateLinksFromActs(cert)}
                             initialOpenId={targetCertificateId}
                             onClearInitialOpenId={() => setTargetCertificateId(null)}
                         />;
@@ -624,7 +670,7 @@ const App: React.FC = () => {
                 currentPage={currentPage}
                 setCurrentPage={setCurrentPage}
                 isTemplateLoaded={!!template}
-                trashCount={deletedActs.length}
+                trashCount={deletedActs.length + deletedCertificates.length}
                 onImport={handleImportClick}
                 onExport={handleExportData}
                 onChangeTemplate={handleChangeTemplate}
