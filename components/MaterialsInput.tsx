@@ -15,6 +15,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [highlightedIndex, setHighlightedIndex] = useState(0);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editIndex, setEditIndex] = useState<number | null>(null);
     
     const inputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -134,8 +135,13 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                     return (
                         <div key={index} className={`inline-flex items-center rounded text-xs border ${chipClass} select-none max-w-full`}>
                             <span 
-                                className="px-2 py-0.5 truncate max-w-[200px]" 
-                                title={item}
+                                className="px-2 py-0.5 truncate max-w-[200px] cursor-pointer hover:underline" 
+                                title={cert ? item : "Нажмите, чтобы выбрать сертификат"}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditIndex(index);
+                                    setIsModalOpen(true);
+                                }}
                             >
                                 {item.split('(')[0]} {/* Show mostly just name in chip */}
                             </span>
@@ -170,7 +176,10 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                 type="button"
                 className="absolute top-0 right-0 p-1 text-slate-400 hover:text-blue-600 bg-white/50 hover:bg-white rounded shadow-sm z-10"
                 title="Добавить из базы сертификатов"
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => {
+                    setEditIndex(null);
+                    setIsModalOpen(true);
+                }}
             >
                 <CertificateIcon className="w-4 h-4" />
             </button>
@@ -196,12 +205,25 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             {isModalOpen && (
                 <MaterialsModal
                     isOpen={isModalOpen}
-                    onClose={() => setIsModalOpen(false)}
-                    certificates={certificates}
-                    onSelect={(text) => {
-                        const newValue = value ? `${value}; ${text}` : text;
-                        onChange(newValue);
+                    onClose={() => {
                         setIsModalOpen(false);
+                        setEditIndex(null);
+                    }}
+                    certificates={certificates}
+                    initialSearch={editIndex !== null ? selectedItems[editIndex].split('(')[0] : undefined}
+                    onSelect={(text) => {
+                        if (editIndex !== null) {
+                            // Replace existing
+                            const newItems = [...selectedItems];
+                            newItems[editIndex] = text;
+                            onChange(newItems.join('; '));
+                        } else {
+                            // Add new
+                            const newValue = value ? `${value}; ${text}` : text;
+                            onChange(newValue);
+                        }
+                        setIsModalOpen(false);
+                        setEditIndex(null);
                     }}
                 />
             )}

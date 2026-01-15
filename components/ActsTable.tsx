@@ -11,7 +11,8 @@ import RegulationsModal from './RegulationsModal';
 import RegulationsInput from './RegulationsInput';
 import RegulationDetails from './RegulationDetails';
 import MaterialsInput from './MaterialsInput';
-import MaterialPopover from './MaterialPopover'; // Import the new popover
+import MaterialPopover from './MaterialPopover';
+import MaterialsModal from './MaterialsModal'; // Import for linking
 
 const AUTO_NEXT_ID = 'AUTO_NEXT';
 const AUTO_NEXT_LABEL = '⬇️ Следующий по списку (Автоматически)';
@@ -324,6 +325,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         materialName: string;
         position: { top: number; left: number };
     } | null>(null);
+    
+    // New state for linking material via modal
+    const [linkMaterialModalState, setLinkMaterialModalState] = useState<{
+        isOpen: boolean;
+        actId: string;
+        itemIndex: number;
+        initialSearch: string;
+    } | null>(null);
+
     
     const [fullRegulationDetails, setFullRegulationDetails] = useState<Regulation | null>(null);
 
@@ -1667,9 +1677,16 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                                     e.stopPropagation();
                                                                     if (cert) {
                                                                         handleShowMaterialInfo(item, e.currentTarget);
+                                                                    } else {
+                                                                        setLinkMaterialModalState({
+                                                                            isOpen: true,
+                                                                            actId: act.id,
+                                                                            itemIndex: idx,
+                                                                            initialSearch: item
+                                                                        });
                                                                     }
                                                                 }}
-                                                                title={item}
+                                                                title={cert ? item : "Нажмите, чтобы выбрать сертификат из базы"}
                                                             >
                                                                 <span className="truncate max-w-[200px] block">{item.split('(')[0]}</span>
                                                             </span>
@@ -1909,6 +1926,30 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     onNavigate={(certId) => {
                         onNavigateToCertificate?.(certId);
                         setMaterialPopoverState(null);
+                    }}
+                />
+            )}
+            
+            {linkMaterialModalState && (
+                <MaterialsModal
+                    isOpen={linkMaterialModalState.isOpen}
+                    onClose={() => setLinkMaterialModalState(null)}
+                    certificates={certificates}
+                    initialSearch={linkMaterialModalState.initialSearch}
+                    onSelect={(text) => {
+                        const act = acts.find(a => a.id === linkMaterialModalState.actId);
+                        if (act) {
+                            const items = act.materials.split(';').map(s => s.trim());
+                            // Replace item at the stored index if it exists, otherwise append?
+                            // Since we clicked a specific chip, we should replace that index.
+                            // But data might have shifted if concurrent edits happened (unlikely here).
+                            if (items[linkMaterialModalState.itemIndex] !== undefined) {
+                                items[linkMaterialModalState.itemIndex] = text;
+                                const updatedAct = { ...act, materials: items.join('; ') };
+                                handleSaveWithTemplateResolution(updatedAct);
+                            }
+                        }
+                        setLinkMaterialModalState(null);
                     }}
                 />
             )}

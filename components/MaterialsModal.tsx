@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Modal from './Modal';
 import { Certificate } from '../types';
 import { CertificateIcon, PlusIcon } from './Icons';
@@ -9,11 +9,20 @@ interface MaterialsModalProps {
     onClose: () => void;
     certificates: Certificate[];
     onSelect: (selectedString: string) => void;
+    initialSearch?: string;
 }
 
-const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certificates, onSelect }) => {
+const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certificates, onSelect, initialSearch }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedCertId, setExpandedCertId] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (isOpen && initialSearch) {
+            setSearchTerm(initialSearch);
+        } else if (isOpen) {
+            setSearchTerm('');
+        }
+    }, [isOpen, initialSearch]);
 
     const filteredCertificates = useMemo(() => {
         if (!searchTerm) return certificates;
