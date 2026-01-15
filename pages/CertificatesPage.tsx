@@ -530,7 +530,7 @@ const CertificateForm: React.FC<{
 
     const handleCancelMassEdit = () => {
         setDiffResult(null);
-        setMassEditPrompt('');
+        // Do NOT clear massEditPrompt to allow user to retry/edit
     };
 
     const handleCommitMassEdit = () => {
@@ -561,6 +561,13 @@ const CertificateForm: React.FC<{
         setDiffResult(prev => {
             if (!prev) return null;
             return prev.map(item => item.id === id ? { ...item, selected: !item.selected } : item);
+        });
+    };
+    
+    const handleSelectAllDiffs = (select: boolean) => {
+        setDiffResult(prev => {
+            if (!prev) return null;
+            return prev.map(item => ({ ...item, selected: select }));
         });
     };
 
@@ -871,7 +878,7 @@ const CertificateForm: React.FC<{
                                     )}
                                 </div>
                                 
-                                {/* AI Materials Suggestions with Hide/Show */}
+                                {/* AI Materials Suggestions with Hide/Show - Hide completely during Diff review */}
                                 {aiSuggestions?.materials && aiSuggestions.materials.length > 0 && !isPreviewMode && (
                                     <div className="mb-4 bg-violet-50 border border-violet-100 rounded-md p-3">
                                         <div className="flex justify-between items-center mb-2 cursor-pointer select-none" onClick={() => setShowAiMaterials(!showAiMaterials)}>
@@ -938,26 +945,26 @@ const CertificateForm: React.FC<{
                                     </div>
                                 )}
 
-                                {/* Manual Add Input */}
-                                <div className="flex gap-2 mt-1 mb-3">
-                                    <input 
-                                        type="text" 
-                                        value={newMaterial} 
-                                        onChange={e => setNewMaterial(e.target.value)}
-                                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleManualAddMaterial())}
-                                        className={inputClass} 
-                                        placeholder="Введите название и нажмите Enter" 
-                                        disabled={isPreviewMode}
-                                    />
-                                    <button 
-                                        type="button" 
-                                        onClick={handleManualAddMaterial}
-                                        disabled={isPreviewMode}
-                                        className="mt-1 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-300 rounded-md hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        <PlusIcon className="w-5 h-5"/>
-                                    </button>
-                                </div>
+                                {/* Manual Add Input - HIDDEN during Diff Review */}
+                                {!isPreviewMode && (
+                                    <div className="flex gap-2 mt-1 mb-3">
+                                        <input 
+                                            type="text" 
+                                            value={newMaterial} 
+                                            onChange={e => setNewMaterial(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleManualAddMaterial())}
+                                            className={inputClass} 
+                                            placeholder="Введите название и нажмите Enter" 
+                                        />
+                                        <button 
+                                            type="button" 
+                                            onClick={handleManualAddMaterial}
+                                            className="mt-1 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-300 rounded-md hover:bg-slate-200"
+                                        >
+                                            <PlusIcon className="w-5 h-5"/>
+                                        </button>
+                                    </div>
+                                )}
                                 
                                 {/* Undo Banner */}
                                 {lastDeletedMaterial && !isPreviewMode && (
@@ -1027,46 +1034,69 @@ const CertificateForm: React.FC<{
                                             </div>
                                         ) : (
                                             <div className="bg-violet-50 p-3 rounded-md border border-violet-100 animate-fade-in-up">
-                                                <p className="text-xs text-violet-800 mb-3 font-medium border-b border-violet-200 pb-1">Проверьте изменения:</p>
+                                                <div className="flex justify-between items-center mb-2 pb-2 border-b border-violet-200">
+                                                    <p className="text-xs text-violet-800 font-medium">Проверьте изменения:</p>
+                                                    <div className="flex gap-3">
+                                                        <button 
+                                                            type="button" 
+                                                            onClick={() => handleSelectAllDiffs(true)} 
+                                                            className="text-[10px] font-medium text-violet-600 hover:underline hover:text-violet-800"
+                                                        >
+                                                            Выбрать все
+                                                        </button>
+                                                        <button 
+                                                            type="button" 
+                                                            onClick={() => handleSelectAllDiffs(false)} 
+                                                            className="text-[10px] font-medium text-slate-500 hover:underline hover:text-slate-700"
+                                                        >
+                                                            Снять все
+                                                        </button>
+                                                    </div>
+                                                </div>
                                                 
-                                                <div className="max-h-60 overflow-y-auto mb-3 space-y-2 pr-1">
+                                                <div className="mb-3 space-y-2 pr-1">
                                                     {diffResult.length === 0 && <p className="text-xs text-slate-500 italic">Нет изменений</p>}
                                                     {diffResult.map((item) => (
-                                                        <div key={item.id} className="flex items-center gap-2 text-xs bg-white p-2 rounded border border-slate-200 shadow-sm">
+                                                        <div key={item.id} className="flex items-start gap-2 text-xs bg-white p-2 rounded border border-slate-200 shadow-sm">
                                                             <input 
                                                                 type="checkbox" 
                                                                 checked={item.selected}
                                                                 onChange={() => handleToggleDiffSelection(item.id)}
-                                                                className="h-4 w-4 form-checkbox-custom flex-shrink-0"
+                                                                className="h-4 w-4 form-checkbox-custom flex-shrink-0 mt-0.5"
                                                             />
                                                             
                                                             <div className="flex-grow min-w-0">
                                                                 {item.status === 'modified' && (
-                                                                    <div className="flex flex-col gap-1">
-                                                                        <div className="line-through text-red-600 opacity-60 truncate" title={item.original}>{item.original}</div>
-                                                                        <div className="flex items-center gap-1 text-green-700 font-medium">
-                                                                            <ArrowRightIcon className="w-3 h-3 flex-shrink-0 text-slate-400" />
-                                                                            <span className="break-all">{item.new}</span>
+                                                                    <div className="flex flex-col md:flex-row items-start md:items-stretch gap-2 w-full">
+                                                                        <div className="flex-1 w-full md:w-auto p-1.5 bg-red-50 border border-red-100 rounded text-red-900 text-xs break-words">
+                                                                            {item.original}
+                                                                        </div>
+                                                                        <div className="flex-shrink-0 self-center">
+                                                                             <ArrowRightIcon className="w-3 h-3 text-slate-400 hidden md:block" />
+                                                                             <ArrowRightIcon className="w-3 h-3 text-slate-400 md:hidden rotate-90" />
+                                                                        </div>
+                                                                        <div className="flex-1 w-full md:w-auto p-1.5 bg-green-50 border border-green-100 rounded text-green-900 text-xs font-medium break-words">
+                                                                            {item.new}
                                                                         </div>
                                                                     </div>
                                                                 )}
                                                                 {item.status === 'added' && (
-                                                                    <div className="text-green-700 font-medium flex items-center gap-1">
-                                                                        <PlusIcon className="w-3 h-3 flex-shrink-0" />
-                                                                        <span className="break-all">{item.new}</span>
+                                                                    <div className="text-green-700 font-medium flex items-start gap-1 p-1.5 bg-green-50 border border-green-100 rounded">
+                                                                        <PlusIcon className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                                                                        <span className="break-words">{item.new}</span>
                                                                     </div>
                                                                 )}
                                                                 {item.status === 'removed' && (
-                                                                    <div className="text-red-600 line-through opacity-70 flex items-center gap-1">
-                                                                        <span className="break-all">{item.original}</span>
+                                                                    <div className="text-red-700 p-1.5 bg-red-50 border border-red-100 rounded flex items-start gap-1 opacity-80">
+                                                                        <span className="line-through decoration-red-400 break-words">{item.original}</span>
                                                                     </div>
                                                                 )}
                                                                 {item.status === 'unchanged' && (
-                                                                    <div className="text-slate-500 truncate" title="Без изменений">{item.original}</div>
+                                                                    <div className="text-slate-500 break-words pt-0.5" title="Без изменений">{item.original}</div>
                                                                 )}
                                                             </div>
                                                             
-                                                            <div className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded
+                                                            <div className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded mt-0.5
                                                                 ${item.status === 'modified' ? 'bg-amber-100 text-amber-700' : ''}
                                                                 ${item.status === 'added' ? 'bg-green-100 text-green-700' : ''}
                                                                 ${item.status === 'removed' ? 'bg-red-100 text-red-700' : ''}
@@ -1078,7 +1108,7 @@ const CertificateForm: React.FC<{
                                                     ))}
                                                 </div>
 
-                                                <div className="flex gap-2">
+                                                <div className="flex gap-2 sticky bottom-0 bg-violet-50 pt-2 border-t border-violet-100">
                                                     <button 
                                                         type="button" 
                                                         onClick={handleCommitMassEdit}
