@@ -126,6 +126,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
     const [inputValue, setInputValue] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
+    const [usingKeyboard, setUsingKeyboard] = useState(false); // Track if user is navigating with keyboard
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editIndex, setEditIndex] = useState<number | null>(null);
@@ -241,6 +242,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
 
     useEffect(() => {
         setHighlightedIndex(-1);
+        setUsingKeyboard(false);
     }, [flatSuggestions]);
 
     const handleAddItem = (item: string) => {
@@ -249,6 +251,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
         setInputValue('');
         setShowSuggestions(false);
         setItemToDeleteIndex(null);
+        setUsingKeyboard(false);
         inputRef.current?.focus();
     };
 
@@ -286,6 +289,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             }
         } else if (e.key === 'ArrowDown') {
             e.preventDefault();
+            setUsingKeyboard(true);
             setHighlightedIndex(prev => {
                 if (flatSuggestions.length === 0) return -1;
                 return Math.min(prev + 1, flatSuggestions.length - 1);
@@ -293,11 +297,15 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             setItemToDeleteIndex(null);
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
+            setUsingKeyboard(true);
             setHighlightedIndex(prev => Math.max(prev - 1, -1));
             setItemToDeleteIndex(null);
         } else if (e.key === 'Enter') {
             e.preventDefault();
-            if (showSuggestions && highlightedIndex >= 0 && flatSuggestions[highlightedIndex]) {
+            // Only select suggestion if it was highlighted AND we are using keyboard navigation
+            // OR if the user explicitly clicked (handled by onClick), but here we handle Enter.
+            // If the user just typed and pressed Enter, we want the typed text unless they arrowed down.
+            if (showSuggestions && highlightedIndex >= 0 && flatSuggestions[highlightedIndex] && usingKeyboard) {
                 handleAddItem(flatSuggestions[highlightedIndex].fullString);
             } else if (inputValue.trim()) {
                 handleAddItem(inputValue.trim());
@@ -391,6 +399,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                         setInputValue(e.target.value);
                         setShowSuggestions(true);
                         setItemToDeleteIndex(null);
+                        setUsingKeyboard(false); // Reset keyboard state on typing
                     }}
                     onKeyDown={handleKeyDown}
                     onPaste={handlePaste}
@@ -416,7 +425,10 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             </button>
 
             {showSuggestions && groupedSuggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-60 overflow-y-auto w-[150%] min-w-[300px]">
+                <div 
+                    className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-60 overflow-y-auto w-[150%] min-w-[300px]"
+                    onMouseMove={() => setUsingKeyboard(false)} // Disable keyboard selection mode if mouse is moved over list
+                >
                     {groupedSuggestions.map((group) => (
                         <div key={group.cert.id} className="border-b border-slate-100 last:border-0">
                             {/* Group Header */}
@@ -441,7 +453,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                                 const isHighlighted = globalIndex === highlightedIndex;
                                 return (
                                     <div
-                                        key={globalIndex} // Using index is safe here as list is static during render
+                                        key={globalIndex}
                                         className={`px-3 py-2 cursor-pointer text-sm flex flex-col ${isHighlighted ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : 'hover:bg-white'}`}
                                         onClick={() => handleAddItem(item.fullString)}
                                         onMouseEnter={() => setHighlightedIndex(globalIndex)}
@@ -474,6 +486,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                     certificates={certificates}
                     initialSearch={editIndex !== null ? selectedItems[editIndex].split('(')[0] : undefined}
                     editingMaterialTitle={editIndex !== null ? selectedItems[editIndex].split('(')[0] : undefined}
+                    onNavigateToCertificate={onNavigateToCertificate}
                     onSelect={(text) => {
                         if (editIndex !== null) {
                             const newItems = [...selectedItems];

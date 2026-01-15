@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Modal from './Modal';
 import { Certificate } from '../types';
-import { CertificateIcon, PlusIcon, CloseIcon } from './Icons';
+import { CertificateIcon, PlusIcon, CloseIcon, LinkIcon } from './Icons';
 
 interface MaterialsModalProps {
     isOpen: boolean;
@@ -11,6 +11,7 @@ interface MaterialsModalProps {
     onSelect: (selectedString: string) => void;
     initialSearch?: string;
     editingMaterialTitle?: string;
+    onNavigateToCertificate?: (id: string) => void;
 }
 
 // --- Shared Fuzzy Logic (Duplicated from MaterialsInput to keep files self-contained) ---
@@ -119,7 +120,7 @@ interface FilteredData {
     bestScore: number;
 }
 
-const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certificates, onSelect, initialSearch, editingMaterialTitle }) => {
+const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certificates, onSelect, initialSearch, editingMaterialTitle, onNavigateToCertificate }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedCertId, setExpandedCertId] = useState<string | null>(null);
 
@@ -229,6 +230,14 @@ const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certif
         setSearchTerm('');
     };
 
+    const handleNavigate = (e: React.MouseEvent, certId: string) => {
+        e.stopPropagation();
+        if (onNavigateToCertificate) {
+            onNavigateToCertificate(certId);
+            onClose(); // Close modal on navigation
+        }
+    };
+
     const modalTitle = editingMaterialTitle 
         ? `Привязка к сертификату: "${editingMaterialTitle}"`
         : "Выбор материала из сертификатов";
@@ -282,6 +291,15 @@ const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certif
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0">
+                                        {onNavigateToCertificate && (
+                                            <button
+                                                onMouseDown={(e) => handleNavigate(e, cert.id)}
+                                                className="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-100 rounded transition-colors mr-1"
+                                                title="Открыть сертификат"
+                                            >
+                                                <LinkIcon className="w-4 h-4" />
+                                            </button>
+                                        )}
                                         <span className="text-xs text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-100">
                                             {materials.length} {isSearching ? 'совп.' : 'мат.'}
                                         </span>
