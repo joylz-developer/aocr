@@ -1761,6 +1761,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                                 value={editorValue}
                                                                 onChange={setEditorValue}
                                                                 certificates={certificates}
+                                                                onNavigateToCertificate={onNavigateToCertificate}
                                                             />
                                                         ) : (
                                                             <textarea

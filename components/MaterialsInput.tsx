@@ -1,13 +1,14 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Certificate } from '../types';
-import { CertificateIcon, CloseIcon, PlusIcon } from './Icons';
+import { CertificateIcon, CloseIcon, PlusIcon, LinkIcon } from './Icons';
 import MaterialsModal from './MaterialsModal';
 
 interface MaterialsInputProps {
     value: string;
     onChange: (value: string) => void;
     certificates: Certificate[];
+    onNavigateToCertificate?: (id: string) => void;
 }
 
 // Basic Levenshtein distance for fuzzy matching
@@ -32,7 +33,32 @@ const levenshteinDistance = (a: string, b: string): number => {
     return matrix[b.length][a.length];
 };
 
-const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certificates }) => {
+// Helper component to highlight matched text
+const HighlightMatch: React.FC<{ text: string; query: string }> = ({ text, query }) => {
+    if (!query.trim()) return <>{text}</>;
+
+    // Escape regex characters in query
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escapedQuery})`, 'gi');
+    const parts = text.split(regex);
+
+    // If no split happened (fuzzy match), return text as is
+    if (parts.length === 1) return <>{text}</>;
+
+    return (
+        <>
+            {parts.map((part, i) => 
+                regex.test(part) ? (
+                    <span key={i} className="font-extrabold text-blue-600 bg-blue-50 rounded-sm px-0.5 mx-[-2px]">{part}</span>
+                ) : (
+                    part
+                )
+            )}
+        </>
+    );
+};
+
+const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certificates, onNavigateToCertificate }) => {
     const [inputValue, setInputValue] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
     
@@ -60,9 +86,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
         if (!inputValue.trim()) return [];
         const lowerInput = inputValue.toLowerCase();
         
-        // Dynamic threshold: 0 errors for short words (<3), 
-        // 1 error for len 3-5, 2 errors for len 6-8, etc.
-        // Approx 1 error per 3 characters.
+        // Threshold for fuzzy matching
         const threshold = lowerInput.length < 3 ? 0 : Math.floor(lowerInput.length / 3);
 
         const candidates: { label: string; cert: Certificate; fullString: string; score: number }[] = [];
@@ -70,38 +94,41 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
         certificates.forEach(cert => {
             cert.materials.forEach(mat => {
                 const lowerMat = mat.toLowerCase();
-                let score = 100; // Lower is better
+                let score = 1000; // Lower is better
                 
-                // 1. Exact substring match (Highest Priority)
-                if (lowerMat.includes(lowerInput)) {
-                    score = 0; 
-                    // Prioritize startsWith
-                    if (lowerMat.startsWith(lowerInput)) score = -1;
-                } else if (threshold > 0) {
-                    // 2. Fuzzy Match logic
-                    
-                    // A. Prefix Fuzzy Match
-                    // Check if the input matches the *beginning* of the material name with typos.
-                    // This helps finding "Тройник ..." when user types "трайник" (input length matches prefix length)
+                // 1. Exact match (Best)
+                if (lowerMat === lowerInput) {
+                    score = 0;
+                }
+                // 2. Starts with match
+                else if (lowerMat.startsWith(lowerInput)) {
+                    score = 10;
+                }
+                // 3. Contains match
+                else if (lowerMat.includes(lowerInput)) {
+                    score = 20 + lowerMat.indexOf(lowerInput); // Prefer matches closer to start
+                } 
+                // 4. Fuzzy Match logic
+                else if (threshold > 0) {
+                    // A. Prefix Fuzzy Match (e.g. "трайник" -> "Тройник")
                     if (lowerMat.length >= lowerInput.length) {
                         const matPrefix = lowerMat.substring(0, lowerInput.length);
                         const dist = levenshteinDistance(lowerInput, matPrefix);
                         if (dist <= threshold) {
-                            score = dist + 1; // Score > 0 to rank lower than exact matches
+                            score = 50 + dist; 
                         }
                     }
 
                     // B. Full String Fuzzy Match (if lengths are close)
-                    // This handles cases where input is almost the full word
-                    if (score === 100 && Math.abs(lowerMat.length - lowerInput.length) <= 3) {
+                    if (score === 1000 && Math.abs(lowerMat.length - lowerInput.length) <= 3) {
                         const dist = levenshteinDistance(lowerInput, lowerMat);
                         if (dist <= threshold) {
-                            score = dist + 1;
+                            score = 60 + dist;
                         }
                     }
                 }
 
-                if (score < 100) {
+                if (score < 1000) {
                     const dateObj = new Date(cert.validUntil);
                     const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString('ru-RU') : cert.validUntil;
                     const fullString = `${mat} (сертификат № ${cert.number}, до ${dateStr})`;
@@ -132,7 +159,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             }
         }
 
-        return uniqueCandidates.slice(0, 10);
+        return uniqueCandidates.slice(0, 15);
     }, [inputValue, certificates]);
 
     // Reset highlight when suggestions change
@@ -239,6 +266,13 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
         return null;
     };
 
+    const handleNavigate = (e: React.MouseEvent, certId: string) => {
+        e.stopPropagation();
+        if (onNavigateToCertificate) {
+            onNavigateToCertificate(certId);
+        }
+    };
+
     return (
         <div ref={containerRef} className="relative w-full h-full bg-transparent flex flex-col group">
             <div 
@@ -317,18 +351,37 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             </button>
 
             {showSuggestions && suggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-60 overflow-y-auto w-[150%] min-w-[300px]">
                     {suggestions.map((item, index) => (
                         <div
                             key={index}
-                            className={`px-3 py-2 cursor-pointer text-sm flex flex-col ${index === highlightedIndex ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : 'hover:bg-slate-50'}`}
+                            className={`px-3 py-2 cursor-pointer text-sm flex flex-col ${index === highlightedIndex ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : 'hover:bg-slate-50'} border-b border-slate-50 last:border-0`}
                             onClick={() => handleAddItem(item.fullString)}
                             onMouseEnter={() => setHighlightedIndex(index)}
                         >
-                            <span className="font-bold text-slate-700">{item.label}</span>
-                            <span className="text-xs text-slate-500">
-                                Сертификат № {item.cert.number} (до {new Date(item.cert.validUntil).toLocaleDateString()})
-                            </span>
+                            <div className="flex justify-between items-start gap-2">
+                                <span className="font-medium text-slate-800 break-words flex-grow">
+                                    <HighlightMatch text={item.label} query={inputValue} />
+                                </span>
+                                {item.score > 20 && (
+                                    <span className="text-[10px] bg-amber-100 text-amber-700 px-1 rounded flex-shrink-0 mt-0.5" title="Найдено с опечаткой/нечетко">
+                                        ~
+                                    </span>
+                                )}
+                            </div>
+                            
+                            <div className="flex items-center justify-between mt-1 text-xs text-slate-500">
+                                <span>
+                                    Сертификат № {item.cert.number} (до {new Date(item.cert.validUntil).toLocaleDateString()})
+                                </span>
+                                <button
+                                    onMouseDown={(e) => handleNavigate(e, item.cert.id)} // Use onMouseDown to prevent losing focus/blur issues
+                                    className="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-100 rounded transition-colors"
+                                    title="Открыть сертификат в новой вкладке"
+                                >
+                                    <LinkIcon className="w-3 h-3" />
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>
