@@ -34,7 +34,6 @@ const levenshteinDistance = (a: string, b: string): number => {
 };
 
 // Advanced Highlighter using LCS for multiple tokens
-// Highlights characters that match ANY of the tokens in the query
 const HighlightMatch: React.FC<{ text: string; query: string }> = ({ text, query }) => {
     if (!query || !text) return <>{text}</>;
 
@@ -44,15 +43,12 @@ const HighlightMatch: React.FC<{ text: string; query: string }> = ({ text, query
     
     if (tokens.length === 0) return <>{text}</>;
 
-    // Global set of matched indices
     const matchedIndices = new Set<number>();
 
-    // Helper to compute LCS indices for one token and add to set
     const computeLCSIndices = (token: string) => {
         const m = token.length;
         if (m === 0) return;
         
-        // dp[i][j] = length of LCS of text[0..i-1] and token[0..j-1]
         const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
 
         for (let i = 1; i <= n; i++) {
@@ -65,7 +61,6 @@ const HighlightMatch: React.FC<{ text: string; query: string }> = ({ text, query
             }
         }
 
-        // Backtrack to find which indices in 'text' are part of the match
         let i = n, j = m;
         while (i > 0 && j > 0) {
             if (t[i - 1] === token[j - 1]) {
@@ -80,10 +75,8 @@ const HighlightMatch: React.FC<{ text: string; query: string }> = ({ text, query
         }
     };
 
-    // Compute matches for all tokens
     tokens.forEach(token => computeLCSIndices(token));
 
-    // Render segments
     const elements: React.ReactNode[] = [];
     let lastIdx = 0;
     let isHighlighting = false;
@@ -116,6 +109,19 @@ const HighlightMatch: React.FC<{ text: string; query: string }> = ({ text, query
     return <>{elements}</>;
 };
 
+interface SuggestionItem {
+    label: string;
+    cert: Certificate;
+    fullString: string;
+    score: number;
+}
+
+interface GroupedSuggestion {
+    cert: Certificate;
+    items: SuggestionItem[];
+    bestScore: number;
+}
+
 const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certificates, onNavigateToCertificate }) => {
     const [inputValue, setInputValue] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -133,47 +139,42 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
         return value.split(';').map(s => s.trim()).filter(Boolean);
     }, [value]);
 
-    // Enhanced Multi-Token Fuzzy Search
-    const suggestions = useMemo(() => {
-        if (!inputValue.trim()) return [];
+    // 1. Calculate matching items
+    // 2. Group by Certificate
+    const { groupedSuggestions, flatSuggestions } = useMemo(() => {
+        if (!inputValue.trim()) return { groupedSuggestions: [], flatSuggestions: [] };
         
-        // Split input into tokens (e.g., "трайник 219" -> ["трайник", "219"])
         const tokens = inputValue.toLowerCase().split(/\s+/).filter(t => t.length > 0);
-        if (tokens.length === 0) return [];
+        if (tokens.length === 0) return { groupedSuggestions: [], flatSuggestions: [] };
 
-        const candidates: { label: string; cert: Certificate; fullString: string; score: number }[] = [];
+        const tempGroups = new Map<string, GroupedSuggestion>();
 
         certificates.forEach(cert => {
+            const matches: SuggestionItem[] = [];
+            let bestCertScore = 10000;
+
             cert.materials.forEach(mat => {
                 const lowerMat = mat.toLowerCase();
                 let totalScore = 0;
                 let allTokensMatch = true;
                 
-                // Split material name into words for fuzzy context
-                // e.g. "Тройник стальной 219x6" -> ["тройник", "стальной", "219x6"]
                 const matWords = lowerMat.split(/[\s,.\(\)]+/).filter(w => w.length > 0);
 
                 for (const token of tokens) {
                     let tokenMatched = false;
                     let bestTokenScore = 1000;
 
-                    // 1. Exact Substring Match (Strongest)
                     const idx = lowerMat.indexOf(token);
                     if (idx !== -1) {
                         tokenMatched = true;
                         bestTokenScore = 0;
-                        // Boost score if matches start of the string or a word
                         if (idx === 0 || /[\s,.\(\)]/.test(lowerMat[idx - 1])) {
                             bestTokenScore = -10;
                         }
                     } else {
-                        // 2. Fuzzy Match against individual words
                         const threshold = token.length < 3 ? 0 : Math.floor(token.length / 3);
-                        
                         for (const word of matWords) {
-                            // Skip comparison if length diff is too big
                             if (Math.abs(word.length - token.length) > 3 && token.length < word.length) {
-                                // Check Prefix Match (e.g. "трай" -> "Тройник")
                                 if (word.length >= token.length) {
                                     const prefix = word.substring(0, token.length);
                                     const dist = levenshteinDistance(token, prefix);
@@ -184,8 +185,6 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                                 }
                                 continue;
                             }
-
-                            // Full Word Fuzzy Match
                             if (Math.abs(word.length - token.length) <= 3) {
                                 const dist = levenshteinDistance(token, word);
                                 if (dist <= threshold) {
@@ -208,35 +207,41 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                     const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString('ru-RU') : cert.validUntil;
                     const fullString = `${mat} (сертификат № ${cert.number}, до ${dateStr})`;
                     
-                    candidates.push({
+                    matches.push({
                         label: mat,
                         cert: cert,
                         fullString: fullString,
                         score: totalScore
                     });
+                    if (totalScore < bestCertScore) bestCertScore = totalScore;
                 }
             });
+
+            if (matches.length > 0) {
+                // Sort matches within the certificate by score
+                matches.sort((a, b) => a.score - b.score);
+                tempGroups.set(cert.id, {
+                    cert,
+                    items: matches,
+                    bestScore: bestCertScore
+                });
+            }
         });
 
-        // Sort by score (ascending)
-        candidates.sort((a, b) => a.score - b.score);
+        // Convert map to array and sort groups by best match score
+        const sortedGroups = Array.from(tempGroups.values())
+            .sort((a, b) => a.bestScore - b.bestScore)
+            .slice(0, 10); // Limit number of groups shown
 
-        // Deduplicate
-        const uniqueCandidates = [];
-        const seen = new Set();
-        for (const c of candidates) {
-            if (!seen.has(c.fullString)) {
-                seen.add(c.fullString);
-                uniqueCandidates.push(c);
-            }
-        }
+        // Create a flat list for keyboard navigation
+        const flat = sortedGroups.flatMap(g => g.items);
 
-        return uniqueCandidates.slice(0, 15);
+        return { groupedSuggestions: sortedGroups, flatSuggestions: flat };
     }, [inputValue, certificates]);
 
     useEffect(() => {
         setHighlightedIndex(-1);
-    }, [suggestions]);
+    }, [flatSuggestions]);
 
     const handleAddItem = (item: string) => {
         const newItems = [...selectedItems, item];
@@ -282,8 +287,8 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
         } else if (e.key === 'ArrowDown') {
             e.preventDefault();
             setHighlightedIndex(prev => {
-                if (suggestions.length === 0) return -1;
-                return Math.min(prev + 1, suggestions.length - 1);
+                if (flatSuggestions.length === 0) return -1;
+                return Math.min(prev + 1, flatSuggestions.length - 1);
             });
             setItemToDeleteIndex(null);
         } else if (e.key === 'ArrowUp') {
@@ -292,8 +297,8 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             setItemToDeleteIndex(null);
         } else if (e.key === 'Enter') {
             e.preventDefault();
-            if (showSuggestions && highlightedIndex >= 0 && suggestions[highlightedIndex]) {
-                handleAddItem(suggestions[highlightedIndex].fullString);
+            if (showSuggestions && highlightedIndex >= 0 && flatSuggestions[highlightedIndex]) {
+                handleAddItem(flatSuggestions[highlightedIndex].fullString);
             } else if (inputValue.trim()) {
                 handleAddItem(inputValue.trim());
             }
@@ -410,38 +415,50 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                 <CertificateIcon className="w-4 h-4" />
             </button>
 
-            {showSuggestions && suggestions.length > 0 && (
+            {showSuggestions && groupedSuggestions.length > 0 && (
                 <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-60 overflow-y-auto w-[150%] min-w-[300px]">
-                    {suggestions.map((item, index) => (
-                        <div
-                            key={index}
-                            className={`px-3 py-2 cursor-pointer text-sm flex flex-col ${index === highlightedIndex ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : 'hover:bg-slate-50'} border-b border-slate-50 last:border-0`}
-                            onClick={() => handleAddItem(item.fullString)}
-                            onMouseEnter={() => setHighlightedIndex(index)}
-                        >
-                            <div className="flex justify-between items-start gap-2">
-                                <span className="font-medium text-slate-800 break-words flex-grow">
-                                    <HighlightMatch text={item.label} query={inputValue} />
-                                </span>
-                                {item.score > 20 && (
-                                    <span className="text-[10px] bg-amber-100 text-amber-700 px-1 rounded flex-shrink-0 mt-0.5" title="Найдено с опечаткой/нечетко">
-                                        ~
-                                    </span>
-                                )}
-                            </div>
-                            
-                            <div className="flex items-center justify-between mt-1 text-xs text-slate-500">
-                                <span>
-                                    Сертификат № {item.cert.number} (до {new Date(item.cert.validUntil).toLocaleDateString()})
-                                </span>
+                    {groupedSuggestions.map((group) => (
+                        <div key={group.cert.id} className="border-b border-slate-100 last:border-0">
+                            {/* Group Header */}
+                            <div className="bg-slate-50 px-3 py-1.5 flex justify-between items-center text-xs border-b border-slate-50">
+                                <div className="flex items-center gap-2 text-slate-500 font-medium">
+                                    <CertificateIcon className="w-3 h-3" />
+                                    <span>№ {group.cert.number}</span>
+                                    <span className="opacity-75 font-normal">(до {new Date(group.cert.validUntil).toLocaleDateString()})</span>
+                                </div>
                                 <button
-                                    onMouseDown={(e) => handleNavigate(e, item.cert.id)} 
+                                    onMouseDown={(e) => handleNavigate(e, group.cert.id)}
                                     className="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-100 rounded transition-colors"
-                                    title="Открыть сертификат в новой вкладке"
+                                    title="Открыть сертификат"
                                 >
                                     <LinkIcon className="w-3 h-3" />
                                 </button>
                             </div>
+
+                            {/* Group Items */}
+                            {group.items.map((item) => {
+                                const globalIndex = flatSuggestions.indexOf(item);
+                                const isHighlighted = globalIndex === highlightedIndex;
+                                return (
+                                    <div
+                                        key={globalIndex} // Using index is safe here as list is static during render
+                                        className={`px-3 py-2 cursor-pointer text-sm flex flex-col ${isHighlighted ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : 'hover:bg-white'}`}
+                                        onClick={() => handleAddItem(item.fullString)}
+                                        onMouseEnter={() => setHighlightedIndex(globalIndex)}
+                                    >
+                                        <div className="flex justify-between items-start gap-2">
+                                            <span className="font-medium text-slate-800 break-words flex-grow">
+                                                <HighlightMatch text={item.label} query={inputValue} />
+                                            </span>
+                                            {item.score > 20 && (
+                                                <span className="text-[10px] bg-amber-100 text-amber-700 px-1 rounded flex-shrink-0 mt-0.5" title="Найдено с опечаткой/нечетко">
+                                                    ~
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     ))}
                 </div>
