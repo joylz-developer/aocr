@@ -1,322 +1,77 @@
-
-import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
-import { Certificate, ProjectSettings, CertificateFile, Act } from '../types';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { Certificate, Act, ProjectSettings, CertificateFile } from '../types';
 import Modal from '../components/Modal';
-import ConfirmationModal from '../components/ConfirmationModal';
-import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon, LayoutListIcon, LayoutGridIcon, ColumnsIcon, LinkIcon, ChevronDownIcon, MinimizeIcon, MaximizeIcon, ArrowRightIcon, CheckIcon, XIcon } from '../components/Icons';
+import { PlusIcon, DeleteIcon, EditIcon, LinkIcon, CloudUploadIcon, SparklesIcon, MaximizeIcon, MinimizeIcon, CloseIcon, ChevronLeftIcon, ArrowRightIcon } from '../components/Icons';
 import { GoogleGenAI } from '@google/genai';
 
 interface CertificatesPageProps {
     certificates: Certificate[];
-    acts: Act[]; // Passed to check usage/links
+    acts: Act[];
     settings: ProjectSettings;
     onSave: (cert: Certificate) => void;
     onDelete: (id: string) => void;
     onUnlink: (cert: Certificate) => void;
-    initialOpenId?: string | null;
-    onClearInitialOpenId?: () => void;
+    initialOpenId: string | null;
+    onClearInitialOpenId: () => void;
 }
 
-// Updated Type for AI Suggestions to support multiple options
-interface AiSuggestions {
-    numbers?: string[];
-    dates?: string[];
-    materials?: string[];
-}
-
-// Diff Types
-type DiffStatus = 'unchanged' | 'modified' | 'added' | 'removed';
-
-interface DiffItem {
-    id: string; // Unique ID for keying
-    status: DiffStatus;
-    original?: string;
-    new?: string;
-    selected: boolean; // Whether the user accepts this change
-}
-
-type ViewMode = 'card' | 'list';
-type ColumnCount = 1 | 2 | 3;
-
-// --- Helper Functions ---
-
-// Basic Levenshtein distance for fuzzy matching
-const levenshteinDistance = (a: string, b: string): number => {
-    const matrix = [];
-    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
-    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-
-    for (let i = 1; i <= b.length; i++) {
-        for (let j = 1; j <= a.length; j++) {
-            if (b.charAt(i - 1) === a.charAt(j - 1)) {
-                matrix[i][j] = matrix[i - 1][j - 1];
-            } else {
-                matrix[i][j] = Math.min(
-                    matrix[i - 1][j - 1] + 1,
-                    matrix[i][j - 1] + 1,
-                    matrix[i - 1][j] + 1
-                );
-            }
-        }
-    }
-    return matrix[b.length][a.length];
-};
-
-const calculateDiff = (oldList: string[], newList: string[]): DiffItem[] => {
-    const diffs: DiffItem[] = [];
-    const usedNewIndices = new Set<number>();
-    const usedOldIndices = new Set<number>();
-
-    // 1. Exact Matches (Unchanged)
-    oldList.forEach((oldItem, oldIdx) => {
-        if (usedOldIndices.has(oldIdx)) return;
-        const newIdx = newList.findIndex((newItem, idx) => !usedNewIndices.has(idx) && newItem === oldItem);
-        if (newIdx !== -1) {
-            diffs.push({ id: `unchanged-${oldIdx}`, status: 'unchanged', original: oldItem, new: oldItem, selected: true });
-            usedOldIndices.add(oldIdx);
-            usedNewIndices.add(newIdx);
-        }
-    });
-
-    // 2. Fuzzy Matches (Modified)
-    // We try to find the best match for each remaining old item
-    oldList.forEach((oldItem, oldIdx) => {
-        if (usedOldIndices.has(oldIdx)) return;
-
-        let bestMatchIdx = -1;
-        let bestScore = Infinity; // Lower is better
-
-        newList.forEach((newItem, newIdx) => {
-            if (usedNewIndices.has(newIdx)) return;
-            
-            // Optimization: Skip if lengths differ drastically
-            if (Math.abs(oldItem.length - newItem.length) > oldItem.length * 0.5) return;
-
-            const score = levenshteinDistance(oldItem, newItem);
-            // Threshold: change must be less than 60% of string length to be considered an edit
-            if (score < bestScore && score < Math.max(oldItem.length, newItem.length) * 0.6) {
-                bestScore = score;
-                bestMatchIdx = newIdx;
-            }
-        });
-
-        if (bestMatchIdx !== -1) {
-            diffs.push({ 
-                id: `mod-${oldIdx}`, 
-                status: 'modified', 
-                original: oldItem, 
-                new: newList[bestMatchIdx], 
-                selected: true 
-            });
-            usedOldIndices.add(oldIdx);
-            usedNewIndices.add(bestMatchIdx);
-        }
-    });
-
-    // 3. Remaining Old -> Removed
-    oldList.forEach((oldItem, oldIdx) => {
-        if (!usedOldIndices.has(oldIdx)) {
-            diffs.push({ id: `del-${oldIdx}`, status: 'removed', original: oldItem, selected: true });
-        }
-    });
-
-    // 4. Remaining New -> Added
-    newList.forEach((newItem, newIdx) => {
-        if (!usedNewIndices.has(newIdx)) {
-            diffs.push({ id: `add-${newIdx}`, status: 'added', new: newItem, selected: true });
-        }
-    });
-
-    // Sort to keep original order somewhat, though edits/adds make it tricky. 
-    // We'll just group them: Modified, Added, Removed, Unchanged (or keep fuzzy order).
-    // For simpler UI, let's sort by status priority: Modified > Added > Removed > Unchanged
-    const score = (d: DiffItem) => {
-        switch(d.status) {
-            case 'modified': return 0;
-            case 'added': return 1;
-            case 'removed': return 2;
-            case 'unchanged': return 3;
-            default: return 4;
-        }
-    };
-    diffs.sort((a, b) => score(a) - score(b));
-
-    return diffs;
-};
-
-
-// --- Helper Components ---
-
-const AutoResizeTextarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement>> = (props) => {
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-    useLayoutEffect(() => {
-        if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-            // Add 2px to account for borders in border-box sizing, ensuring text isn't cut off
-            textareaRef.current.style.height = `${textareaRef.current.scrollHeight + 2}px`;
-        }
-    }, [props.value]);
-
-    return (
-        <textarea
-            ref={textareaRef}
-            {...props}
-            rows={1}
-            className={`resize-none overflow-hidden ${props.className || ''}`}
-        />
-    );
-};
-
-// --- Image Viewer Component with Pan & Zoom ---
 const ImageViewer: React.FC<{ src: string; alt: string }> = ({ src, alt }) => {
-    const [scale, setScale] = useState(1);
-    const [position, setPosition] = useState({ x: 0, y: 0 });
-    const [isDragging, setIsDragging] = useState(false);
-    const dragStart = useRef({ x: 0, y: 0 });
-    const imgRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        setScale(1);
-        setPosition({ x: 0, y: 0 });
-    }, [src]);
-
-    const handleWheel = (e: React.WheelEvent) => {
-        e.preventDefault();
-        e.stopPropagation(); // Stop scrolling parent modal
-        const delta = e.deltaY * -0.001;
-        const newScale = Math.min(Math.max(0.5, scale + delta), 5);
-        setScale(newScale);
-    };
-
-    const handleMouseDown = (e: React.MouseEvent) => {
-        e.preventDefault();
-        setIsDragging(true);
-        dragStart.current = { x: e.clientX - position.x, y: e.clientY - position.y };
-    };
-
-    const handleMouseMove = (e: React.MouseEvent) => {
-        if (!isDragging) return;
-        e.preventDefault();
-        setPosition({
-            x: e.clientX - dragStart.current.x,
-            y: e.clientY - dragStart.current.y
-        });
-    };
-
-    const handleMouseUp = () => {
-        setIsDragging(false);
-    };
-
-    const resetView = () => {
-        setScale(1);
-        setPosition({ x: 0, y: 0 });
-    };
-
-    const zoomIn = () => setScale(s => Math.min(s + 0.5, 5));
-    const zoomOut = () => setScale(s => Math.max(0.5, s - 0.5));
-
     return (
-        <div className="relative w-full h-full overflow-hidden bg-slate-800 rounded-lg group select-none">
-            <div 
-                ref={imgRef}
-                className="w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing"
-                onWheel={handleWheel}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-            >
-                <img 
-                    src={src} 
-                    alt={alt} 
-                    className="max-w-none transition-transform duration-75"
-                    style={{ 
-                        transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-                        maxHeight: '100%',
-                        maxWidth: '100%'
-                    }}
-                    draggable={false}
-                />
-            </div>
-
-            {/* Controls */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 bg-black/50 backdrop-blur-sm p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                <button type="button" onClick={zoomOut} className="p-1.5 text-white hover:bg-white/20 rounded-full" title="Уменьшить">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4"/></svg>
-                </button>
-                <button type="button" onClick={resetView} className="px-2 text-xs text-white font-mono hover:bg-white/20 rounded-full flex items-center">
-                    {Math.round(scale * 100)}%
-                </button>
-                <button type="button" onClick={zoomIn} className="p-1.5 text-white hover:bg-white/20 rounded-full" title="Увеличить">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/></svg>
-                </button>
-            </div>
-            
-             <div className="absolute top-2 right-2 text-[10px] text-white/50 pointer-events-none">
-                Колесико: Зум | Драг: Перемещение
-            </div>
-        </div>
+        <img src={src} alt={alt} className="max-w-full max-h-full object-contain mx-auto rounded-md shadow-sm" />
     );
 };
 
+const fileToDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+};
 
 const CertificateForm: React.FC<{
     certificate: Certificate | null;
-    settings: ProjectSettings;
     onSave: (cert: Certificate) => void;
     onClose: () => void;
-}> = ({ certificate, settings, onSave, onClose }) => {
-    // Initial state setup with migration logic
+    settings: ProjectSettings;
+}> = ({ certificate, onSave, onClose, settings }) => {
     const [formData, setFormData] = useState<Certificate>(() => {
         if (certificate) {
-            // Migration: If we have legacy single file but no files array, convert it
-            const existingFiles = certificate.files || [];
-            if (existingFiles.length === 0 && certificate.fileData) {
-                existingFiles.push({
+            // Migration logic for legacy single-file format
+            let files = certificate.files || [];
+            if (files.length === 0 && certificate.fileData) {
+                const legacyFile: CertificateFile = {
                     id: crypto.randomUUID(),
                     type: certificate.fileType || 'image',
                     name: certificate.fileName || 'Документ',
-                    data: certificate.fileData
-                });
+                    data: certificate.fileData.startsWith('data:') 
+                        ? certificate.fileData 
+                        : `data:${certificate.fileType === 'pdf' ? 'application/pdf' : 'image/jpeg'};base64,${certificate.fileData}`
+                };
+                files = [legacyFile];
             }
-            return { ...certificate, files: existingFiles };
-        } else {
-            return {
-                id: crypto.randomUUID(),
-                number: '',
-                validUntil: '',
-                materials: [],
-                files: []
-            };
+            return { ...certificate, files };
         }
+        return {
+            id: crypto.randomUUID(),
+            number: '',
+            validUntil: '',
+            files: [],
+            materials: []
+        };
     });
 
     const [activeFileId, setActiveFileId] = useState<string | null>(null);
-    const [newMaterial, setNewMaterial] = useState('');
-    const [isDragging, setIsDragging] = useState(false);
-    const [isScanning, setIsScanning] = useState(false);
-    const [aiError, setAiError] = useState<string | null>(null);
-    const [aiSuggestions, setAiSuggestions] = useState<AiSuggestions | null>(null);
-    
-    // UI States
-    const [lastDeletedMaterial, setLastDeletedMaterial] = useState<{index: number, value: string} | null>(null);
-    const [hoveredDeleteIndex, setHoveredDeleteIndex] = useState<number | null>(null);
-    const [fileToDeleteId, setFileToDeleteId] = useState<string | null>(null);
     const [isGalleryCollapsed, setIsGalleryCollapsed] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
     
-    // Suggestion Visibility State
-    const [showAiMaterials, setShowAiMaterials] = useState(true);
-    
-    // Mass Edit AI States
-    const [massEditPrompt, setMassEditPrompt] = useState('');
-    const [isMassEditing, setIsMassEditing] = useState(false);
-    const [diffResult, setDiffResult] = useState<DiffItem[] | null>(null);
+    // AI State
+    const [isAiLoading, setIsAiLoading] = useState(false);
+    const [aiPrompt, setAiPrompt] = useState<string>('');
 
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
 
-    // Set active file on load
     useEffect(() => {
         if (formData.files.length > 0 && !activeFileId) {
             setActiveFileId(formData.files[0].id);
@@ -327,867 +82,374 @@ const CertificateForm: React.FC<{
         formData.files.find(f => f.id === activeFileId) || formData.files[0] || null
     , [formData.files, activeFileId]);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
-    };
+    const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
 
-    const processFiles = (files: FileList) => {
-        Array.from(files).forEach(file => {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                if (typeof event.target?.result === 'string') {
-                    const newFile: CertificateFile = {
-                        id: crypto.randomUUID(),
-                        name: file.name,
-                        type: file.type.includes('pdf') ? 'pdf' : 'image',
-                        data: event.target.result as string
-                    };
-                    
-                    setFormData(prev => ({
-                        ...prev,
-                        files: [...prev.files, newFile]
-                    }));
-                    setActiveFileId(newFile.id);
-                    setAiError(null);
-                }
-            };
-            reader.readAsDataURL(file);
-        });
-    };
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files.length > 0) {
-            processFiles(e.target.files);
+        const newFiles: CertificateFile[] = [];
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            try {
+                const dataUrl = await fileToDataUrl(file);
+                newFiles.push({
+                    id: crypto.randomUUID(),
+                    type: file.type === 'application/pdf' ? 'pdf' : 'image',
+                    name: file.name,
+                    data: dataUrl
+                });
+            } catch (error) {
+                console.error("Failed to read file", file.name, error);
+            }
         }
+
+        setFormData(prev => ({ ...prev, files: [...prev.files, ...newFiles] }));
+        if (newFiles.length > 0 && !activeFileId) {
+            setActiveFileId(newFiles[0].id);
+        }
+        
+        // Reset input
+        if (event.target) event.target.value = '';
     };
 
-    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
-        e.stopPropagation();
         setIsDragging(true);
     };
 
-    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    const handleDragLeave = (e: React.DragEvent) => {
         e.preventDefault();
-        e.stopPropagation();
-        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
         setIsDragging(false);
     };
 
-    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    const handleDrop = async (e: React.DragEvent) => {
         e.preventDefault();
-        e.stopPropagation();
         setIsDragging(false);
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            processFiles(e.dataTransfer.files);
+        
+        const files = e.dataTransfer.files;
+        if (!files || files.length === 0) return;
+
+        const newFiles: CertificateFile[] = [];
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            // Simple validation
+            if (!file.type.startsWith('image/') && file.type !== 'application/pdf') continue;
+
+            try {
+                const dataUrl = await fileToDataUrl(file);
+                newFiles.push({
+                    id: crypto.randomUUID(),
+                    type: file.type === 'application/pdf' ? 'pdf' : 'image',
+                    name: file.name,
+                    data: dataUrl
+                });
+            } catch (error) {
+                console.error("Failed to read file", file.name, error);
+            }
+        }
+
+        if (newFiles.length > 0) {
+            setFormData(prev => ({ ...prev, files: [...prev.files, ...newFiles] }));
+            if (!activeFileId) setActiveFileId(newFiles[0].id);
         }
     };
 
-    const handleDeleteFileClick = (e: React.MouseEvent, fileId: string) => {
+    const handleDeleteFile = (fileId: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        setFileToDeleteId(fileId);
-    };
-
-    const handleConfirmDeleteFile = () => {
-        if (!fileToDeleteId) return;
-        
         setFormData(prev => {
-            const newFiles = prev.files.filter(f => f.id !== fileToDeleteId);
-            // If we deleted the active file, switch to another
-            if (fileToDeleteId === activeFileId) {
-                setActiveFileId(newFiles.length > 0 ? newFiles[newFiles.length - 1].id : null);
-            }
+            const newFiles = prev.files.filter(f => f.id !== fileId);
             return { ...prev, files: newFiles };
         });
-        
-        setFileToDeleteId(null);
+        if (activeFileId === fileId) {
+            setActiveFileId(null); // Will default to first available in render or useEffect
+        }
+    };
+
+    const handleMaterialsChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const text = e.target.value;
+        const materials = text.split('\n').map(s => s.trim()).filter(Boolean);
+        setFormData(prev => ({ ...prev, materials }));
     };
 
     const handleAiScan = async () => {
-        if (!activeFile || !ai) return;
-        setIsScanning(true);
-        setAiError(null);
-        setAiSuggestions(null);
-        setShowAiMaterials(true); // Auto-expand when scanning
+        if (!settings.geminiApiKey || !activeFile) return;
+        if (activeFile.type !== 'image') {
+            alert("AI сканирование поддерживается только для изображений.");
+            return;
+        }
 
+        setIsAiLoading(true);
         try {
-            const [mimeType, base64Data] = activeFile.data.split(',');
-            const cleanMimeType = mimeType.match(/:(.*?);/)?.[1];
+            const ai = new GoogleGenAI({ apiKey: settings.geminiApiKey });
+            
+            // Extract base64 from data URL
+            const base64Data = activeFile.data.split(',')[1];
+            
+            const promptNumber = settings.certificatePromptNumber || "Тип документа (обязательно укажи 'Паспорт качества', 'Сертификат соответствия' или другой тип) + Номер документа. Пример: 'Паспорт качества № 123'";
+            const promptDate = settings.certificatePromptDate || "Дата выдачи/составления документа (НЕ дата окончания).";
+            const promptMaterials = settings.certificatePromptMaterials || "Точное наименование продукции, марки, типы и размеры (например, 'Бетон B25 W6').";
 
-            if (!cleanMimeType || !base64Data) throw new Error("Invalid file data");
+            const prompt = `Проанализируй изображение сертификата/паспорта качества.
+            Извлеки следующие данные и верни в формате JSON:
+            {
+                "number": "${promptNumber}",
+                "validUntil": "Дата окончания действия (если есть) или дата документа, формат YYYY-MM-DD",
+                "materials": ["${promptMaterials}", "..."]
+            }
+            Если материалов несколько, верни их списком.`;
 
-            const promptNumber = settings.certificatePromptNumber || "Document Type + Number";
-            const promptDate = settings.certificatePromptDate || "Issue Date YYYY-MM-DD";
-            const promptMaterials = settings.certificatePromptMaterials || "Exact material names";
-
-            const finalPrompt = `
-                Analyze the provided document image/PDF.
-                Extract the following fields and return ONLY valid JSON:
-                {
-                    "numbers": ["${promptNumber}"], // Array of possible document numbers, sorted by probability (most likely first)
-                    "dates": ["${promptDate}"], // Array of possible dates YYYY-MM-DD, sorted by probability
-                    "materials": ["${promptMaterials}"] // Array of materials found (NO duplicates)
-                }
-                
-                If you are unsure about the number or date, provide up to 3 most likely options.
-                Ensure "materials" list does not contain duplicates.
-                IMPORTANT: Return valid JSON only. Do not add markdown code blocks.
-            `;
-
-            const part = {
+            const imagePart = {
                 inlineData: {
-                    mimeType: cleanMimeType,
+                    mimeType: 'image/jpeg', // Assuming jpeg/png, standard for vision
                     data: base64Data
                 }
             };
-
+            
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: { parts: [part, { text: finalPrompt }] },
+                model: 'gemini-3-flash-preview',
+                contents: { parts: [imagePart, { text: prompt }] },
                 config: { responseMimeType: "application/json" }
             });
 
-            const text = response.text;
-            if (!text) throw new Error("Empty response from AI");
-
-            const jsonStartIndex = text.indexOf('{');
-            const jsonEndIndex = text.lastIndexOf('}');
+            const result = JSON.parse(response.text);
             
-            if (jsonStartIndex === -1 || jsonEndIndex === -1) {
-                throw new Error("JSON structure not found in response");
-            }
-
-            const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
-            const result = JSON.parse(jsonString);
-            
-            // Normalize result to arrays even if AI returns single strings (backward compat)
-            const numbers = Array.isArray(result.numbers) ? result.numbers : (result.number ? [result.number] : []);
-            const dates = Array.isArray(result.dates) ? result.dates : (result.validUntil ? [result.validUntil] : []);
-            // Dedup AI materials immediately
-            const rawMaterials = Array.isArray(result.materials) ? result.materials : [];
-            const uniqueMaterials = Array.from(new Set(rawMaterials)) as string[];
-
-            setAiSuggestions({
-                numbers: numbers,
-                dates: dates,
-                materials: uniqueMaterials
-            });
+            setFormData(prev => ({
+                ...prev,
+                number: result.number || prev.number,
+                validUntil: result.validUntil || prev.validUntil,
+                materials: result.materials && Array.isArray(result.materials) 
+                    ? [...new Set([...prev.materials, ...result.materials])]
+                    : prev.materials
+            }));
 
         } catch (error) {
             console.error("AI Scan Error:", error);
-            setAiError("Не удалось распознать данные. Убедитесь, что API ключ верен.");
+            alert("Не удалось распознать документ. Проверьте API ключ и формат изображения.");
         } finally {
-            setIsScanning(false);
+            setIsAiLoading(false);
         }
-    };
-
-    // --- Mass Edit AI Logic ---
-    const handleAiMassEdit = async () => {
-        if (!ai || !massEditPrompt.trim() || formData.materials.length === 0) return;
-        setIsMassEditing(true);
-        setDiffResult(null);
-        
-        try {
-            const prompt = `
-                Current materials list: ${JSON.stringify(formData.materials)}
-                User request: "${massEditPrompt}"
-                
-                Perform the requested operation on the list. 
-                Examples: 
-                - "Remove dimensions" -> strip sizes
-                - "Split by comma" -> explode items
-                - "Translate to English" -> translate
-                - "Fix typos" -> fix
-                - "Clear list" -> return empty array
-                
-                Return ONLY the new list of materials as a JSON array of strings. ["mat1", "mat2"]
-            `;
-
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: { parts: [{ text: prompt }] },
-                config: { responseMimeType: "application/json" }
-            });
-
-            const text = response.text;
-            if(!text) throw new Error("No response");
-            const newList = JSON.parse(text);
-
-            if (Array.isArray(newList)) {
-                // Determine Diff
-                const calculatedDiff = calculateDiff(formData.materials, newList);
-                setDiffResult(calculatedDiff);
-            }
-        } catch (e) {
-            alert("Ошибка при обработке AI. Попробуйте другой запрос.");
-            console.error(e);
-            setDiffResult(null);
-        } finally {
-            setIsMassEditing(false);
-        }
-    };
-
-    const handleCancelMassEdit = () => {
-        setDiffResult(null);
-        // Do NOT clear massEditPrompt to allow user to retry/edit
-    };
-
-    const handleCommitMassEdit = () => {
-        if (diffResult) {
-            const finalMaterials: string[] = [];
-            
-            diffResult.forEach(item => {
-                if (item.status === 'unchanged') {
-                    if (item.original) finalMaterials.push(item.original);
-                } else if (item.status === 'modified') {
-                    if (item.selected && item.new) finalMaterials.push(item.new);
-                    else if (!item.selected && item.original) finalMaterials.push(item.original);
-                } else if (item.status === 'added') {
-                    if (item.selected && item.new) finalMaterials.push(item.new);
-                } else if (item.status === 'removed') {
-                    if (!item.selected && item.original) finalMaterials.push(item.original);
-                    // If selected, it's removed, so don't push
-                }
-            });
-
-            setFormData(prev => ({ ...prev, materials: finalMaterials }));
-            setDiffResult(null);
-            setMassEditPrompt('');
-        }
-    };
-    
-    const handleToggleDiffSelection = (id: string) => {
-        setDiffResult(prev => {
-            if (!prev) return null;
-            return prev.map(item => item.id === id ? { ...item, selected: !item.selected } : item);
-        });
-    };
-    
-    const handleSelectAllDiffs = (select: boolean) => {
-        setDiffResult(prev => {
-            if (!prev) return null;
-            return prev.map(item => ({ ...item, selected: select }));
-        });
-    };
-
-    // --- Material List Logic ---
-
-    const handleAddMaterial = (materialName: string) => {
-        const nameToAdd = materialName.trim();
-        if (!nameToAdd) return;
-        // Check duplicates
-        if (formData.materials.includes(nameToAdd)) return;
-
-        setFormData(prev => ({
-            ...prev,
-            materials: [...prev.materials, nameToAdd]
-        }));
-    };
-
-    const handleManualAddMaterial = () => {
-        handleAddMaterial(newMaterial);
-        setNewMaterial('');
-    };
-
-    const handleRemoveMaterial = (index: number) => {
-        const itemToRemove = formData.materials[index];
-        setLastDeletedMaterial({ index, value: itemToRemove });
-        
-        setFormData(prev => ({
-            ...prev,
-            materials: prev.materials.filter((_, i) => i !== index)
-        }));
-    };
-
-    const handleUndoDelete = () => {
-        if (lastDeletedMaterial) {
-            setFormData(prev => {
-                const newMaterials = [...prev.materials];
-                newMaterials.splice(lastDeletedMaterial.index, 0, lastDeletedMaterial.value);
-                return { ...prev, materials: newMaterials };
-            });
-            setLastDeletedMaterial(null);
-        }
-    };
-
-    const handleRemoveAllMaterials = () => {
-        if (confirm("Вы уверены, что хотите удалить все материалы?")) {
-            setFormData(prev => ({ ...prev, materials: [] }));
-        }
-    };
-
-    const handleEditMaterial = (index: number, newValue: string) => {
-        setFormData(prev => {
-            const newMaterials = [...prev.materials];
-            newMaterials[index] = newValue;
-            return { ...prev, materials: newMaterials };
-        });
-    };
-
-    const applyAiSuggestion = (field: 'number' | 'validUntil', value: string) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        // Update legacy fields for backward compatibility just in case other components use them directly without checking files array
-        const primaryFile = formData.files[0];
-        const finalData = {
-            ...formData,
-            fileData: primaryFile?.data,
-            fileType: primaryFile?.type,
-            fileName: primaryFile?.name
-        };
-        onSave(finalData);
+        onSave(formData);
         onClose();
     };
 
-    const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900";
-    const labelClass = "block text-sm font-medium text-slate-700";
-
-    const isPreviewMode = !!diffResult;
-
     return (
-        <>
-            <form onSubmit={handleSubmit} className="flex flex-col h-[75vh]">
-                
-                <div className="flex flex-row gap-6 h-full min-h-0 relative">
-                    {/* LEFT COLUMN: Document Preview Gallery */}
-                    <div 
-                        className={`flex flex-col h-full min-h-0 gap-2 transition-all duration-300 ease-in-out relative
-                            ${isGalleryCollapsed ? 'w-12' : 'w-full md:w-3/5'}
-                        `}
-                    >
-                        {/* Collapse Toggle */}
-                        <button 
-                            type="button"
+        <form onSubmit={handleSubmit} className="flex flex-col h-[80vh] w-full">
+            <div className="flex-grow flex flex-row overflow-hidden gap-4">
+                {/* Left Panel: File Viewer */}
+                <div className={`flex flex-col transition-all duration-300 ${isGalleryCollapsed ? 'w-12' : 'w-2/3'}`}>
+                    <div className="flex justify-between items-center mb-2 flex-shrink-0">
+                         {!isGalleryCollapsed && <h3 className="font-semibold text-slate-700">Файлы документа</h3>}
+                         <button 
+                            type="button" 
                             onClick={() => setIsGalleryCollapsed(!isGalleryCollapsed)}
-                            className="absolute -right-3 top-2 z-30 bg-white border border-slate-300 rounded-full p-1 shadow-md hover:bg-slate-50 text-slate-600"
-                            title={isGalleryCollapsed ? "Развернуть превью" : "Свернуть превью"}
+                            className="p-1 hover:bg-slate-100 rounded text-slate-500"
+                            title={isGalleryCollapsed ? "Развернуть" : "Свернуть"}
                         >
-                            {isGalleryCollapsed ? <MaximizeIcon className="w-4 h-4"/> : <MinimizeIcon className="w-4 h-4"/>}
+                            {isGalleryCollapsed ? <MaximizeIcon className="w-5 h-5"/> : <MinimizeIcon className="w-5 h-5"/>}
                         </button>
-
-                        {!isGalleryCollapsed ? (
-                            <>
-                                <div 
-                                    className={`flex-grow flex flex-col bg-slate-50 rounded-lg border-2 transition-colors relative overflow-hidden
-                                        ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}
-                                    `}
-                                    onDragOver={handleDragOver}
-                                    onDragLeave={handleDragLeave}
-                                    onDrop={handleDrop}
-                                >
-                                    <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-center z-10 bg-gradient-to-b from-black/50 to-transparent pointer-events-none">
-                                        <span className="font-semibold text-white drop-shadow-md pointer-events-auto truncate pr-2">
-                                            {activeFile ? activeFile.name : 'Нет файла'}
-                                        </span>
-                                        {activeFile && (
-                                            <button
-                                                type="button"
-                                                onClick={(e) => handleDeleteFileClick(e, activeFile.id)}
-                                                className="p-1.5 bg-red-600/80 text-white rounded-full hover:bg-red-700 pointer-events-auto shadow-sm flex-shrink-0"
-                                                title="Удалить текущий файл"
-                                            >
-                                                <DeleteIcon className="w-4 h-4" />
-                                            </button>
-                                        )}
-                                    </div>
-                                    
-                                    <div className="flex-grow overflow-hidden relative flex items-center justify-center p-2 bg-slate-800">
-                                        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" multiple />
-                                        
-                                        {activeFile ? (
-                                            activeFile.type === 'image' ? (
-                                                <ImageViewer src={activeFile.data} alt="Preview" />
-                                            ) : (
-                                                <object data={activeFile.data} type="application/pdf" className="w-full h-full rounded-md shadow-inner bg-white">
-                                                    <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                                                        <p>PDF Preview не поддерживается.</p>
-                                                    </div>
-                                                </object>
-                                            )
-                                        ) : (
-                                            <div className="text-center p-6 pointer-events-none flex flex-col items-center">
-                                                <CloudUploadIcon className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                                                <p className="text-lg text-slate-400 font-medium">Перетащите файлы сюда</p>
-                                                <p className="text-sm text-slate-500 mt-1">или выберите из списка снизу</p>
-                                            </div>
-                                        )}
-
-                                        {/* Drag Overlay */}
-                                        {isDragging && (
-                                            <div className="absolute inset-0 bg-blue-100/90 flex flex-col items-center justify-center z-20 border-2 border-blue-500 border-dashed rounded-lg animate-fade-in-up">
-                                                <CloudUploadIcon className="w-16 h-16 text-blue-600 mb-2" />
-                                                <span className="text-lg font-bold text-blue-700">Отпустите, чтобы добавить файлы</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Thumbnail Strip */}
-                                <div className="h-24 flex-shrink-0 bg-slate-100 rounded-lg border border-slate-200 p-2 overflow-x-auto flex gap-2 items-center">
-                                    {formData.files.map(file => (
-                                        <div 
-                                            key={file.id}
-                                            onClick={() => setActiveFileId(file.id)}
-                                            className={`
-                                                relative h-20 w-20 min-w-[5rem] rounded-md border-2 overflow-hidden cursor-pointer group flex-shrink-0
-                                                ${activeFileId === file.id ? 'border-blue-600 ring-2 ring-blue-200' : 'border-slate-300 hover:border-slate-400'}
-                                            `}
-                                        >
-                                            {file.type === 'image' ? (
-                                                <img src={file.data} alt="thumb" className="w-full h-full object-cover" />
-                                            ) : (
-                                                <div className="w-full h-full bg-white flex flex-col items-center justify-center p-1">
-                                                    <CertificateIcon className="w-8 h-8 text-red-500" />
-                                                    <span className="text-[8px] text-slate-600 truncate w-full text-center mt-1">{file.name}</span>
-                                                </div>
-                                            )}
-                                            <div className="absolute top-0 right-0 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button 
-                                                    type="button" 
-                                                    onClick={(e) => handleDeleteFileClick(e, file.id)}
-                                                    className="bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600"
-                                                >
-                                                    <CloseIcon className="w-3 h-3" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    
-                                    <button 
-                                        type="button"
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="h-20 w-20 min-w-[5rem] rounded-md border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-colors"
-                                        title="Добавить файлы"
-                                    >
-                                        <PlusIcon className="w-6 h-6 mb-1" />
-                                        <span className="text-xs font-medium">Добавить</span>
-                                    </button>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="h-full bg-slate-100 rounded-lg border border-slate-200 flex flex-col items-center pt-8 gap-4 overflow-hidden">
-                                {activeFile && (
-                                    <div className="w-8 h-8 rounded overflow-hidden shadow border border-white" title={activeFile.name}>
-                                        {activeFile.type === 'image' ? (
-                                            <img src={activeFile.data} className="w-full h-full object-cover"/>
-                                        ) : (
-                                            <CertificateIcon className="w-full h-full text-slate-400 bg-white p-1"/>
-                                        )}
-                                    </div>
-                                )}
-                                <span className="vertical-rl text-xs text-slate-400 font-medium tracking-wider uppercase" style={{writingMode: 'vertical-rl'}}>
-                                    Превью скрыто
-                                </span>
-                            </div>
-                        )}
                     </div>
 
-                    {/* RIGHT COLUMN: Form Fields */}
-                    <div className={`flex flex-col h-full min-h-0 transition-all duration-300 ${isGalleryCollapsed ? 'w-full pl-2' : 'w-full md:w-2/5'}`}>
-                        <div className="overflow-y-auto pr-2 flex-grow space-y-5 pb-4">
-                            
-                            {/* AI Button */}
-                            {ai && activeFile && (
-                                <div className="flex flex-col">
-                                    <button
-                                        type="button"
-                                        onClick={handleAiScan}
-                                        disabled={isScanning || isPreviewMode}
-                                        className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-4 py-2.5 rounded-lg hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-sm font-medium"
-                                    >
-                                        <SparklesIcon className="w-5 h-5" />
-                                        {isScanning ? 'Анализ текущего файла...' : 'Сканировать (AI)'}
-                                    </button>
-                                    {aiError && <p className="text-red-500 text-xs mt-2">{aiError}</p>}
-                                </div>
-                            )}
-
-                            {/* Number Field */}
-                            <div>
-                                <label className={labelClass}>Номер (тип + №)</label>
-                                <input type="text" name="number" value={formData.number} onChange={handleChange} className={inputClass} required placeholder="Паспорт качества № 123" disabled={isPreviewMode} />
-                                {aiSuggestions?.numbers && aiSuggestions.numbers.length > 0 && !isPreviewMode && (
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                        <span className="text-xs text-violet-600 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
-                                        {aiSuggestions.numbers.map((suggestion, idx) => (
-                                            <button
-                                                key={idx}
-                                                type="button"
-                                                onClick={() => applyAiSuggestion('number', suggestion)}
-                                                className={`text-xs px-2 py-1 rounded border transition-colors max-w-full truncate
-                                                    ${formData.number === suggestion 
-                                                        ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' 
-                                                        : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300'
-                                                    }
-                                                `}
-                                                title={`Нажмите, чтобы выбрать: ${suggestion}`}
-                                            >
-                                                {suggestion}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Date Field */}
-                            <div>
-                                <label className={labelClass}>Дата документа</label>
-                                <input type="date" name="validUntil" value={formData.validUntil} onChange={handleChange} className={inputClass} required disabled={isPreviewMode} />
-                                {aiSuggestions?.dates && aiSuggestions.dates.length > 0 && !isPreviewMode && (
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                        <span className="text-xs text-violet-600 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
-                                        {aiSuggestions.dates.map((dateStr, idx) => {
-                                            const formatted = new Date(dateStr).toLocaleDateString();
-                                            return (
-                                                <button
-                                                    key={idx}
-                                                    type="button"
-                                                    onClick={() => applyAiSuggestion('validUntil', dateStr)}
-                                                    className={`text-xs px-2 py-1 rounded border transition-colors
-                                                        ${formData.validUntil === dateStr 
-                                                            ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' 
-                                                            : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300'
-                                                        }
-                                                    `}
-                                                    title={`Нажмите, чтобы выбрать: ${formatted}`}
-                                                >
-                                                    {formatted}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Materials Section */}
-                            <div className="border-t pt-4">
-                                <div className="flex justify-between items-center mb-1">
-                                    <label className={labelClass}>Материалы ({formData.materials.length})</label>
-                                    {formData.materials.length > 0 && !isPreviewMode && (
-                                        <button 
-                                            type="button" 
-                                            onClick={handleRemoveAllMaterials}
-                                            className="text-xs text-red-500 hover:text-red-700 underline"
+                    {!isGalleryCollapsed ? (
+                        <>
+                            {/* Main Viewer Area */}
+                            <div 
+                                className={`flex-grow flex flex-col bg-slate-100 rounded-lg border-2 transition-colors relative overflow-hidden mb-2
+                                    ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}
+                                `}
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                                onDrop={handleDrop}
+                            >
+                                <div className="flex-grow overflow-hidden relative flex items-center justify-center bg-slate-800 rounded-md">
+                                    <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" multiple />
+                                    
+                                    {activeFile ? (
+                                        activeFile.type === 'image' ? (
+                                            <ImageViewer src={activeFile.data} alt="Preview" />
+                                        ) : (
+                                            <object data={activeFile.data} type="application/pdf" className="w-full h-full bg-white">
+                                                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                                    <p>Предпросмотр PDF</p>
+                                                    <a href={activeFile.data} target="_blank" rel="noreferrer" className="text-blue-400 underline mt-2">Скачать</a>
+                                                </div>
+                                            </object>
+                                        )
+                                    ) : (
+                                        <div 
+                                            className="text-center p-6 cursor-pointer flex flex-col items-center"
+                                            onClick={() => fileInputRef.current?.click()}
                                         >
-                                            Удалить все
-                                        </button>
+                                            <CloudUploadIcon className="w-16 h-16 text-slate-500 mb-4" />
+                                            <p className="text-lg text-slate-400 font-medium">Перетащите файлы сюда</p>
+                                            <p className="text-sm text-slate-500 mt-1">или кликните для выбора</p>
+                                        </div>
+                                    )}
+
+                                    {/* Drag Overlay */}
+                                    {isDragging && (
+                                        <div className="absolute inset-0 bg-blue-100/90 flex flex-col items-center justify-center z-20 border-2 border-blue-500 border-dashed rounded-lg animate-fade-in-up">
+                                            <CloudUploadIcon className="w-16 h-16 text-blue-600 mb-2" />
+                                            <span className="text-lg font-bold text-blue-700">Отпустите, чтобы добавить файлы</span>
+                                        </div>
                                     )}
                                 </div>
-                                
-                                {/* AI Materials Suggestions with Hide/Show - Hide completely during Diff review */}
-                                {aiSuggestions?.materials && aiSuggestions.materials.length > 0 && !isPreviewMode && (
-                                    <div className="mb-4 bg-violet-50 border border-violet-100 rounded-md p-3">
-                                        <div className="flex justify-between items-center mb-2 cursor-pointer select-none" onClick={() => setShowAiMaterials(!showAiMaterials)}>
-                                            <p className="text-xs text-violet-700 font-bold flex items-center">
-                                                <SparklesIcon className="w-3 h-3 mr-1"/> 
-                                                Найдено в документе ({aiSuggestions.materials.length})
-                                            </p>
-                                            <div className="flex items-center gap-2">
-                                                <ChevronDownIcon className={`w-4 h-4 text-violet-500 transition-transform ${showAiMaterials ? 'rotate-180' : ''}`} />
-                                            </div>
-                                        </div>
-                                        
-                                        {showAiMaterials && (
-                                            <div className="animate-fade-in-up">
-                                                <div className="flex gap-2 mb-3 justify-end border-b border-violet-100 pb-2">
-                                                    <button 
-                                                        type="button"
-                                                        onClick={() => {
-                                                            if (aiSuggestions.materials) {
-                                                                setFormData(prev => ({...prev, materials: [...aiSuggestions.materials!]}));
-                                                            }
-                                                        }}
-                                                        className="text-xs bg-white border border-violet-200 text-violet-700 px-2 py-1 rounded hover:bg-violet-50"
-                                                    >
-                                                        Заменить все
-                                                    </button>
-                                                    <button 
-                                                        type="button"
-                                                        onClick={() => {
-                                                            if (aiSuggestions.materials) {
-                                                                const unique = aiSuggestions.materials.filter(m => !formData.materials.includes(m));
-                                                                setFormData(prev => ({...prev, materials: [...prev.materials, ...unique]}));
-                                                            }
-                                                        }}
-                                                        className="text-xs bg-violet-600 text-white px-2 py-1 rounded hover:bg-violet-700"
-                                                    >
-                                                        Добавить уникальные
-                                                    </button>
-                                                </div>
-                                                <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
-                                                    {aiSuggestions.materials.map((mat, idx) => {
-                                                        const isDuplicate = formData.materials.includes(mat);
-                                                        return (
-                                                            <button
-                                                                key={idx}
-                                                                type="button"
-                                                                onClick={() => !isDuplicate && handleAddMaterial(mat)}
-                                                                disabled={isDuplicate}
-                                                                className={`text-xs border px-2 py-1 rounded-full text-left max-w-full truncate
-                                                                    ${isDuplicate 
-                                                                        ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-default line-through' 
-                                                                        : 'bg-white border-violet-200 text-slate-700 hover:border-violet-400 hover:text-violet-700'
-                                                                    }
-                                                                `}
-                                                                title={isDuplicate ? "Уже добавлено" : "Нажмите, чтобы добавить"}
-                                                            >
-                                                                {isDuplicate ? '' : '+ '}{mat}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Manual Add Input - HIDDEN during Diff Review */}
-                                {!isPreviewMode && (
-                                    <div className="flex gap-2 mt-1 mb-3">
-                                        <input 
-                                            type="text" 
-                                            value={newMaterial} 
-                                            onChange={e => setNewMaterial(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleManualAddMaterial())}
-                                            className={inputClass} 
-                                            placeholder="Введите название и нажмите Enter" 
-                                        />
-                                        <button 
-                                            type="button" 
-                                            onClick={handleManualAddMaterial}
-                                            className="mt-1 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-300 rounded-md hover:bg-slate-200"
-                                        >
-                                            <PlusIcon className="w-5 h-5"/>
-                                        </button>
-                                    </div>
-                                )}
-                                
-                                {/* Undo Banner */}
-                                {lastDeletedMaterial && !isPreviewMode && (
-                                    <div className="mb-2 p-2 bg-slate-100 text-xs flex justify-between items-center rounded border border-slate-200 animate-fade-in-up">
-                                        <span className="text-slate-600 truncate mr-2">
-                                            Удалено: "{lastDeletedMaterial.value}"
-                                        </span>
-                                        <button 
-                                            type="button"
-                                            onClick={handleUndoDelete}
-                                            className="text-blue-600 font-medium hover:underline flex items-center gap-1 whitespace-nowrap"
-                                        >
-                                            <RestoreIcon className="w-3 h-3" /> Вернуть
-                                        </button>
-                                    </div>
-                                )}
-
-                                {/* Editable List */}
-                                <div className="flex flex-col gap-1">
-                                    {formData.materials.length === 0 && !isPreviewMode && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded">Список материалов пуст</p>}
-                                    
-                                    {!isPreviewMode && formData.materials.map((item, idx) => (
-                                        <div 
-                                            key={idx} 
-                                            className={`flex items-start gap-1 group py-1 px-1 rounded transition-colors ${hoveredDeleteIndex === idx ? 'bg-red-50' : ''}`}
-                                        >
-                                            <AutoResizeTextarea
-                                                value={item}
-                                                onChange={(e) => handleEditMaterial(idx, e.target.value)}
-                                                className="block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded focus:bg-white transition-colors py-1 px-2 bg-slate-50"
-                                            />
-                                            <button 
-                                                type="button" 
-                                                onClick={() => handleRemoveMaterial(idx)} 
-                                                onMouseEnter={() => setHoveredDeleteIndex(idx)}
-                                                onMouseLeave={() => setHoveredDeleteIndex(null)}
-                                                className="text-slate-400 hover:text-red-500 p-1.5 rounded hover:bg-red-100 mt-0.5 transition-colors"
-                                                title="Удалить строку"
-                                            >
-                                                <CloseIcon className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                                
-                                {/* Mass AI Edit Section */}
-                                {formData.materials.length > 0 && ai && (
-                                    <div className="mt-6 pt-4 border-t border-slate-200">
-                                        {!diffResult ? (
-                                            <div className="flex gap-2">
-                                                <input 
-                                                    type="text" 
-                                                    value={massEditPrompt}
-                                                    onChange={e => setMassEditPrompt(e.target.value)}
-                                                    placeholder="AI: 'Удали размеры', 'Исправь...', 'Очистить'..."
-                                                    className="flex-grow text-sm border border-violet-200 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                                                    onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAiMassEdit())}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={handleAiMassEdit}
-                                                    disabled={isMassEditing || !massEditPrompt.trim()}
-                                                    className="bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-3 py-2 rounded-md hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-50 text-sm whitespace-nowrap flex items-center"
-                                                >
-                                                    {isMassEditing ? '...' : <SparklesIcon className="w-4 h-4" />}
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="bg-violet-50 p-3 rounded-md border border-violet-100 animate-fade-in-up">
-                                                <div className="flex justify-between items-center mb-2 pb-2 border-b border-violet-200">
-                                                    <p className="text-xs text-violet-800 font-medium">Проверьте изменения:</p>
-                                                    <div className="flex gap-3">
-                                                        <button 
-                                                            type="button" 
-                                                            onClick={() => handleSelectAllDiffs(true)} 
-                                                            className="text-[10px] font-medium text-violet-600 hover:underline hover:text-violet-800"
-                                                        >
-                                                            Выбрать все
-                                                        </button>
-                                                        <button 
-                                                            type="button" 
-                                                            onClick={() => handleSelectAllDiffs(false)} 
-                                                            className="text-[10px] font-medium text-slate-500 hover:underline hover:text-slate-700"
-                                                        >
-                                                            Снять все
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                
-                                                <div className="mb-3 space-y-2 pr-1">
-                                                    {diffResult.length === 0 && <p className="text-xs text-slate-500 italic">Нет изменений</p>}
-                                                    {diffResult.map((item) => (
-                                                        <div key={item.id} className="flex items-start gap-2 text-xs bg-white p-2 rounded border border-slate-200 shadow-sm">
-                                                            <input 
-                                                                type="checkbox" 
-                                                                checked={item.selected}
-                                                                onChange={() => handleToggleDiffSelection(item.id)}
-                                                                className="h-4 w-4 form-checkbox-custom flex-shrink-0 mt-0.5"
-                                                            />
-                                                            
-                                                            <div className="flex-grow min-w-0">
-                                                                {item.status === 'modified' && (
-                                                                    <div className="flex flex-col md:flex-row items-start md:items-stretch gap-2 w-full">
-                                                                        <div className="flex-1 w-full md:w-auto p-1.5 bg-red-50 border border-red-100 rounded text-red-900 text-xs break-words">
-                                                                            {item.original}
-                                                                        </div>
-                                                                        <div className="flex-shrink-0 self-center">
-                                                                             <ArrowRightIcon className="w-3 h-3 text-slate-400 hidden md:block" />
-                                                                             <ArrowRightIcon className="w-3 h-3 text-slate-400 md:hidden rotate-90" />
-                                                                        </div>
-                                                                        <div className="flex-1 w-full md:w-auto p-1.5 bg-green-50 border border-green-100 rounded text-green-900 text-xs font-medium break-words">
-                                                                            {item.new}
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                                {item.status === 'added' && (
-                                                                    <div className="text-green-700 font-medium flex items-start gap-1 p-1.5 bg-green-50 border border-green-100 rounded">
-                                                                        <PlusIcon className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                                                                        <span className="break-words">{item.new}</span>
-                                                                    </div>
-                                                                )}
-                                                                {item.status === 'removed' && (
-                                                                    <div className="text-red-700 p-1.5 bg-red-50 border border-red-100 rounded flex items-start gap-1 opacity-80">
-                                                                        <span className="line-through decoration-red-400 break-words">{item.original}</span>
-                                                                    </div>
-                                                                )}
-                                                                {item.status === 'unchanged' && (
-                                                                    <div className="text-slate-500 break-words pt-0.5" title="Без изменений">{item.original}</div>
-                                                                )}
-                                                            </div>
-                                                            
-                                                            <div className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded mt-0.5
-                                                                ${item.status === 'modified' ? 'bg-amber-100 text-amber-700' : ''}
-                                                                ${item.status === 'added' ? 'bg-green-100 text-green-700' : ''}
-                                                                ${item.status === 'removed' ? 'bg-red-100 text-red-700' : ''}
-                                                                ${item.status === 'unchanged' ? 'bg-slate-100 text-slate-500' : ''}
-                                                            `}>
-                                                                {item.status === 'modified' ? 'ИЗМ' : item.status === 'added' ? 'НОВ' : item.status === 'removed' ? 'УДЛ' : 'ОК'}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-
-                                                <div className="flex gap-2 sticky bottom-0 bg-violet-50 pt-2 border-t border-violet-100">
-                                                    <button 
-                                                        type="button" 
-                                                        onClick={handleCommitMassEdit}
-                                                        className="flex-1 bg-violet-600 text-white text-xs py-2 rounded hover:bg-violet-700 font-medium"
-                                                    >
-                                                        Применить выбранное
-                                                    </button>
-                                                    <button 
-                                                        type="button" 
-                                                        onClick={handleCancelMassEdit}
-                                                        className="flex-1 bg-white border border-slate-300 text-slate-700 text-xs py-2 rounded hover:bg-slate-50 font-medium"
-                                                    >
-                                                        Отменить
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
                             </div>
+
+                            {/* Thumbnails */}
+                            <div className="h-20 flex gap-2 overflow-x-auto pb-1 min-h-[5rem]">
+                                {formData.files.map(file => (
+                                    <div 
+                                        key={file.id}
+                                        className={`relative w-16 h-16 flex-shrink-0 cursor-pointer border-2 rounded-md overflow-hidden bg-white
+                                            ${activeFileId === file.id ? 'border-blue-600' : 'border-slate-200'}
+                                        `}
+                                        onClick={() => setActiveFileId(file.id)}
+                                    >
+                                        {file.type === 'image' ? (
+                                            <img src={file.data} className="w-full h-full object-cover" alt="thumb" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center bg-red-50 text-red-500 font-bold text-xs">PDF</div>
+                                        )}
+                                        <button
+                                            type="button"
+                                            className="absolute top-0 right-0 bg-black/50 text-white p-0.5 hover:bg-red-600 rounded-bl-md"
+                                            onClick={(e) => handleDeleteFile(file.id, e)}
+                                        >
+                                            <CloseIcon className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                ))}
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="w-16 h-16 flex-shrink-0 border-2 border-dashed border-slate-300 rounded-md flex items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-slate-50 transition-colors"
+                                >
+                                    <PlusIcon className="w-6 h-6" />
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        // Collapsed View - Vertical Strip
+                        <div className="flex flex-col gap-2 items-center flex-grow overflow-y-auto pt-2 bg-slate-50 rounded-r-lg border-l border-slate-200">
+                             {formData.files.map(file => (
+                                <div 
+                                    key={file.id}
+                                    className={`relative w-8 h-8 flex-shrink-0 cursor-pointer border rounded bg-white
+                                        ${activeFileId === file.id ? 'border-blue-600' : 'border-slate-200'}
+                                    `}
+                                    onClick={() => setActiveFileId(file.id)}
+                                    title={file.name}
+                                >
+                                    {file.type === 'image' ? (
+                                        <img src={file.data} className="w-full h-full object-cover" alt="thumb" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center bg-red-50 text-red-500 text-[10px]">PDF</div>
+                                    )}
+                                </div>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="w-8 h-8 flex-shrink-0 border border-dashed border-slate-300 rounded flex items-center justify-center text-slate-400 hover:text-blue-600"
+                            >
+                                <PlusIcon className="w-4 h-4" />
+                            </button>
                         </div>
-                        
-                        {/* Sticky Footer for Buttons within the column */}
-                        <div className="flex justify-end space-x-3 pt-4 border-t border-slate-200 bg-white mt-auto">
-                            <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-md hover:bg-slate-300">Отмена</button>
-                            <button type="submit" disabled={isPreviewMode} className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed">Сохранить</button>
-                        </div>
+                    )}
+                </div>
+
+                {/* Right Panel: Data Form */}
+                <div className={`flex flex-col gap-4 overflow-y-auto pl-2 pr-1 ${isGalleryCollapsed ? 'w-full' : 'w-1/3'}`}>
+                    <div>
+                         <label className="block text-sm font-medium text-slate-700">Номер документа</label>
+                         <div className="flex gap-2">
+                             <input 
+                                type="text" 
+                                className="mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+                                value={formData.number}
+                                onChange={e => setFormData(prev => ({ ...prev, number: e.target.value }))}
+                                placeholder="№ сертификата..."
+                                required
+                             />
+                              {settings.geminiApiKey && activeFile?.type === 'image' && (
+                                <button
+                                    type="button"
+                                    onClick={handleAiScan}
+                                    disabled={isAiLoading}
+                                    className="mt-1 px-3 py-2 bg-violet-100 text-violet-700 rounded-md border border-violet-200 hover:bg-violet-200 disabled:opacity-50"
+                                    title="Автозаполнение с помощью AI"
+                                >
+                                    {isAiLoading ? (
+                                        <span className="animate-spin block w-5 h-5 border-2 border-violet-600 border-t-transparent rounded-full" />
+                                    ) : (
+                                        <SparklesIcon className="w-5 h-5" />
+                                    )}
+                                </button>
+                             )}
+                         </div>
+                    </div>
+
+                    <div>
+                         <label className="block text-sm font-medium text-slate-700">Срок действия / Дата</label>
+                         <input 
+                            type="date" 
+                            className="mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+                            value={formData.validUntil}
+                            onChange={e => setFormData(prev => ({ ...prev, validUntil: e.target.value }))}
+                            required
+                         />
+                    </div>
+
+                    <div className="flex-grow flex flex-col min-h-[200px]">
+                         <label className="block text-sm font-medium text-slate-700 mb-1">
+                             Материалы (по одному на строку)
+                             <span className="text-slate-400 font-normal ml-2 text-xs">({formData.materials.length})</span>
+                         </label>
+                         <textarea 
+                            className="flex-grow w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 resize-none font-mono text-sm"
+                            value={formData.materials.join('\n')}
+                            onChange={handleMaterialsChange}
+                            placeholder="Бетон В25&#10;Арматура А500С&#10;..."
+                         />
                     </div>
                 </div>
-            </form>
+            </div>
 
-            <ConfirmationModal 
-                isOpen={!!fileToDeleteId} 
-                onClose={() => setFileToDeleteId(null)} 
-                onConfirm={handleConfirmDeleteFile}
-                title="Удаление файла"
-                confirmText="Удалить"
-            >
-                Вы действительно хотите удалить эту страницу/изображение? Это действие нельзя будет отменить.
-            </ConfirmationModal>
-        </>
+            <div className="flex justify-end space-x-3 pt-4 border-t mt-2 flex-shrink-0">
+                <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-md hover:bg-slate-300">Отмена</button>
+                <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Сохранить</button>
+            </div>
+        </form>
     );
 };
 
-const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts, settings, onSave, onDelete, onUnlink, initialOpenId, onClearInitialOpenId }) => {
+const CertificatesPage: React.FC<CertificatesPageProps> = ({ 
+    certificates, 
+    acts, 
+    settings, 
+    onSave, 
+    onDelete, 
+    onUnlink,
+    initialOpenId, 
+    onClearInitialOpenId 
+}) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingCert, setEditingCert] = useState<Certificate | null>(null);
-    const [previewFile, setPreviewFile] = useState<{ type: 'pdf' | 'image', data: string } | null>(null);
-    
-    // View Controls State
-    const [searchQuery, setSearchQuery] = useState('');
-    const [viewMode, setViewMode] = useState<ViewMode>('card');
-    const [columnCount, setColumnCount] = useState<ColumnCount>(3);
-    
-    // Delete Confirmation State
-    const [deleteWarning, setDeleteWarning] = useState<{ cert: Certificate, usedInActs: string[] } | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
 
-    // Effect to handle initial opening from external navigation
     useEffect(() => {
         if (initialOpenId) {
-            const certToOpen = certificates.find(c => c.id === initialOpenId);
-            if (certToOpen) {
-                setEditingCert(certToOpen);
+            const target = certificates.find(c => c.id === initialOpenId);
+            if (target) {
+                setEditingCert(target);
                 setIsModalOpen(true);
             }
-            // Clear the ID so it doesn't re-open if the user closes it
-            if(onClearInitialOpenId) onClearInitialOpenId();
+            onClearInitialOpenId();
         }
     }, [initialOpenId, certificates, onClearInitialOpenId]);
-
-    const filteredCertificates = useMemo(() => {
-        if (!searchQuery) return certificates;
-        const lower = searchQuery.toLowerCase();
-        return certificates.filter(c => 
-            c.number.toLowerCase().includes(lower) || 
-            c.materials.some(m => m.toLowerCase().includes(lower))
-        );
-    }, [certificates, searchQuery]);
 
     const handleOpenModal = (cert: Certificate | null = null) => {
         setEditingCert(cert);
@@ -1199,300 +461,174 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
         setIsModalOpen(false);
     };
 
-    const handlePreview = (cert: Certificate) => {
-        // Fallback for legacy certificates that haven't been migrated in the edit form yet
-        const fileData = cert.files?.[0]?.data || cert.fileData;
-        const fileType = cert.files?.[0]?.type || cert.fileType;
+    const filteredCertificates = useMemo(() => {
+        if (!searchTerm) return certificates;
+        const lower = searchTerm.toLowerCase();
+        return certificates.filter(c => 
+            c.number.toLowerCase().includes(lower) || 
+            c.materials.some(m => m.toLowerCase().includes(lower))
+        );
+    }, [certificates, searchTerm]);
 
-        if (fileData && fileType) {
-            setPreviewFile({ type: fileType, data: fileData });
-        } else {
-            alert("Файл не загружен для этого сертификата.");
-        }
-    };
-
-    const openInNewTab = (fileData: string) => {
-        fetch(fileData)
-            .then(res => res.blob())
-            .then(blob => {
-                const url = URL.createObjectURL(blob);
-                window.open(url, '_blank');
-            })
-            .catch(err => {
-                console.error("Error opening file:", err);
-                alert("Не удалось открыть файл.");
-            });
-    };
-    
-    // Smart Delete Logic
-    const handleClickDelete = (cert: Certificate) => {
-        // Check for usage in acts
-        const usedInActs: string[] = [];
-        
+    // Calculate usage statistics
+    const usageStats = useMemo(() => {
+        const stats = new Map<string, number>();
         acts.forEach(act => {
-            if (act.materials.includes(`(сертификат № ${cert.number}`)) {
-                usedInActs.push(act.number || 'б/н');
-            }
+            if (!act.materials) return;
+            // Scan for cert numbers
+            certificates.forEach(cert => {
+                if (act.materials.includes(`сертификат № ${cert.number}`)) {
+                    stats.set(cert.id, (stats.get(cert.id) || 0) + 1);
+                }
+            });
         });
+        return stats;
+    }, [acts, certificates]);
 
-        if (usedInActs.length > 0) {
-            setDeleteWarning({ cert, usedInActs });
+    const handleDelete = (cert: Certificate) => {
+        const count = usageStats.get(cert.id) || 0;
+        if (count > 0) {
+            if (confirm(`Этот сертификат используется в ${count} актах. Вы хотите удалить его и разорвать связи?`)) {
+                onUnlink(cert); // Clean up texts in acts
+                onDelete(cert.id); // Move to trash
+            }
         } else {
-            onDelete(cert.id);
+             onDelete(cert.id);
         }
     };
-    
-    const handleConfirmDelete = () => {
-        if (deleteWarning) {
-            onDelete(deleteWarning.cert.id);
-            setDeleteWarning(null);
-        }
-    };
-
-    const handleUnlink = () => {
-        if (deleteWarning) {
-            onUnlink(deleteWarning.cert);
-            setDeleteWarning(null);
-        }
-    };
-
-    const gridColsClass = columnCount === 1 ? 'grid-cols-1' : columnCount === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0 gap-4">
+            <div className="flex justify-between items-center mb-6 flex-shrink-0">
                 <h1 className="text-2xl font-bold text-slate-800">Сертификаты и Паспорта</h1>
-                <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 whitespace-nowrap">
-                    <PlusIcon /> Добавить сертификат
-                </button>
-            </div>
-
-            {/* Toolbar: Search and View Controls */}
-            <div className="flex flex-col md:flex-row gap-4 mb-4 pb-4 border-b border-slate-100 items-center justify-between">
-                <input
-                    type="text"
-                    placeholder="Поиск по номеру, материалам..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                
-                <div className="flex items-center gap-4 text-slate-500">
-                    <div className="flex items-center gap-1 border rounded-md p-0.5">
-                         <button 
-                            onClick={() => setViewMode('card')} 
-                            className={`p-1.5 rounded ${viewMode === 'card' ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-100'}`}
-                            title="Карточки"
-                        >
-                            <LayoutGridIcon className="w-5 h-5"/>
-                         </button>
-                         <button 
-                            onClick={() => setViewMode('list')} 
-                            className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-100'}`}
-                            title="Список"
-                        >
-                            <LayoutListIcon className="w-5 h-5"/>
-                         </button>
-                    </div>
-
-                    <div className="w-px h-6 bg-slate-200 mx-1"></div>
-
-                    <div className="flex items-center gap-1 border rounded-md p-0.5">
-                         <button 
-                            onClick={() => setColumnCount(1)} 
-                            className={`px-3 py-1 rounded text-xs font-medium ${columnCount === 1 ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-100'}`}
-                        >
-                            1
-                         </button>
-                         <button 
-                            onClick={() => setColumnCount(2)} 
-                            className={`px-3 py-1 rounded text-xs font-medium ${columnCount === 2 ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-100'}`}
-                        >
-                            2
-                         </button>
-                         <button 
-                            onClick={() => setColumnCount(3)} 
-                            className={`px-3 py-1 rounded text-xs font-medium ${columnCount === 3 ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-100'}`}
-                        >
-                            3
-                         </button>
-                    </div>
+                <div className="flex gap-4">
+                     <div className="relative">
+                        <input
+                            type="text"
+                            placeholder="Поиск..."
+                            className="pl-3 pr-8 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                        {searchTerm && (
+                            <button 
+                                onClick={() => setSearchTerm('')}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            >
+                                <CloseIcon className="w-4 h-4"/>
+                            </button>
+                        )}
+                     </div>
+                    <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                        <PlusIcon className="w-5 h-5 mr-2" /> Добавить
+                    </button>
                 </div>
             </div>
 
-            <div className="flex-grow overflow-auto">
-                 <div className={`grid ${gridColsClass} gap-4`}>
-                    {filteredCertificates.map(cert => {
-                        const hasFiles = (cert.files && cert.files.length > 0) || !!cert.fileData;
-                        const mainFile = cert.files?.[0] || { type: cert.fileType, data: cert.fileData };
-                        const fileCount = cert.files?.length || (cert.fileData ? 1 : 0);
+            <div className="flex-grow overflow-y-auto min-h-0 border rounded-md">
+                <table className="min-w-full divide-y divide-slate-200">
+                    <thead className="bg-slate-50 sticky top-0 z-10">
+                        <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider w-20">Файл</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Номер и Дата</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Материалы</th>
+                            <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wider w-24">Исп.</th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider w-32">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-slate-200">
+                        {filteredCertificates.length > 0 ? filteredCertificates.map(cert => {
+                             // Handle legacy or array files for thumbnail
+                             const thumbFile = (cert.files && cert.files.length > 0) 
+                                ? cert.files[0] 
+                                : (cert.fileData ? { type: cert.fileType || 'image', data: cert.fileData } : null);
+                             
+                             const uses = usageStats.get(cert.id) || 0;
 
-                        if (viewMode === 'list') {
-                            return (
-                                <div key={cert.id} className="border border-slate-200 rounded-lg p-3 hover:shadow-md transition-shadow bg-white flex items-center gap-4">
-                                    <div className="p-2 bg-slate-100 rounded text-slate-500 cursor-pointer" onClick={() => handlePreview(cert)}>
-                                        <CertificateIcon className="w-6 h-6" />
-                                    </div>
-                                    <div className="flex-grow min-w-0">
-                                         <h3 className="font-bold text-slate-800 text-sm truncate">{cert.number}</h3>
-                                         <p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p>
-                                    </div>
-                                    <div className="text-xs text-slate-500 truncate w-1/4">
-                                        {cert.materials.join(', ')}
-                                    </div>
-                                    <div className="flex gap-1 flex-shrink-0">
-                                        <button onClick={() => handleOpenModal(cert)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
-                                        <button onClick={() => handleClickDelete(cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
-                                    </div>
-                                </div>
-                            );
-                        }
-
-                        // Card View (Default)
-                        return (
-                        <div key={cert.id} className="border border-slate-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col h-full">
-                            {/* Thumbnail Section */}
-                            <div 
-                                className="h-40 bg-slate-100 border-b border-slate-100 flex items-center justify-center cursor-pointer relative overflow-hidden group"
-                                onClick={() => handlePreview(cert)}
-                                onDoubleClick={(e) => {
-                                    e.stopPropagation();
-                                    if(mainFile.data) openInNewTab(mainFile.data);
-                                }}
-                                title="Нажмите для предпросмотра, дважды для открытия в новой вкладке"
-                            >
-                                {hasFiles ? (
-                                    mainFile.type === 'image' ? (
-                                        <img src={mainFile.data} alt={cert.number} className="w-full h-full object-cover" />
-                                    ) : (
-                                        <div className="w-full h-full relative pointer-events-none">
-                                            {/* Pointer events none to allow clicking the div container */}
-                                            <object data={mainFile.data} type="application/pdf" className="w-full h-full opacity-80" tabIndex={-1}>
-                                                <div className="flex items-center justify-center h-full">
-                                                    <CertificateIcon className="w-12 h-12 text-red-400" />
-                                                </div>
-                                            </object>
-                                            <div className="absolute inset-0 bg-transparent"></div>
+                             return (
+                                <tr key={cert.id} className="hover:bg-slate-50">
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div 
+                                            className="h-12 w-12 rounded border border-slate-200 overflow-hidden bg-slate-100 flex items-center justify-center cursor-pointer"
+                                            onClick={() => handleOpenModal(cert)}
+                                        >
+                                            {thumbFile ? (
+                                                thumbFile.type === 'image' ? (
+                                                    <img src={thumbFile.data.startsWith('data:') ? thumbFile.data : `data:image/jpeg;base64,${thumbFile.data}`} alt="thumb" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <span className="text-[10px] font-bold text-red-500">PDF</span>
+                                                )
+                                            ) : (
+                                                <span className="text-slate-300 text-xs">Нет</span>
+                                            )}
                                         </div>
-                                    )
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center text-slate-400">
-                                        <CertificateIcon className="w-10 h-10 mb-1 opacity-50" />
-                                        <span className="text-xs">Нет файла</span>
-                                    </div>
-                                )}
-                                
-                                {fileCount > 1 && (
-                                    <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 shadow-sm">
-                                        <CloudUploadIcon className="w-3 h-3" /> {fileCount}
-                                    </div>
-                                )}
-                                
-                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity flex items-center justify-center">
-                                    <span className="opacity-0 group-hover:opacity-100 bg-white/90 px-3 py-1 rounded-full text-xs font-medium shadow-sm">
-                                        Просмотр
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div className="p-4 flex flex-col flex-grow">
-                                <div className="flex justify-between items-start mb-2">
-                                    <div>
-                                        <h3 className="font-bold text-slate-800 text-sm leading-tight mb-1">{cert.number}</h3>
-                                        <p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p>
-                                    </div>
-                                    <div className="flex gap-1 ml-2">
-                                        <button onClick={() => handleOpenModal(cert)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
-                                        <button onClick={() => handleClickDelete(cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
-                                    </div>
-                                </div>
-                                
-                                <div className="flex-grow">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Материалы:</p>
-                                    <ul className="text-xs text-slate-700 space-y-1">
-                                        {cert.materials.slice(0, 3).map((m, i) => (
-                                            <li key={i} className="truncate border-l-2 border-blue-100 pl-2">{m}</li>
-                                        ))}
-                                        {cert.materials.length > 3 && (
-                                            <li className="text-slate-400 pl-2 italic">...и еще {cert.materials.length - 3}</li>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap align-top">
+                                        <div className="text-sm font-medium text-slate-900">{cert.number}</div>
+                                        <div className="text-xs text-slate-500">
+                                            {new Date(cert.validUntil) < new Date() ? (
+                                                <span className="text-red-600 font-bold">Истек: {cert.validUntil}</span>
+                                            ) : (
+                                                <span>До: {cert.validUntil}</span>
+                                            )}
+                                        </div>
+                                        {cert.files && cert.files.length > 1 && (
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800 mt-1">
+                                                +{cert.files.length - 1} файл(а)
+                                            </span>
                                         )}
-                                        {cert.materials.length === 0 && <li className="text-slate-400 italic pl-2">Список пуст</li>}
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    )})}
-                    {filteredCertificates.length === 0 && (
-                        <div className="col-span-full flex flex-col items-center justify-center py-20 text-slate-400">
-                             <CertificateIcon className="w-16 h-16 mb-4 opacity-20" />
-                             <p>Ничего не найдено.</p>
-                        </div>
-                    )}
-                 </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-slate-600 align-top">
+                                        <div className="max-h-16 overflow-hidden text-ellipsis">
+                                            {cert.materials.join(', ')}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-center text-sm text-slate-500 align-top">
+                                        {uses > 0 ? (
+                                            <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-bold" title={`Используется в ${uses} актах`}>
+                                                {uses}
+                                            </span>
+                                        ) : (
+                                            <span className="text-slate-300">-</span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium align-top">
+                                        <div className="flex justify-end space-x-2">
+                                            <button onClick={() => handleOpenModal(cert)} className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full" title="Редактировать">
+                                                <EditIcon />
+                                            </button>
+                                            <button onClick={() => handleDelete(cert)} className="p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full" title="Удалить">
+                                                <DeleteIcon />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                             );
+                        }) : (
+                            <tr>
+                                <td colSpan={5} className="text-center py-10 text-slate-500">
+                                    {certificates.length === 0 ? "База сертификатов пуста." : "Ничего не найдено."}
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
             </div>
 
-            <Modal 
-                isOpen={isModalOpen} 
-                onClose={handleCloseModal} 
-                title={editingCert ? 'Редактировать сертификат' : 'Новый сертификат'}
-                maxWidth="max-w-[90vw] lg:max-w-7xl"
-                className="resize-x overflow-hidden"
-            >
-                <CertificateForm certificate={editingCert} settings={settings} onSave={onSave} onClose={handleCloseModal} />
-            </Modal>
-            
-            {/* Delete Warning Modal */}
-            {deleteWarning && (
+            {isModalOpen && (
                 <Modal 
-                    isOpen={true} 
-                    onClose={() => setDeleteWarning(null)} 
-                    title="Сертификат используется"
+                    isOpen={isModalOpen} 
+                    onClose={handleCloseModal} 
+                    title={editingCert ? 'Редактировать сертификат' : 'Новый сертификат'}
+                    maxWidth="max-w-6xl"
+                    className="h-[90vh]"
                 >
-                    <div className="space-y-4">
-                        <p className="text-slate-700">
-                            Сертификат <strong>{deleteWarning.cert.number}</strong> используется в следующих актах ({deleteWarning.usedInActs.length}):
-                        </p>
-                        <div className="bg-slate-50 border border-slate-200 rounded p-2 text-sm max-h-32 overflow-y-auto">
-                            {deleteWarning.usedInActs.join(', ')}
-                        </div>
-                        <p className="text-slate-600 text-sm">
-                            Выберите действие:
-                        </p>
-                        <div className="flex flex-col gap-2 pt-2">
-                             <button 
-                                onClick={handleConfirmDelete} 
-                                className="w-full flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2.5 rounded-md hover:bg-red-700 transition-colors"
-                            >
-                                <DeleteIcon /> Удалить сертификат (в корзину)
-                                <span className="text-red-200 text-xs font-normal ml-auto">Ссылка в актах станет неактивной</span>
-                            </button>
-                             <button 
-                                onClick={handleUnlink} 
-                                className="w-full flex items-center justify-center gap-2 bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-md hover:bg-slate-50 transition-colors"
-                            >
-                                <LinkIcon /> Удалить только связь
-                                <span className="text-slate-400 text-xs font-normal ml-auto">Убрать упоминание из актов</span>
-                            </button>
-                            <button 
-                                onClick={() => setDeleteWarning(null)} 
-                                className="w-full text-slate-500 hover:text-slate-800 text-sm py-2"
-                            >
-                                Отмена
-                            </button>
-                        </div>
-                    </div>
-                </Modal>
-            )}
-
-            {previewFile && (
-                <Modal isOpen={!!previewFile} onClose={() => setPreviewFile(null)} title="Просмотр документа" maxWidth="max-w-6xl">
-                    <div className="h-[75vh] w-full flex items-center justify-center bg-slate-100 rounded overflow-hidden">
-                        {previewFile.type === 'pdf' ? (
-                            <iframe src={previewFile.data} className="w-full h-full" title="PDF Preview" />
-                        ) : (
-                            <ImageViewer src={previewFile.data} alt="Certificate Preview" />
-                        )}
-                    </div>
+                    <CertificateForm 
+                        certificate={editingCert} 
+                        onSave={onSave} 
+                        onClose={handleCloseModal} 
+                        settings={settings}
+                    />
                 </Modal>
             )}
         </div>
