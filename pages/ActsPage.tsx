@@ -383,7 +383,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     onReorderActs={onReorderActs}
                     setCurrentPage={setCurrentPage}
                     onNavigateToCertificate={onNavigateToCertificate}
-                    density="standard"
                 />
             </div>
             
