@@ -1,7 +1,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry, ExportSettings } from './types';
+import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry, ExportSettings, CertificateFile } from './types';
 import TemplateUploader from './components/TemplateUploader';
 import ImportModal from './components/ImportModal';
 import ExportModal from './components/ExportModal';
@@ -49,6 +49,11 @@ const base64ToBlob = (base64: string, mimeType: string = 'application/vnd.openxm
     }
 
     return new Blob(byteArrays, { type: mimeType });
+};
+
+// Helper to reconstruct Base64 from binary string (PizZip output)
+const binaryStringToBase64 = (binary: string): string => {
+    return window.btoa(binary);
 };
 
 const DEFAULT_PROMPT_NUMBER = "Тип документа (обязательно укажи 'Паспорт качества', 'Сертификат соответствия' или другой тип) + Номер документа. Пример: 'Паспорт качества № 123'";
@@ -459,13 +464,9 @@ const App: React.FC = () => {
     const handleRemoveCertificateLinksFromActs = useCallback((cert: Certificate) => {
         const updatedActs = acts.map(act => {
             let materials = act.materials;
-            // Filter out strings that look like "Material Name (сертификат № XXXXX...)"
-            // This is rudimentary text matching based on how MaterialsModal constructs the string.
-            // A more robust system would track IDs, but here we work with text.
             const regex = new RegExp(`\\(сертификат №\\s*${cert.number}.*?\\)`, 'i');
             
             if (regex.test(materials)) {
-                // We split by semicolon, filter out the matching parts
                 const parts = materials.split(';').map(s => s.trim());
                 const cleanParts = parts.filter(part => !part.includes(`сертификат № ${cert.number}`));
                 return { ...act, materials: cleanParts.join('; ') };
@@ -473,7 +474,6 @@ const App: React.FC = () => {
             return act;
         });
         
-        // This updates acts without moving the cert to trash (used for "Delete Only Link")
         updateActsWithHistory(updatedActs);
     }, [acts, updateActsWithHistory]);
 
@@ -500,25 +500,28 @@ const App: React.FC = () => {
         setIsExportModalOpen(true);
     };
 
+    // --- NEW EXPORT LOGIC ---
     const handleExecuteExport = (exportSettings: ExportSettings) => {
         try {
             const zip = new PizZip();
 
-            // 1. Create the "System Backup" JSON (for restoring later via Import)
-            const fullBackupData: any = {};
-            if (exportSettings.template) fullBackupData.template = template;
-            if (exportSettings.projectSettings) fullBackupData.projectSettings = settings;
-            if (exportSettings.acts) fullBackupData.acts = acts;
-            if (exportSettings.people) fullBackupData.people = people;
-            if (exportSettings.organizations) fullBackupData.organizations = organizations;
-            if (exportSettings.groups) fullBackupData.groups = groups;
-            if (exportSettings.regulations) fullBackupData.regulations = regulations;
-            if (exportSettings.certificates) fullBackupData.certificates = certificates;
-            if (exportSettings.deletedActs) fullBackupData.deletedActs = deletedActs;
-            if (exportSettings.deletedCertificates) fullBackupData.deletedCertificates = deletedCertificates;
+            // 1. Create the "System Backup" JSON (Acts, People, Settings, etc. - NO Certificates here)
+            const backupData: any = {};
+            if (exportSettings.template) backupData.template = template;
+            if (exportSettings.projectSettings) backupData.projectSettings = settings;
+            if (exportSettings.acts) backupData.acts = acts;
+            if (exportSettings.people) backupData.people = people;
+            if (exportSettings.organizations) backupData.organizations = organizations;
+            if (exportSettings.groups) backupData.groups = groups;
+            if (exportSettings.regulations) backupData.regulations = regulations;
+            if (exportSettings.deletedActs) backupData.deletedActs = deletedActs;
+            if (exportSettings.deletedCertificates) backupData.deletedCertificates = deletedCertificates;
+            
+            // Note: Certificates are intentionally EXCLUDED from backup_restore.json 
+            // if we are exporting them as folders, to avoid duplication.
+            // If the user *unchecks* certificates export, they are just skipped.
 
-            // Add the restore file to root
-            zip.file("backup_restore.json", JSON.stringify(fullBackupData, null, 2));
+            zip.file("backup_restore.json", JSON.stringify(backupData, null, 2));
 
             // 2. Add Human Readable separate JSONs
             if (exportSettings.projectSettings) zip.file("settings.json", JSON.stringify(settings, null, 2));
@@ -532,56 +535,55 @@ const App: React.FC = () => {
                  zip.file("template.docx", template, { base64: true });
             }
 
-            // 4. Certificates Folder with real files
+            // 4. Certificates: Folder Structure
             if (exportSettings.certificates && certificates.length > 0) {
-                const certFolder = zip.folder("certificates");
-                if (certFolder) {
-                    const readableCerts = certificates.map(cert => {
-                        const certFiles: string[] = [];
+                const certsRoot = zip.folder("certificates");
+                if (certsRoot) {
+                    certificates.forEach((cert) => {
+                        // Create folder name: "Num_ID_snippet"
+                        const safeNum = cert.number.replace(/[^a-z0-9а-яё]/gi, '_').substring(0, 50);
+                        const folderName = `Cert_${safeNum}_${cert.id.substring(0, 6)}`;
+                        const certFolder = certsRoot.folder(folderName);
                         
-                        // Helper to process and add file
-                        const addFileToZip = (dataUrl: string, index: number | null) => {
-                            const mimeMatch = dataUrl.match(/^data:(.*?);base64,(.*)$/);
-                            if (mimeMatch) {
-                                const mime = mimeMatch[1];
-                                const b64 = mimeMatch[2];
-                                let ext = 'bin';
-                                if (mime.includes('pdf')) ext = 'pdf';
-                                else if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg';
-                                else if (mime.includes('png')) ext = 'png';
-                                
-                                // Sanitize filename
-                                const safeNum = cert.number.replace(/[^a-z0-9а-яё]/gi, '_');
-                                const suffix = index !== null ? `_${index + 1}` : '';
-                                const fileName = `${safeNum}${suffix}.${ext}`;
-                                
-                                certFolder.file(fileName, b64, { base64: true });
-                                certFiles.push(fileName);
-                            }
-                        };
+                        if (certFolder) {
+                            // a) Metadata file
+                            const info = {
+                                id: cert.id,
+                                number: cert.number,
+                                validUntil: cert.validUntil,
+                                materials: cert.materials
+                            };
+                            certFolder.file("info.json", JSON.stringify(info, null, 2));
 
-                        // Handle new array-based files
-                        if (cert.files && cert.files.length > 0) {
-                            cert.files.forEach((file, idx) => addFileToZip(file.data, idx));
-                        } 
-                        // Handle legacy single file
-                        else if (cert.fileData) {
-                             addFileToZip(cert.fileData, null);
+                            // b) Binary files
+                            const filesToSave = cert.files && cert.files.length > 0 
+                                ? cert.files 
+                                : (cert.fileData ? [{ id: 'legacy', name: cert.fileName || 'doc', type: cert.fileType || 'image', data: cert.fileData }] : []);
+
+                            filesToSave.forEach((f, idx) => {
+                                // @ts-ignore
+                                const mimeMatch = f.data.match(/^data:(.*?);base64,(.*)$/);
+                                if (mimeMatch) {
+                                    const mime = mimeMatch[1];
+                                    const b64 = mimeMatch[2];
+                                    let ext = 'bin';
+                                    if (mime.includes('pdf')) ext = 'pdf';
+                                    else if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg';
+                                    else if (mime.includes('png')) ext = 'png';
+                                    
+                                    // Clean name or generic name
+                                    // @ts-ignore
+                                    let fileName = f.name || `file_${idx + 1}`;
+                                    if (!fileName.endsWith(`.${ext}`)) fileName += `.${ext}`;
+                                    
+                                    certFolder.file(fileName, b64, { base64: true });
+                                }
+                            });
                         }
-
-                        return {
-                            number: cert.number,
-                            validUntil: cert.validUntil,
-                            materials: cert.materials,
-                            files: certFiles // List of filenames inside the zip folder
-                        };
                     });
-                    
-                    certFolder.file("index.json", JSON.stringify(readableCerts, null, 2));
                 }
             }
 
-            // Generate Zip
             const content = zip.generate({ type: "blob" });
             const timestamp = new Date().toISOString().split('.')[0].replace('T', '_').replace(/:/g, '-');
             saveAs(content, `Project_Export_${timestamp}.zip`);
@@ -597,33 +599,138 @@ const App: React.FC = () => {
         importInputRef.current?.click();
     };
 
+    // --- NEW IMPORT LOGIC ---
     const handleImportFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
+        const isZip = file.name.toLowerCase().endsWith('.zip');
         const reader = new FileReader();
-        reader.onload = (e) => {
+
+        reader.onload = async (e) => {
             try {
-                const text = e.target?.result;
-                if (typeof text !== 'string') throw new Error("Failed to read file");
-                
-                // Only JSON imports are supported currently via this method
-                // (User extracts zip and uploads backup_restore.json)
-                const data: ImportData = JSON.parse(text);
-                
-                if (data.template !== undefined || Array.isArray(data.acts) || Array.isArray(data.people) || Array.isArray(data.organizations) || Array.isArray(data.groups) || Array.isArray(data.regulations) || Array.isArray(data.certificates) || data.projectSettings || Array.isArray(data.deletedActs)) {
-                    setImportData(data);
+                if (isZip) {
+                    // --- ZIP IMPORT ---
+                    const zip = new PizZip(e.target?.result as string | ArrayBuffer);
+                    
+                    // 1. Read Backup JSON (Acts, etc.)
+                    let mainData: ImportData = {};
+                    const backupFile = zip.file("backup_restore.json");
+                    if (backupFile) {
+                        try {
+                            mainData = JSON.parse(backupFile.asText());
+                        } catch(err) { console.error("Bad backup json", err); }
+                    }
+
+                    // 2. Scan Certificates folders to reconstruct Certs
+                    const reconstructedCerts: Certificate[] = [];
+                    const certsRoot = zip.folder("certificates");
+                    
+                    if (certsRoot) {
+                        // Iterate through all files in 'certificates/' recursively?
+                        // PizZip doesn't have a simple "list folders" method easily exposed without iteration.
+                        // We iterate all files and group by folder.
+                        
+                        // Map: FolderPath -> { info: any, files: {name: string, data: string, type: string}[] }
+                        const certMap = new Map<string, { info?: any, files: CertificateFile[] }>();
+
+                        certsRoot.forEach((relativePath, fileEntry) => {
+                            if (fileEntry.dir) return; // Skip directory entries themselves
+                            
+                            const parts = relativePath.split('/'); 
+                            // Expected: "Cert_123_abc/info.json" or "Cert_123_abc/scan.jpg"
+                            // If it's deeper, we treat parent as cert folder.
+                            // relativePath is relative to 'certificates/' root.
+                            
+                            if (parts.length < 2) return; // Ignore files directly in certificates/ root if any
+                            
+                            const folderName = parts[0];
+                            const fileName = parts.slice(1).join('/');
+                            
+                            if (!certMap.has(folderName)) {
+                                certMap.set(folderName, { files: [] });
+                            }
+                            const entry = certMap.get(folderName)!;
+
+                            if (fileName === 'info.json') {
+                                try {
+                                    entry.info = JSON.parse(fileEntry.asText());
+                                } catch(err) { console.warn("Failed to parse info.json in " + folderName); }
+                            } else {
+                                // It's a binary file (image/pdf)
+                                const binary = fileEntry.asBinary();
+                                const b64 = binaryStringToBase64(binary);
+                                
+                                let mime = 'application/octet-stream';
+                                let type: 'pdf' | 'image' = 'image';
+                                
+                                if (fileName.toLowerCase().endsWith('.pdf')) {
+                                    mime = 'application/pdf';
+                                    type = 'pdf';
+                                } else if (fileName.toLowerCase().endsWith('.jpg') || fileName.toLowerCase().endsWith('.jpeg')) {
+                                    mime = 'image/jpeg';
+                                } else if (fileName.toLowerCase().endsWith('.png')) {
+                                    mime = 'image/png';
+                                }
+
+                                entry.files.push({
+                                    id: crypto.randomUUID(),
+                                    name: fileName,
+                                    type: type,
+                                    data: `data:${mime};base64,${b64}`
+                                });
+                            }
+                        });
+
+                        // Convert Map to Certificate[]
+                        certMap.forEach((val) => {
+                            if (val.info) {
+                                reconstructedCerts.push({
+                                    id: val.info.id || crypto.randomUUID(),
+                                    number: val.info.number || '?',
+                                    validUntil: val.info.validUntil || '',
+                                    materials: Array.isArray(val.info.materials) ? val.info.materials : [],
+                                    files: val.files
+                                });
+                            }
+                        });
+                    }
+
+                    // Merge reconstructed certs into mainData
+                    if (reconstructedCerts.length > 0) {
+                        mainData.certificates = reconstructedCerts;
+                    }
+
+                    // Proceed to Modal
+                    if (Object.keys(mainData).length > 0) {
+                        setImportData(mainData);
+                    } else {
+                        alert("Не удалось найти данные в архиве.");
+                    }
+
                 } else {
-                    alert('Ошибка: Неверный формат файла. Убедитесь, что вы загружаете JSON файл резервной копии (например, backup_restore.json из архива).');
+                    // --- JSON IMPORT (Legacy/Single File) ---
+                    const text = e.target?.result as string;
+                    const data: ImportData = JSON.parse(text);
+                    if (data.template !== undefined || Array.isArray(data.acts) || Array.isArray(data.people)) {
+                        setImportData(data);
+                    } else {
+                        alert('Ошибка: Неверный формат JSON файла.');
+                    }
                 }
             } catch (error) {
                 console.error('Import error:', error);
-                alert('Не удалось импортировать данные. Файл может быть поврежден или иметь неверный формат.');
+                alert('Не удалось импортировать данные. Файл может быть поврежден.');
             } finally {
                 if(event.target) event.target.value = '';
             }
         };
-        reader.readAsText(file);
+
+        if (isZip) {
+            reader.readAsBinaryString(file); // PizZip expects binary string or arraybuffer
+        } else {
+            reader.readAsText(file); // JSON
+        }
     };
 
     const handleExecuteImport = (importSettings: ImportSettings) => {
@@ -642,7 +749,7 @@ const App: React.FC = () => {
             sortFn: ((a: T, b: T) => number) | null
         ) => {
             // @ts-ignore dynamic access
-            if ((importSettings[key]?.import || (key === 'deletedCertificates' && importSettings['deletedActs']?.import)) && importData[key]) { // Lazy handle deletedCertificates import setting based on general or auto
+            if ((importSettings[key]?.import || (key === 'deletedCertificates' && importSettings['deletedActs']?.import)) && importData[key]) {
                  // @ts-ignore
                  const mode = importSettings[key]?.mode || 'merge';
                  // @ts-ignore
@@ -783,7 +890,7 @@ const App: React.FC = () => {
 
     return (
         <div className="flex h-screen bg-slate-100 font-sans text-slate-800">
-             <input type="file" ref={importInputRef} onChange={handleImportFileSelected} className="hidden" accept=".json" />
+             <input type="file" ref={importInputRef} onChange={handleImportFileSelected} className="hidden" accept=".json,.zip" />
              <Sidebar
                 isOpen={isSidebarOpen}
                 setIsOpen={setIsSidebarOpen}
