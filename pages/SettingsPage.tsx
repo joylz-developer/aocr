@@ -112,6 +112,7 @@ const SettingToggle: React.FC<SettingToggleProps> = ({ id, label, description, c
 );
 
 type SettingsTab = 'general' | 'data' | 'help';
+type HelpSection = 'main' | 'registry'; // New type for help sub-tabs
 
 const SettingsPage: React.FC<SettingsPageProps> = ({ 
     settings, onSave, onImport, onExport, 
@@ -119,6 +120,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     isRegistryTemplateLoaded, onUploadRegistryTemplate, onDownloadRegistryTemplate, onDeleteRegistryTemplate
 }) => {
     const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+    const [helpSection, setHelpSection] = useState<HelpSection>('main'); // State for help sub-tabs
     const [formData, setFormData] = useState<ProjectSettings>(settings);
     const [isSaved, setIsSaved] = useState(false);
 
@@ -498,59 +500,111 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
                 {activeTab === 'help' && (
                     <div className="prose max-w-none text-slate-700 allow-text-selection pb-10">
-                        <p>Для генерации документов ваш .docx шаблон должен содержать теги-заполнители. Приложение заменит эти теги на данные из формы. Нажмите на любой тег ниже, чтобы скопировать его.</p>
-                        
-                        <h4 className="font-semibold mt-4">Основные теги</h4>
-                        <ul className="list-disc space-y-2 pl-5 mt-2">
-                            <li><CopyableTag tag="{object_name}" /> &mdash; Наименование объекта.</li>
-                            <li><CopyableTag tag="{act_number}" />, <CopyableTag tag="{act_day}" />, <CopyableTag tag="{act_month}" />, <CopyableTag tag="{act_year}" /></li>
-                            <li><CopyableTag tag="{builder_details}" />, <CopyableTag tag="{contractor_details}" />, <CopyableTag tag="{designer_details}" />, <CopyableTag tag="{work_performer}" /></li>
-                            <li><CopyableTag tag="{work_start_day}" />, <CopyableTag tag="{work_start_month}" />, <CopyableTag tag="{work_start_year}" /> &mdash; Дата начала работ.</li>
-                            <li><CopyableTag tag="{work_end_day}" />, <CopyableTag tag="{work_end_month}" />, <CopyableTag tag="{work_end_year}" /> &mdash; Дата окончания работ.</li>
-                            <li><CopyableTag tag="{regulations}" /> &mdash; Нормативные документы.</li>
-                            <li><CopyableTag tag="{next_work}" /> &mdash; Разрешается производство следующих работ.</li>
-                            <li><CopyableTag tag="{additional_info}" />, <CopyableTag tag="{copies_count}" />, <CopyableTag tag="{attachments}" /></li>
-                        </ul>
-                        
-                        <h4 className="font-semibold mt-6">Выполненные работы</h4>
-                        <ul className="list-disc space-y-2 pl-5 mt-2">
-                            <li><CopyableTag tag="{work_name}" /> &mdash; Наименование работ.</li>
-                            <li><CopyableTag tag="{project_docs}" /> &mdash; Проектная документация.</li>
-                            <li><CopyableTag tag="{materials}" /> &mdash; Примененные материалы.</li>
-                            <li><CopyableTag tag="{certs}" /> &mdash; Исполнительные схемы.</li>
-                        </ul>
-
-                        <h4 className="font-semibold mt-6">Теги для Реестра материалов</h4>
-                        <p className="text-sm mb-2">Используйте этот блок в отдельном шаблоне реестра. Он должен находиться внутри строки таблицы, чтобы создать список строк.</p>
-                        <div className="bg-slate-100 p-3 rounded border border-slate-200 text-sm font-mono">
-                            {'Open Tag: '}<CopyableTag tag="{#materials_registry}" /><br/>
-                            {'...столбцы таблицы...'}<br/>
-                            {'Close Tag: '}<CopyableTag tag="{/materials_registry}" />
-                        </div>
-                        <ul className="list-disc space-y-2 pl-5 mt-2">
-                            <li><CopyableTag tag="{num}" /> &mdash; Порядковый номер (1, 2, 3...)</li>
-                            <li><CopyableTag tag="{name}" /> &mdash; Наименование материала</li>
-                            <li><CopyableTag tag="{doc}" /> &mdash; Документ о качестве (сертификат/паспорт)</li>
-                            <li><CopyableTag tag="{date}" /> &mdash; Дата документа</li>
-                            <li><CopyableTag tag="{count}" /> &mdash; Кол-во листов (по умолчанию пустое)</li>
-                        </ul>
-
-                        <h4 className="font-semibold mt-6">Представители (Комиссия)</h4>
-                        <div className="my-2 p-3 rounded-md bg-blue-50 border border-blue-200">
-                            <h5 className="font-semibold text-blue-800">✨ Важное обновление синтаксиса</h5>
-                            <p className="text-sm mt-1">Для вставки данных представителей теперь рекомендуется использовать синтаксис с подчеркиванием, например <CopyableTag tag="{tnz_name}" />. Этот формат более надежен.</p>
+                        {/* Sub-tabs for Help Sections */}
+                        <div className="flex border-b border-slate-200 mb-6">
+                            <button
+                                type="button"
+                                onClick={() => setHelpSection('main')}
+                                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                                    helpSection === 'main'
+                                        ? 'border-blue-600 text-blue-600'
+                                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                                }`}
+                            >
+                                Шаблон Акта (АОСР)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setHelpSection('registry')}
+                                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                                    helpSection === 'registry'
+                                        ? 'border-blue-600 text-blue-600'
+                                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                                }`}
+                            >
+                                Шаблон Реестра Материалов
+                            </button>
                         </div>
 
-                        <p className="mt-2">Используйте <strong>условные блоки</strong>, чтобы скрыть строки, если представитель не выбран. Для этого оберните нужный текст в теги <code>{`{#ключ}...{/ключ}`}</code>, где "ключ" - это код роли (например, <code>tnz</code>).</p>
+                        {helpSection === 'main' && (
+                            <>
+                                <p className="mb-4 text-sm bg-blue-50 p-3 rounded-md border border-blue-100">
+                                    Этот набор тегов используется для основного шаблона (формат .docx), который генерируется для каждого акта.
+                                    Нажмите на любой тег, чтобы скопировать его.
+                                </p>
+                                
+                                <h4 className="font-semibold mt-4">Основные теги</h4>
+                                <ul className="list-disc space-y-2 pl-5 mt-2">
+                                    <li><CopyableTag tag="{object_name}" /> &mdash; Наименование объекта.</li>
+                                    <li><CopyableTag tag="{act_number}" />, <CopyableTag tag="{act_day}" />, <CopyableTag tag="{act_month}" />, <CopyableTag tag="{act_year}" /></li>
+                                    <li><CopyableTag tag="{builder_details}" />, <CopyableTag tag="{contractor_details}" />, <CopyableTag tag="{designer_details}" />, <CopyableTag tag="{work_performer}" /></li>
+                                    <li><CopyableTag tag="{work_start_day}" />, <CopyableTag tag="{work_start_month}" />, <CopyableTag tag="{work_start_year}" /> &mdash; Дата начала работ.</li>
+                                    <li><CopyableTag tag="{work_end_day}" />, <CopyableTag tag="{work_end_month}" />, <CopyableTag tag="{work_end_year}" /> &mdash; Дата окончания работ.</li>
+                                    <li><CopyableTag tag="{regulations}" /> &mdash; Нормативные документы.</li>
+                                    <li><CopyableTag tag="{next_work}" /> &mdash; Разрешается производство следующих работ.</li>
+                                    <li><CopyableTag tag="{additional_info}" />, <CopyableTag tag="{copies_count}" />, <CopyableTag tag="{attachments}" /></li>
+                                </ul>
+                                
+                                <h4 className="font-semibold mt-6">Выполненные работы</h4>
+                                <ul className="list-disc space-y-2 pl-5 mt-2">
+                                    <li><CopyableTag tag="{work_name}" /> &mdash; Наименование работ.</li>
+                                    <li><CopyableTag tag="{project_docs}" /> &mdash; Проектная документация.</li>
+                                    <li><CopyableTag tag="{materials}" /> &mdash; Примененные материалы (одной строкой).</li>
+                                    <li><CopyableTag tag="{certs}" /> &mdash; Исполнительные схемы.</li>
+                                </ul>
 
-                        <p className="mt-2 font-medium">Расшифровка ключей ролей:</p>
-                        <ul className="list-disc space-y-1 pl-5 text-sm">
-                            {Object.entries(ROLES).map(([key, label]) => (
-                                <li key={key}>
-                                    <code>{key}</code> - {label} (теги: <CopyableTag tag={`{${key}_name}`} />, <CopyableTag tag={`{${key}_position}`} />, <CopyableTag tag={`{${key}_org}`} />, <CopyableTag tag={`{${key}_auth_doc}`} />)
-                                </li>
-                            ))}
-                        </ul>
+                                <h4 className="font-semibold mt-6">Представители (Комиссия)</h4>
+                                <div className="my-2 p-3 rounded-md bg-white border border-slate-200 shadow-sm">
+                                    <p className="text-sm">Используйте <strong>условные блоки</strong>, чтобы скрыть строки, если представитель не выбран. Для этого оберните нужный текст в теги <code>{`{#ключ}...{/ключ}`}</code>.</p>
+                                </div>
+
+                                <ul className="list-disc space-y-2 pl-5 text-sm mt-3">
+                                    {Object.entries(ROLES).map(([key, label]) => (
+                                        <li key={key} className="leading-relaxed">
+                                            <strong>{label}</strong> (код: <code>{key}</code>)<br/>
+                                            Теги: <CopyableTag tag={`{${key}_name}`} />, <CopyableTag tag={`{${key}_position}`} />, <CopyableTag tag={`{${key}_org}`} />, <CopyableTag tag={`{${key}_auth_doc}`} />
+                                        </li>
+                                    ))}
+                                </ul>
+                            </>
+                        )}
+
+                        {helpSection === 'registry' && (
+                            <>
+                                <p className="mb-4 text-sm bg-violet-50 p-3 rounded-md border border-violet-100 text-violet-800">
+                                    Этот набор тегов используется <strong>только</strong> для шаблона Реестра материалов.
+                                    Файл шаблона должен быть в формате <strong>.docx</strong> (Word), но содержать таблицу, похожую на Excel.
+                                </p>
+
+                                <div className="bg-white p-4 rounded-md border border-slate-200 shadow-sm mb-6">
+                                    <h5 className="font-semibold text-slate-800 mb-2">Как создать таблицу в Word:</h5>
+                                    <ol className="list-decimal list-inside text-sm text-slate-600 space-y-2">
+                                        <li>Создайте таблицу в Word с нужным количеством столбцов (например: № п/п, Наименование, Документ, Дата, Кол-во).</li>
+                                        <li>В <strong>первую ячейку</strong> строки данных добавьте открывающий тег цикла: <CopyableTag tag="{#materials_registry}" /></li>
+                                        <li>Заполните остальные ячейки тегами данных (см. ниже).</li>
+                                        <li>В <strong>последнюю ячейку</strong> той же строки добавьте закрывающий тег: <CopyableTag tag="{/materials_registry}" /></li>
+                                    </ol>
+                                </div>
+
+                                <h4 className="font-semibold mt-4">Теги столбцов таблицы</h4>
+                                <ul className="list-disc space-y-2 pl-5 mt-2">
+                                    <li><CopyableTag tag="{num}" /> &mdash; Порядковый номер (1, 2, 3...)</li>
+                                    <li><CopyableTag tag="{name}" /> &mdash; Наименование материала (извлекается из акта)</li>
+                                    <li><CopyableTag tag="{doc}" /> &mdash; Документ о качестве (извлекается из скобок в названии материала)</li>
+                                    <li><CopyableTag tag="{date}" /> &mdash; Дата документа (если найдена)</li>
+                                    <li><CopyableTag tag="{count}" /> &mdash; Кол-во листов (по умолчанию пустое поле)</li>
+                                </ul>
+
+                                <h4 className="font-semibold mt-6">Общие данные акта (доступны и в реестре)</h4>
+                                <p className="text-sm text-slate-600 mb-2">Вы также можете использовать эти теги в шапке или подвале реестра:</p>
+                                <div className="flex flex-wrap gap-2">
+                                    <CopyableTag tag="{object_name}" />
+                                    <CopyableTag tag="{act_number}" />
+                                    <CopyableTag tag="{act_date}" />
+                                    <CopyableTag tag="{work_name}" />
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
             </div>
