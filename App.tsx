@@ -62,6 +62,8 @@ const DEFAULT_PROMPT_MATERIALS = "Точное наименование прод
 
 const App: React.FC = () => {
     const [template, setTemplate] = useLocalStorage<string | null>('docx_template', null);
+    const [registryTemplate, setRegistryTemplate] = useLocalStorage<string | null>('docx_registry_template', null);
+    
     const [acts, setActs] = useLocalStorage<Act[]>('acts_data', []);
     const [deletedActs, setDeletedActs] = useLocalStorage<DeletedActEntry[]>('deleted_acts', []);
     const [people, setPeople] = useLocalStorage<Person[]>('people_data', []);
@@ -81,6 +83,7 @@ const App: React.FC = () => {
         geminiApiKey: '',
         defaultActDate: '{workEndDate}',
         historyDepth: 20,
+        registryThreshold: 5,
         certificatePromptNumber: DEFAULT_PROMPT_NUMBER,
         certificatePromptDate: DEFAULT_PROMPT_DATE,
         certificatePromptMaterials: DEFAULT_PROMPT_MATERIALS
@@ -153,14 +156,28 @@ const App: React.FC = () => {
         }
     };
 
-    const handleDownloadTemplate = () => {
-        if (!template) {
+    const handleRegistryTemplateUpload = async (file: File) => {
+        try {
+            const base64 = await fileToBase64(file);
+            setRegistryTemplate(base64);
+            alert("Шаблон реестра успешно загружен.");
+        } catch (error) {
+            console.error("Error converting file to base64:", error);
+            alert("Не удалось загрузить шаблон реестра.");
+        }
+    };
+
+    const handleDownloadTemplate = (type: 'main' | 'registry' = 'main') => {
+        const temp = type === 'registry' ? registryTemplate : template;
+        const name = type === 'registry' ? 'registry_template.docx' : 'template.docx';
+        
+        if (!temp) {
             alert('Шаблон не загружен.');
             return;
         }
         try {
-            const blob = base64ToBlob(template);
-            saveAs(blob, 'template.docx');
+            const blob = base64ToBlob(temp);
+            saveAs(blob, name);
         } catch (error) {
             console.error('Error downloading template:', error);
             alert('Ошибка при скачивании шаблона.');
@@ -508,6 +525,7 @@ const App: React.FC = () => {
             // 1. Create the "System Backup" JSON (Acts, People, Settings, etc. - NO Certificates here)
             const backupData: any = {};
             if (exportSettings.template) backupData.template = template;
+            if (exportSettings.registryTemplate) backupData.registryTemplate = registryTemplate;
             if (exportSettings.projectSettings) backupData.projectSettings = settings;
             if (exportSettings.acts) backupData.acts = acts;
             if (exportSettings.people) backupData.people = people;
@@ -517,10 +535,6 @@ const App: React.FC = () => {
             if (exportSettings.deletedActs) backupData.deletedActs = deletedActs;
             if (exportSettings.deletedCertificates) backupData.deletedCertificates = deletedCertificates;
             
-            // Note: Certificates are intentionally EXCLUDED from backup_restore.json 
-            // if we are exporting them as folders, to avoid duplication.
-            // If the user *unchecks* certificates export, they are just skipped.
-
             zip.file("backup_restore.json", JSON.stringify(backupData, null, 2));
 
             // 2. Add Human Readable separate JSONs
@@ -533,6 +547,9 @@ const App: React.FC = () => {
             // 3. Template File (Real DOCX)
             if (exportSettings.template && template) {
                  zip.file("template.docx", template, { base64: true });
+            }
+            if (exportSettings.registryTemplate && registryTemplate) {
+                 zip.file("registry_template.docx", registryTemplate, { base64: true });
             }
 
             // 4. Certificates: Folder Structure
@@ -624,77 +641,69 @@ const App: React.FC = () => {
 
                     // 2. Scan Certificates folders to reconstruct Certs
                     const reconstructedCerts: Certificate[] = [];
-                    const certsRoot = zip.folder("certificates");
+                    // Using direct files iteration to avoid PizZip types limitation
                     
-                    if (certsRoot) {
-                        // Iterate through all files in 'certificates/' recursively?
-                        // PizZip doesn't have a simple "list folders" method easily exposed without iteration.
-                        // We iterate all files and group by folder.
+                    const certMap = new Map<string, { info?: any, files: CertificateFile[] }>();
+
+                    Object.keys(zip.files).forEach((relativePath) => {
+                        if (!relativePath.startsWith("certificates/")) return;
+                        const fileEntry = zip.files[relativePath];
+                        if (fileEntry.dir) return; 
                         
-                        // Map: FolderPath -> { info: any, files: {name: string, data: string, type: string}[] }
-                        const certMap = new Map<string, { info?: any, files: CertificateFile[] }>();
+                        // relativePath is like "certificates/FolderName/FileName"
+                        const parts = relativePath.split('/'); 
+                        if (parts.length < 3) return; // Must be inside a subfolder
+                        
+                        const folderName = parts[1];
+                        const fileName = parts.slice(2).join('/');
+                        
+                        if (!certMap.has(folderName)) {
+                            certMap.set(folderName, { files: [] });
+                        }
+                        const entry = certMap.get(folderName)!;
 
-                        certsRoot.forEach((relativePath, fileEntry) => {
-                            if (fileEntry.dir) return; // Skip directory entries themselves
+                        if (fileName === 'info.json') {
+                            try {
+                                entry.info = JSON.parse(fileEntry.asText());
+                            } catch(err) { console.warn("Failed to parse info.json in " + folderName); }
+                        } else {
+                            // It's a binary file (image/pdf)
+                            const binary = fileEntry.asBinary();
+                            const b64 = binaryStringToBase64(binary);
                             
-                            const parts = relativePath.split('/'); 
-                            // Expected: "Cert_123_abc/info.json" or "Cert_123_abc/scan.jpg"
-                            // If it's deeper, we treat parent as cert folder.
-                            // relativePath is relative to 'certificates/' root.
+                            let mime = 'application/octet-stream';
+                            let type: 'pdf' | 'image' = 'image';
                             
-                            if (parts.length < 2) return; // Ignore files directly in certificates/ root if any
-                            
-                            const folderName = parts[0];
-                            const fileName = parts.slice(1).join('/');
-                            
-                            if (!certMap.has(folderName)) {
-                                certMap.set(folderName, { files: [] });
+                            if (fileName.toLowerCase().endsWith('.pdf')) {
+                                mime = 'application/pdf';
+                                type = 'pdf';
+                            } else if (fileName.toLowerCase().endsWith('.jpg') || fileName.toLowerCase().endsWith('.jpeg')) {
+                                mime = 'image/jpeg';
+                            } else if (fileName.toLowerCase().endsWith('.png')) {
+                                mime = 'image/png';
                             }
-                            const entry = certMap.get(folderName)!;
 
-                            if (fileName === 'info.json') {
-                                try {
-                                    entry.info = JSON.parse(fileEntry.asText());
-                                } catch(err) { console.warn("Failed to parse info.json in " + folderName); }
-                            } else {
-                                // It's a binary file (image/pdf)
-                                const binary = fileEntry.asBinary();
-                                const b64 = binaryStringToBase64(binary);
-                                
-                                let mime = 'application/octet-stream';
-                                let type: 'pdf' | 'image' = 'image';
-                                
-                                if (fileName.toLowerCase().endsWith('.pdf')) {
-                                    mime = 'application/pdf';
-                                    type = 'pdf';
-                                } else if (fileName.toLowerCase().endsWith('.jpg') || fileName.toLowerCase().endsWith('.jpeg')) {
-                                    mime = 'image/jpeg';
-                                } else if (fileName.toLowerCase().endsWith('.png')) {
-                                    mime = 'image/png';
-                                }
+                            entry.files.push({
+                                id: crypto.randomUUID(),
+                                name: fileName,
+                                type: type,
+                                data: `data:${mime};base64,${b64}`
+                            });
+                        }
+                    });
 
-                                entry.files.push({
-                                    id: crypto.randomUUID(),
-                                    name: fileName,
-                                    type: type,
-                                    data: `data:${mime};base64,${b64}`
-                                });
-                            }
-                        });
-
-                        // Convert Map to Certificate[]
-                        certMap.forEach((val) => {
-                            if (val.info) {
-                                reconstructedCerts.push({
-                                    id: val.info.id || crypto.randomUUID(),
-                                    number: val.info.number || '?',
-                                    validUntil: val.info.validUntil || '',
-                                    materials: Array.isArray(val.info.materials) ? val.info.materials : [],
-                                    files: val.files
-                                });
-                            }
-                        });
-                    }
+                    // Convert Map to Certificate[]
+                    certMap.forEach((val) => {
+                        if (val.info) {
+                            reconstructedCerts.push({
+                                id: val.info.id || crypto.randomUUID(),
+                                number: val.info.number || '?',
+                                validUntil: val.info.validUntil || '',
+                                materials: Array.isArray(val.info.materials) ? val.info.materials : [],
+                                files: val.files
+                            });
+                        }
+                    });
 
                     // Merge reconstructed certs into mainData
                     if (reconstructedCerts.length > 0) {
@@ -738,6 +747,9 @@ const App: React.FC = () => {
 
         if (importSettings.template && importData.template !== undefined) {
             setTemplate(importData.template);
+        }
+        if (importSettings.registryTemplate && importData.registryTemplate !== undefined) {
+            setRegistryTemplate(importData.registryTemplate);
         }
         if (importSettings.projectSettings && importData.projectSettings) {
             setSettings(importData.projectSettings);
@@ -834,6 +846,7 @@ const App: React.FC = () => {
                             regulations={regulations}
                             certificates={certificates}
                             template={template}
+                            registryTemplate={registryTemplate}
                             settings={settings}
                             onSave={handleSaveAct} 
                             onMoveToTrash={handleMoveActsToTrash}
@@ -881,7 +894,9 @@ const App: React.FC = () => {
                             onExport={handleExportClick}
                             onChangeTemplate={handleChangeTemplate}
                             onDownloadTemplate={handleDownloadTemplate}
+                            onUploadRegistryTemplate={handleRegistryTemplateUpload}
                             isTemplateLoaded={!!template}
+                            isRegistryTemplateLoaded={!!registryTemplate}
                         />;
             default:
                 return null;
@@ -934,7 +949,8 @@ const App: React.FC = () => {
                         certificates: certificates.length,
                         deletedActs: deletedActs.length,
                         deletedCertificates: deletedCertificates.length,
-                        hasTemplate: !!template
+                        hasTemplate: !!template,
+                        hasRegistryTemplate: !!registryTemplate
                     }}
                 />
             )}

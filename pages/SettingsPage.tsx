@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ProjectSettings, ROLES } from '../types';
-import { ImportIcon, ExportIcon, TemplateIcon, DownloadIcon } from '../components/Icons';
+import { ImportIcon, ExportIcon, TemplateIcon, DownloadIcon, QuestionMarkCircleIcon, CloudUploadIcon, DeleteIcon } from '../components/Icons';
 
 interface SettingsPageProps {
     settings: ProjectSettings;
@@ -9,28 +9,65 @@ interface SettingsPageProps {
     onImport: () => void;
     onExport: () => void;
     onChangeTemplate: () => void;
-    onDownloadTemplate: () => void;
+    onDownloadTemplate: (type?: 'main' | 'registry') => void;
+    onUploadRegistryTemplate: (file: File) => void;
     isTemplateLoaded: boolean;
+    isRegistryTemplateLoaded: boolean;
 }
 
-// Helper component for interactive tags in the help tab
-const CopyableTag: React.FC<{ tag: string }> = ({ tag }) => {
+// --- Tooltip Logic ---
+const TagTooltip: React.FC<{ tag: string; description: string }> = ({ tag, description }) => {
+    const [isVisible, setIsVisible] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [coords, setCoords] = useState({ top: 0, left: 0 });
+    const triggerRef = useRef<HTMLSpanElement>(null);
 
-    const handleCopy = () => {
+    const handleMouseEnter = () => {
+        if (triggerRef.current) {
+            const rect = triggerRef.current.getBoundingClientRect();
+            // Calculate position: above the element, centered
+            let top = rect.top - 10;
+            let left = rect.left + rect.width / 2;
+            
+            // Adjust if out of bounds (simplified check)
+            if (top < 50) top = rect.bottom + 10; // Flip to bottom if too close to top
+            if (left < 100) left = 100;
+            if (left > window.innerWidth - 100) left = window.innerWidth - 100;
+
+            setCoords({ top, left });
+            setIsVisible(true);
+        }
+    };
+
+    const handleCopy = (e: React.MouseEvent) => {
+        e.stopPropagation();
         navigator.clipboard.writeText(tag);
         setCopied(true);
-        setTimeout(() => setCopied(false), 1500); // Reset after 1.5 seconds
+        setTimeout(() => setCopied(false), 1500);
     };
 
     return (
-        <code
-            onClick={handleCopy}
-            className="bg-slate-200 text-blue-700 px-1.5 py-0.5 rounded-md cursor-pointer hover:bg-blue-200 transition-colors font-mono"
-            title="Нажмите, чтобы скопировать"
-        >
-            {copied ? 'Скопировано!' : tag}
-        </code>
+        <>
+            <code
+                ref={triggerRef}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={() => setIsVisible(false)}
+                onClick={handleCopy}
+                className="bg-slate-100 text-blue-700 px-1.5 py-0.5 rounded-md cursor-pointer hover:bg-blue-200 transition-colors font-mono relative inline-block mx-0.5"
+                title="Нажмите, чтобы скопировать"
+            >
+                {copied ? 'Скопировано!' : tag}
+            </code>
+            {isVisible && (
+                <div 
+                    className="fixed z-50 px-3 py-2 bg-slate-800 text-white text-xs rounded-md shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-full w-max max-w-xs text-center"
+                    style={{ top: coords.top, left: coords.left }}
+                >
+                    {description}
+                    <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-0 h-0 border-l-4 border-l-transparent border-r-4 border-r-transparent border-t-4 border-t-slate-800 -mb-1"></div>
+                </div>
+            )}
+        </>
     );
 };
 
@@ -54,7 +91,7 @@ const VariableHelpTooltip: React.FC = () => {
     return (
         <div className="relative inline-flex ml-2" onMouseEnter={() => setIsVisible(true)} onMouseLeave={() => setIsVisible(false)}>
             <button type="button" className="text-slate-400 hover:text-blue-600 focus:outline-none" aria-label="Показать доступные переменные">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <QuestionMarkCircleIcon className="w-4 h-4" />
             </button>
             {isVisible && (
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 bg-slate-800 text-white text-sm rounded-lg shadow-lg p-3 z-10">
@@ -107,11 +144,14 @@ const SettingToggle: React.FC<SettingToggleProps> = ({ id, label, description, c
 );
 
 type SettingsTab = 'general' | 'data' | 'help';
+type HelpSubTab = 'main' | 'registry';
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport, onExport, onChangeTemplate, onDownloadTemplate, isTemplateLoaded }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport, onExport, onChangeTemplate, onDownloadTemplate, onUploadRegistryTemplate, isTemplateLoaded, isRegistryTemplateLoaded }) => {
     const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+    const [helpSubTab, setHelpSubTab] = useState<HelpSubTab>('main');
     const [formData, setFormData] = useState<ProjectSettings>(settings);
     const [isSaved, setIsSaved] = useState(false);
+    const registryInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         setFormData(settings);
@@ -140,38 +180,50 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
         setTimeout(() => setIsSaved(false), 3000);
     };
     
+    const handleRegistryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            onUploadRegistryTemplate(e.target.files[0]);
+            if (registryInputRef.current) registryInputRef.current.value = '';
+        }
+    }
+
     const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900";
     const labelClass = "block text-sm font-medium text-slate-700";
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col max-w-4xl mx-auto">
-            <h1 className="text-2xl font-bold text-slate-800 mb-6 flex-shrink-0">Настройки и Справка</h1>
-            
-            {/* Tabs */}
-            <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg mb-6 flex-shrink-0 self-start">
-                <button
-                    onClick={() => setActiveTab('general')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'general' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                    Общие настройки
-                </button>
-                <button
-                    onClick={() => setActiveTab('data')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'data' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                    Данные и Шаблон
-                </button>
-                <button
-                    onClick={() => setActiveTab('help')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'help' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                    Справка по тегам
-                </button>
+        <form onSubmit={handleSubmit} className="h-full flex flex-col max-w-4xl mx-auto bg-white rounded-lg shadow-md overflow-hidden relative">
+            <div className="p-6 pb-0 flex-shrink-0">
+                <h1 className="text-2xl font-bold text-slate-800 mb-6">Настройки и Справка</h1>
+                
+                {/* Main Tabs */}
+                <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg mb-4">
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab('general')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex-1 ${activeTab === 'general' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        Общие настройки
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab('data')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex-1 ${activeTab === 'data' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        Данные и Шаблоны
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab('help')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex-1 ${activeTab === 'help' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        Справка по тегам
+                    </button>
+                </div>
             </div>
 
-            <div className="flex-grow overflow-y-auto pr-2">
+            <div className="flex-grow overflow-y-auto px-6 pb-20">
                 {activeTab === 'general' && (
-                    <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="space-y-6">
                         <div>
                             <label htmlFor="objectName" className={labelClass}>
                                 Наименование объекта капитального строительства
@@ -208,75 +260,42 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                         </div>
 
                         <fieldset className="space-y-4 pt-4 border-t">
-                            <legend className="text-base font-medium text-slate-800">Настройки ИИ (Сканирование сертификатов)</legend>
-                            <p className="text-xs text-slate-500 mb-4">Настройте, как ИИ должен искать информацию в документах. Пишите простым языком.</p>
-                            
-                            <div className="space-y-4">
-                                <div>
-                                    <label htmlFor="certificatePromptNumber" className={labelClass}>
-                                        Правило поиска Номера документа
-                                    </label>
-                                    <textarea
-                                        id="certificatePromptNumber"
-                                        name="certificatePromptNumber"
-                                        value={formData.certificatePromptNumber || ''}
-                                        onChange={handleChange}
-                                        className={`${inputClass} text-sm`}
-                                        rows={2}
-                                        placeholder="Что искать в поле номера..."
-                                    />
-                                </div>
-
-                                <div>
-                                    <label htmlFor="certificatePromptDate" className={labelClass}>
-                                        Правило поиска Даты документа
-                                    </label>
-                                    <textarea
-                                        id="certificatePromptDate"
-                                        name="certificatePromptDate"
-                                        value={formData.certificatePromptDate || ''}
-                                        onChange={handleChange}
-                                        className={`${inputClass} text-sm`}
-                                        rows={2}
-                                        placeholder="Какую дату искать..."
-                                    />
-                                </div>
-
-                                <div>
-                                    <label htmlFor="certificatePromptMaterials" className={labelClass}>
-                                        Правило поиска Материалов
-                                    </label>
-                                    <textarea
-                                        id="certificatePromptMaterials"
-                                        name="certificatePromptMaterials"
-                                        value={formData.certificatePromptMaterials || ''}
-                                        onChange={handleChange}
-                                        className={`${inputClass} text-sm`}
-                                        rows={3}
-                                        placeholder="Как описывать материалы..."
-                                    />
-                                </div>
-                            </div>
-                        </fieldset>
-
-                        <fieldset className="space-y-4 pt-4 border-t">
                             <legend className="text-base font-medium text-slate-800">Настройки формы акта</legend>
 
-                            <div>
-                                <label htmlFor="historyDepth" className={labelClass}>
-                                    Количество действий для отмены (History Undo/Redo)
-                                </label>
-                                <input
-                                    type="number"
-                                    id="historyDepth"
-                                    name="historyDepth"
-                                    value={formData.historyDepth ?? 20}
-                                    onChange={handleNumberChange}
-                                    className={inputClass}
-                                    min="1"
-                                    max="500"
-                                />
-                                <p className="text-xs text-slate-500 mt-1">Сколько последних изменений сохранять для возможности отмены (Ctrl+Z).</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label htmlFor="historyDepth" className={labelClass}>
+                                        Глубина истории (Undo/Redo)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        id="historyDepth"
+                                        name="historyDepth"
+                                        value={formData.historyDepth ?? 20}
+                                        onChange={handleNumberChange}
+                                        className={inputClass}
+                                        min="1"
+                                        max="500"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">Количество сохраняемых действий для отмены.</p>
+                                </div>
+                                
+                                <div>
+                                    <label htmlFor="registryThreshold" className={labelClass}>
+                                        Порог для реестра материалов
+                                    </label>
+                                    <input
+                                        type="number"
+                                        id="registryThreshold"
+                                        name="registryThreshold"
+                                        value={formData.registryThreshold ?? 5}
+                                        onChange={handleNumberChange}
+                                        className={inputClass}
+                                        min="1"
+                                        max="100"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">Если материалов в акте больше этого числа, будет создан отдельный файл реестра.</p>
+                                </div>
                             </div>
 
                             <SettingToggle id="showAdditionalInfo" label='Показывать поле "Дополнительные сведения"' formData={formData} handleChange={handleChange}>
@@ -286,9 +305,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         <VariableHelpTooltip />
                                     </label>
                                     <textarea id="defaultAdditionalInfo" name="defaultAdditionalInfo" value={formData.defaultAdditionalInfo || ''} onChange={handleChange} className={`${inputClass} text-sm`} rows={2} placeholder="Например: Работы выполнены в соответствии с..." />
-                                    <p className="text-xs text-slate-500 mt-1">
-                                        <strong className="text-amber-700">Внимание:</strong> при изменении других полей акта, это поле будет автоматически обновляться, перезаписывая ручной ввод.
-                                    </p>
                                 </div>
                             </SettingToggle>
 
@@ -299,9 +315,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         <VariableHelpTooltip />
                                     </label>
                                     <textarea id="defaultAttachments" name="defaultAttachments" value={formData.defaultAttachments || ''} onChange={handleChange} className={`${inputClass} text-sm`} rows={2} placeholder="Например: Исполнительные схемы: {certs}" />
-                                    <p className="text-xs text-slate-500 mt-1">
-                                        <strong className="text-amber-700">Внимание:</strong> при изменении других полей акта, это поле будет автоматически обновляться, перезаписывая ручной ввод.
-                                    </p>
                                 </div>
                             </SettingToggle>
 
@@ -329,27 +342,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         className={`${inputClass} text-sm`} 
                                         placeholder="По умолчанию: {workEndDate}" 
                                     />
-                                    <p className="text-xs text-slate-500 mt-1">
-                                        По умолчанию дата акта равна дате окончания работ.
-                                    </p>
                                 </div>
                             </SettingToggle>
                             
                             <SettingToggle id="showParticipantDetails" label='Показывать раздел "Реквизиты участников"' description="Этот раздел в модальном окне редактирования участников заполняется автоматически, его можно скрыть для экономии места." formData={formData} handleChange={handleChange}/>
 
                         </fieldset>
-                        
-                        <div className="flex justify-end items-center pt-4 gap-4">
-                            {isSaved && (
-                                <p className="text-green-600 text-sm transition-opacity duration-300">
-                                Настройки успешно сохранены!
-                                </p>
-                            )}
-                            <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700">
-                                Сохранить настройки
-                            </button>
-                        </div>
-                    </form>
+                    </div>
                 )}
 
                 {activeTab === 'data' && (
@@ -363,12 +362,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                             </p>
                             <div className="flex gap-3">
                                 <button 
+                                    type="button"
                                     onClick={onImport}
                                     className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
                                 >
                                     <ImportIcon className="w-4 h-4" /> Импорт данных
                                 </button>
                                 <button 
+                                    type="button"
                                     onClick={onExport}
                                     className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
                                 >
@@ -379,20 +380,22 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
 
                         <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
                             <h3 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
-                                <TemplateIcon className="w-5 h-5"/> Шаблон документа
+                                <TemplateIcon className="w-5 h-5"/> Шаблон Акта (Основной)
                             </h3>
                             <p className="text-sm text-slate-600 mb-4">
-                                Текущий шаблон используется для генерации всех актов. Вы можете заменить его или скачать текущую версию.
+                                Основной шаблон документа .docx. Используется для генерации актов.
                             </p>
                             <div className="flex gap-3">
                                 <button 
+                                    type="button"
                                     onClick={onChangeTemplate}
                                     className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
                                 >
                                     <TemplateIcon className="w-4 h-4" /> Сменить шаблон
                                 </button>
                                 <button 
-                                    onClick={onDownloadTemplate}
+                                    type="button"
+                                    onClick={() => onDownloadTemplate('main')}
                                     disabled={!isTemplateLoaded}
                                     className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
@@ -400,53 +403,161 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 </button>
                             </div>
                         </div>
+
+                        <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
+                            <h3 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+                                <TemplateIcon className="w-5 h-5"/> Шаблон Реестра Материалов
+                            </h3>
+                            <p className="text-sm text-slate-600 mb-4">
+                                Дополнительный шаблон (.docx) для списка материалов. Генерируется, если количество материалов в акте превышает {formData.registryThreshold} шт.
+                                <br/><span className="text-xs text-slate-500 italic">Примечание: Шаблон должен быть в формате Word с таблицей, а не Excel.</span>
+                            </p>
+                            <div className="flex gap-3 items-center">
+                                <input type="file" ref={registryInputRef} onChange={handleRegistryFileChange} className="hidden" accept=".docx" />
+                                
+                                {isRegistryTemplateLoaded ? (
+                                    <>
+                                        <button 
+                                            type="button"
+                                            onClick={() => registryInputRef.current?.click()}
+                                            className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
+                                        >
+                                            <TemplateIcon className="w-4 h-4" /> Заменить
+                                        </button>
+                                        <button 
+                                            type="button"
+                                            onClick={() => onDownloadTemplate('registry')}
+                                            className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
+                                        >
+                                            <DownloadIcon className="w-4 h-4" /> Скачать
+                                        </button>
+                                    </>
+                                ) : (
+                                    <button 
+                                        type="button"
+                                        onClick={() => registryInputRef.current?.click()}
+                                        className="flex items-center gap-2 bg-blue-600 text-white border border-blue-600 px-4 py-2 rounded-md hover:bg-blue-700 shadow-sm"
+                                    >
+                                        <CloudUploadIcon className="w-4 h-4" /> Загрузить шаблон реестра
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 )}
 
                 {activeTab === 'help' && (
-                    <div className="prose max-w-none text-slate-700 allow-text-selection">
-                        <p>Для генерации документов ваш .docx шаблон должен содержать теги-заполнители. Приложение заменит эти теги на данные из формы. Нажмите на любой тег ниже, чтобы скопировать его.</p>
-                        
-                        <h4 className="font-semibold mt-4">Основные теги</h4>
-                        <ul className="list-disc space-y-2 pl-5 mt-2">
-                            <li><CopyableTag tag="{object_name}" /> &mdash; Наименование объекта.</li>
-                            <li><CopyableTag tag="{act_number}" />, <CopyableTag tag="{act_day}" />, <CopyableTag tag="{act_month}" />, <CopyableTag tag="{act_year}" /></li>
-                            <li><CopyableTag tag="{builder_details}" />, <CopyableTag tag="{contractor_details}" />, <CopyableTag tag="{designer_details}" />, <CopyableTag tag="{work_performer}" /></li>
-                            <li><CopyableTag tag="{work_start_day}" />, <CopyableTag tag="{work_start_month}" />, <CopyableTag tag="{work_start_year}" /> &mdash; Дата начала работ.</li>
-                            <li><CopyableTag tag="{work_end_day}" />, <CopyableTag tag="{work_end_month}" />, <CopyableTag tag="{work_end_year}" /> &mdash; Дата окончания работ.</li>
-                            <li><CopyableTag tag="{regulations}" /> &mdash; Нормативные документы.</li>
-                            <li><CopyableTag tag="{next_work}" /> &mdash; Разрешается производство следующих работ.</li>
-                            <li><CopyableTag tag="{additional_info}" />, <CopyableTag tag="{copies_count}" />, <CopyableTag tag="{attachments}" /></li>
-                        </ul>
-                        
-                        <h4 className="font-semibold mt-6">Выполненные работы</h4>
-                        <ul className="list-disc space-y-2 pl-5 mt-2">
-                            <li><CopyableTag tag="{work_name}" /> &mdash; Наименование работ.</li>
-                            <li><CopyableTag tag="{project_docs}" /> &mdash; Проектная документация.</li>
-                            <li><CopyableTag tag="{materials}" /> &mdash; Примененные материалы.</li>
-                            <li><CopyableTag tag="{certs}" /> &mdash; Исполнительные схемы.</li>
-                        </ul>
-
-                        <h4 className="font-semibold mt-6">Представители (Комиссия)</h4>
-                        <div className="my-2 p-3 rounded-md bg-blue-50 border border-blue-200">
-                            <h5 className="font-semibold text-blue-800">✨ Важное обновление синтаксиса</h5>
-                            <p className="text-sm mt-1">Для вставки данных представителей теперь рекомендуется использовать синтаксис с подчеркиванием, например <CopyableTag tag="{tnz_name}" />. Этот формат более надежен.</p>
+                    <div className="flex flex-col h-full">
+                        <div className="flex space-x-1 border-b border-slate-200 mb-4 pb-1">
+                            <button
+                                type="button"
+                                onClick={() => setHelpSubTab('main')}
+                                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${helpSubTab === 'main' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                            >
+                                Шаблон Акта
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setHelpSubTab('registry')}
+                                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${helpSubTab === 'registry' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                            >
+                                Шаблон Реестра
+                            </button>
                         </div>
 
-                        <p className="mt-2">Используйте <strong>условные блоки</strong>, чтобы скрыть строки, если представитель не выбран. Для этого оберните нужный текст в теги <code>{`{#ключ}...{/ключ}`}</code>, где "ключ" - это код роли (например, <code>tnz</code>).</p>
+                        <div className="prose max-w-none text-slate-700 text-sm leading-relaxed pb-4">
+                            {helpSubTab === 'main' ? (
+                                <>
+                                    <p>Используйте эти теги в основном шаблоне акта (.docx). При наведении на тег появится подсказка.</p>
+                                    
+                                    <h4 className="font-semibold mt-4">Основные данные</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        <TagTooltip tag="{act_number}" description="Номер акта" />
+                                        <TagTooltip tag="{object_name}" description="Наименование объекта строительства" />
+                                        <TagTooltip tag="{act_day}" description="День подписания акта" />
+                                        <TagTooltip tag="{act_month}" description="Месяц подписания" />
+                                        <TagTooltip tag="{act_year}" description="Год подписания" />
+                                        <TagTooltip tag="{copies_count}" description="Количество экземпляров" />
+                                        <TagTooltip tag="{additional_info}" description="Дополнительные сведения" />
+                                    </div>
 
-                        <p className="mt-2 font-medium">Расшифровка ключей ролей:</p>
-                        <ul className="list-disc space-y-1 pl-5 text-sm">
-                            {Object.entries(ROLES).map(([key, label]) => (
-                                <li key={key}>
-                                    <code>{key}</code> - {label} (теги: <CopyableTag tag={`{${key}_name}`} />, <CopyableTag tag={`{${key}_position}`} />, <CopyableTag tag={`{${key}_org}`} />, <CopyableTag tag={`{${key}_auth_doc}`} />)
-                                </li>
-                            ))}
-                        </ul>
+                                    <h4 className="font-semibold mt-4">Организации</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        <TagTooltip tag="{builder_details}" description="Реквизиты Застройщика" />
+                                        <TagTooltip tag="{contractor_details}" description="Реквизиты Лица, осуществляющего строительство" />
+                                        <TagTooltip tag="{designer_details}" description="Реквизиты Проектировщика" />
+                                        <TagTooltip tag="{work_performer}" description="Реквизиты Лица, выполнившего работы" />
+                                    </div>
+
+                                    <h4 className="font-semibold mt-4">Работы и Даты</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        <TagTooltip tag="{work_name}" description="Наименование выполненных работ" />
+                                        <TagTooltip tag="{project_docs}" description="Проектная документация" />
+                                        <TagTooltip tag="{materials}" description="Примененные материалы (или ссылка на реестр)" />
+                                        <TagTooltip tag="{certs}" description="Документы о качестве/схемы" />
+                                        <TagTooltip tag="{regulations}" description="Нормативные документы" />
+                                        <TagTooltip tag="{next_work}" description="Разрешенные следующие работы" />
+                                        <TagTooltip tag="{work_start_day}" description="День начала работ" />
+                                        <TagTooltip tag="{work_end_day}" description="День окончания работ" />
+                                    </div>
+
+                                    <h4 className="font-semibold mt-4">Комиссия (Представители)</h4>
+                                    <p className="text-xs text-slate-500 mb-2">Используйте <code>{`{#tnz}...{/tnz}`}</code> для скрытия пустых полей.</p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                        {Object.entries(ROLES).map(([key, label]) => (
+                                            <div key={key} className="border p-2 rounded">
+                                                <div className="font-medium mb-1">{label} ({key})</div>
+                                                <TagTooltip tag={`{${key}_details}`} description={`Полная строка (Должность, ФИО, Приказ)`} />
+                                                <div className="mt-1 flex flex-wrap gap-1">
+                                                    <TagTooltip tag={`{${key}_name}`} description="ФИО" />
+                                                    <TagTooltip tag={`{${key}_position}`} description="Должность" />
+                                                    <TagTooltip tag={`{${key}_org}`} description="Организация" />
+                                                    <TagTooltip tag={`{${key}_auth_doc}`} description="Документ о полномочиях" />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <p>Используйте эти теги в шаблоне реестра (.docx). Обязательно создайте таблицу для списка материалов.</p>
+                                    
+                                    <h4 className="font-semibold mt-4">Шапка реестра</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        <TagTooltip tag="{act_number}" description="Номер акта, к которому относится реестр" />
+                                        <TagTooltip tag="{object_name}" description="Наименование объекта" />
+                                    </div>
+
+                                    <h4 className="font-semibold mt-4">Таблица материалов</h4>
+                                    <p className="text-xs text-slate-500 mb-2">
+                                        Вставьте эти теги внутри строки таблицы. DocGen автоматически размножит строку для каждого материала.
+                                    </p>
+                                    <div className="border p-3 rounded bg-slate-50">
+                                        <p className="font-mono text-sm mb-2">
+                                            {#materials_list} ... {/materials_list}
+                                        </p>
+                                        <div className="flex flex-wrap gap-2 ml-4">
+                                            <TagTooltip tag="{index}" description="Порядковый номер (1, 2, 3...)" />
+                                            <TagTooltip tag="{name}" description="Наименование материала и сертификата" />
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>
-        </div>
+
+            {/* Fixed Footer */}
+            <div className="flex-shrink-0 bg-white border-t border-slate-200 p-4 flex justify-end">
+                <button
+                    type="submit"
+                    className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 shadow-sm font-medium transition-colors"
+                >
+                    {isSaved ? 'Сохранено!' : 'Сохранить настройки'}
+                </button>
+            </div>
+        </form>
     );
 };
 

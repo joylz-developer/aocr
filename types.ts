@@ -138,6 +138,9 @@ export interface ProjectSettings {
     defaultActDate?: string;
     historyDepth?: number; // Number of undo steps to save
     
+    // Registry Settings
+    registryThreshold?: number; // Count of materials to trigger registry generation
+    
     // AI Prompts
     certificatePromptNumber?: string;
     certificatePromptDate?: string;
@@ -155,6 +158,7 @@ export interface ImportSettingsCategory {
 
 export interface ImportSettings {
     template: boolean;
+    registryTemplate?: boolean; // New import option
     projectSettings: boolean;
     acts: ImportSettingsCategory;
     people: ImportSettingsCategory;
@@ -167,6 +171,7 @@ export interface ImportSettings {
 
 export interface ExportSettings {
     template: boolean;
+    registryTemplate?: boolean; // New export option
     projectSettings: boolean;
     acts: boolean;
     people: boolean;
@@ -181,6 +186,7 @@ export interface ExportSettings {
 
 export interface ImportData {
     template?: string | null;
+    registryTemplate?: string | null; // New data field
     projectSettings?: ProjectSettings;
     acts?: Act[];
     people?: Person[];

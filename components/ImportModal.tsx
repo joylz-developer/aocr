@@ -16,6 +16,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
 
     const [settings, setSettings] = useState<ImportSettings>({
         template: data.template !== null && data.template !== undefined,
+        registryTemplate: data.registryTemplate !== null && data.registryTemplate !== undefined,
         projectSettings: data.projectSettings !== null && data.projectSettings !== undefined,
         acts: { import: !!data.acts?.length, mode: 'merge', selectedIds: data.acts?.map(i => i.id) },
         people: { import: !!data.people?.length, mode: 'merge', selectedIds: data.people?.map(i => i.id) },
@@ -27,6 +28,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
     
     const isDataPresent =
         (data.template !== null && data.template !== undefined) ||
+        (data.registryTemplate !== null && data.registryTemplate !== undefined) ||
         (data.projectSettings !== null && data.projectSettings !== undefined) ||
         (data.acts && data.acts.length > 0) ||
         (data.people && data.people.length > 0) ||
@@ -200,7 +202,22 @@ const ImportModal: React.FC<ImportModalProps> = ({ data, onClose, onImport }) =>
                                 className="h-5 w-5 form-checkbox-custom"
                             />
                             <label htmlFor="import-template" className="ml-3 text-lg font-semibold text-slate-800 cursor-pointer">
-                                Шаблон документа
+                                Шаблон документа (Акт)
+                            </label>
+                        </div>
+                    )}
+
+                    {data.registryTemplate !== undefined && data.registryTemplate !== null && (
+                        <div className="p-4 border rounded-md bg-slate-50 flex items-center">
+                            <input
+                                type="checkbox"
+                                id="import-registryTemplate"
+                                checked={settings.registryTemplate}
+                                onChange={(e) => setSettings(s => ({...s, registryTemplate: e.target.checked}))}
+                                className="h-5 w-5 form-checkbox-custom"
+                            />
+                            <label htmlFor="import-registryTemplate" className="ml-3 text-lg font-semibold text-slate-800 cursor-pointer">
+                                Шаблон реестра материалов
                             </label>
                         </div>
                     )}
