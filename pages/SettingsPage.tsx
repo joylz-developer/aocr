@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ProjectSettings, ROLES } from '../types';
-import { ImportIcon, ExportIcon, TemplateIcon, DownloadIcon } from '../components/Icons';
+import { ImportIcon, ExportIcon, TemplateIcon, DownloadIcon, DeleteIcon, CloudUploadIcon } from '../components/Icons';
 
 interface SettingsPageProps {
     settings: ProjectSettings;
@@ -11,6 +11,11 @@ interface SettingsPageProps {
     onChangeTemplate: () => void;
     onDownloadTemplate: () => void;
     isTemplateLoaded: boolean;
+    // Registry Props
+    isRegistryTemplateLoaded?: boolean;
+    onUploadRegistryTemplate?: (file: File) => void;
+    onDownloadRegistryTemplate?: () => void;
+    onDeleteRegistryTemplate?: () => void;
 }
 
 // Helper component for interactive tags in the help tab
@@ -108,7 +113,11 @@ const SettingToggle: React.FC<SettingToggleProps> = ({ id, label, description, c
 
 type SettingsTab = 'general' | 'data' | 'help';
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport, onExport, onChangeTemplate, onDownloadTemplate, isTemplateLoaded }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ 
+    settings, onSave, onImport, onExport, 
+    onChangeTemplate, onDownloadTemplate, isTemplateLoaded,
+    isRegistryTemplateLoaded, onUploadRegistryTemplate, onDownloadRegistryTemplate, onDeleteRegistryTemplate
+}) => {
     const [activeTab, setActiveTab] = useState<SettingsTab>('general');
     const [formData, setFormData] = useState<ProjectSettings>(settings);
     const [isSaved, setIsSaved] = useState(false);
@@ -140,38 +149,53 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
         setTimeout(() => setIsSaved(false), 3000);
     };
     
+    const handleRegistryFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (file && onUploadRegistryTemplate) {
+            onUploadRegistryTemplate(file);
+            event.target.value = ''; // Reset input
+        }
+    };
+    
     const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900";
     const labelClass = "block text-sm font-medium text-slate-700";
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col max-w-4xl mx-auto">
-            <h1 className="text-2xl font-bold text-slate-800 mb-6 flex-shrink-0">Настройки и Справка</h1>
-            
-            {/* Tabs */}
-            <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg mb-6 flex-shrink-0 self-start">
-                <button
-                    onClick={() => setActiveTab('general')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'general' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                    Общие настройки
-                </button>
-                <button
-                    onClick={() => setActiveTab('data')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'data' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                    Данные и Шаблон
-                </button>
-                <button
-                    onClick={() => setActiveTab('help')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'help' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                    Справка по тегам
-                </button>
+        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md h-full flex flex-col max-w-4xl mx-auto overflow-hidden">
+            {/* Header */}
+            <div className="p-6 pb-0 flex-shrink-0">
+                <h1 className="text-2xl font-bold text-slate-800 mb-6">Настройки и Справка</h1>
+                
+                {/* Tabs */}
+                <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg">
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab('general')}
+                        className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'general' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        Общие настройки
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab('data')}
+                        className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'data' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        Данные и Шаблон
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab('help')}
+                        className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'help' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        Справка по тегам
+                    </button>
+                </div>
             </div>
 
-            <div className="flex-grow overflow-y-auto pr-2">
+            {/* Content Area */}
+            <div className="flex-grow overflow-y-auto p-6">
                 {activeTab === 'general' && (
-                    <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="space-y-6">
                         <div>
                             <label htmlFor="objectName" className={labelClass}>
                                 Наименование объекта капитального строительства
@@ -206,6 +230,28 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 Ключ хранится локально в вашем браузере.
                             </p>
                         </div>
+
+                        <fieldset className="space-y-4 pt-4 border-t">
+                            <legend className="text-base font-medium text-slate-800">Автоматизация реестра материалов</legend>
+                            <SettingToggle id="enableMaterialRegistry" label="Генерировать отдельный реестр материалов" description="Если количество материалов превышает порог, будет создан дополнительный документ реестра." formData={formData} handleChange={handleChange}>
+                                {formData.enableMaterialRegistry && (
+                                    <div className="mt-2 pl-1">
+                                        <label htmlFor="materialRegistryThreshold" className="block text-xs font-medium text-slate-600 mb-1">
+                                            Порог срабатывания (кол-во материалов)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            id="materialRegistryThreshold"
+                                            name="materialRegistryThreshold"
+                                            value={formData.materialRegistryThreshold ?? 5}
+                                            onChange={handleNumberChange}
+                                            className="w-20 px-2 py-1 text-sm border border-slate-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                                            min="1"
+                                        />
+                                    </div>
+                                )}
+                            </SettingToggle>
+                        </fieldset>
 
                         <fieldset className="space-y-4 pt-4 border-t">
                             <legend className="text-base font-medium text-slate-800">Настройки ИИ (Сканирование сертификатов)</legend>
@@ -338,18 +384,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                             <SettingToggle id="showParticipantDetails" label='Показывать раздел "Реквизиты участников"' description="Этот раздел в модальном окне редактирования участников заполняется автоматически, его можно скрыть для экономии места." formData={formData} handleChange={handleChange}/>
 
                         </fieldset>
-                        
-                        <div className="flex justify-end items-center pt-4 gap-4">
-                            {isSaved && (
-                                <p className="text-green-600 text-sm transition-opacity duration-300">
-                                Настройки успешно сохранены!
-                                </p>
-                            )}
-                            <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700">
-                                Сохранить настройки
-                            </button>
-                        </div>
-                    </form>
+                    </div>
                 )}
 
                 {activeTab === 'data' && (
@@ -363,12 +398,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                             </p>
                             <div className="flex gap-3">
                                 <button 
+                                    type="button"
                                     onClick={onImport}
                                     className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
                                 >
                                     <ImportIcon className="w-4 h-4" /> Импорт данных
                                 </button>
                                 <button 
+                                    type="button"
                                     onClick={onExport}
                                     className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
                                 >
@@ -379,19 +416,21 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
 
                         <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
                             <h3 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
-                                <TemplateIcon className="w-5 h-5"/> Шаблон документа
+                                <TemplateIcon className="w-5 h-5"/> Основной шаблон (АОСР)
                             </h3>
                             <p className="text-sm text-slate-600 mb-4">
-                                Текущий шаблон используется для генерации всех актов. Вы можете заменить его или скачать текущую версию.
+                                Текущий шаблон используется для генерации всех актов.
                             </p>
                             <div className="flex gap-3">
                                 <button 
+                                    type="button"
                                     onClick={onChangeTemplate}
                                     className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
                                 >
                                     <TemplateIcon className="w-4 h-4" /> Сменить шаблон
                                 </button>
                                 <button 
+                                    type="button"
                                     onClick={onDownloadTemplate}
                                     disabled={!isTemplateLoaded}
                                     className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
@@ -400,11 +439,65 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 </button>
                             </div>
                         </div>
+
+                        {onUploadRegistryTemplate && (
+                            <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
+                                <h3 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+                                    <TemplateIcon className="w-5 h-5 text-violet-600"/> Реестр материалов (Шаблон)
+                                </h3>
+                                <p className="text-sm text-slate-600 mb-4">
+                                    Шаблон используется, если количество материалов превышает установленный порог.
+                                </p>
+                                <div className="flex flex-wrap gap-3">
+                                    <div className="relative">
+                                        <input
+                                            type="file"
+                                            id="registry-upload"
+                                            className="hidden"
+                                            accept=".docx"
+                                            onChange={handleRegistryFileChange}
+                                        />
+                                        <label 
+                                            htmlFor="registry-upload"
+                                            className="cursor-pointer flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
+                                        >
+                                            <CloudUploadIcon className="w-4 h-4" /> {isRegistryTemplateLoaded ? 'Заменить шаблон' : 'Загрузить шаблон'}
+                                        </label>
+                                    </div>
+                                    
+                                    <button 
+                                        type="button"
+                                        onClick={onDownloadRegistryTemplate}
+                                        disabled={!isRegistryTemplateLoaded}
+                                        className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <DownloadIcon className="w-4 h-4" /> Скачать
+                                    </button>
+
+                                    {isRegistryTemplateLoaded && onDeleteRegistryTemplate && (
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                if(confirm("Удалить шаблон реестра?")) onDeleteRegistryTemplate();
+                                            }}
+                                            className="flex items-center gap-2 bg-white text-red-600 border border-red-200 px-4 py-2 rounded-md hover:bg-red-50 shadow-sm"
+                                        >
+                                            <DeleteIcon className="w-4 h-4" /> Удалить
+                                        </button>
+                                    )}
+                                </div>
+                                {isRegistryTemplateLoaded ? (
+                                    <p className="text-xs text-green-600 mt-2 font-medium">✓ Шаблон загружен</p>
+                                ) : (
+                                    <p className="text-xs text-slate-400 mt-2">Шаблон не загружен (будет использоваться только АОСР)</p>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 
                 {activeTab === 'help' && (
-                    <div className="prose max-w-none text-slate-700 allow-text-selection">
+                    <div className="prose max-w-none text-slate-700 allow-text-selection pb-10">
                         <p>Для генерации документов ваш .docx шаблон должен содержать теги-заполнители. Приложение заменит эти теги на данные из формы. Нажмите на любой тег ниже, чтобы скопировать его.</p>
                         
                         <h4 className="font-semibold mt-4">Основные теги</h4>
@@ -427,6 +520,21 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                             <li><CopyableTag tag="{certs}" /> &mdash; Исполнительные схемы.</li>
                         </ul>
 
+                        <h4 className="font-semibold mt-6">Теги для Реестра материалов</h4>
+                        <p className="text-sm mb-2">Используйте этот блок в отдельном шаблоне реестра. Он должен находиться внутри строки таблицы, чтобы создать список строк.</p>
+                        <div className="bg-slate-100 p-3 rounded border border-slate-200 text-sm font-mono">
+                            {'Open Tag: '}<CopyableTag tag="{#materials_registry}" /><br/>
+                            {'...столбцы таблицы...'}<br/>
+                            {'Close Tag: '}<CopyableTag tag="{/materials_registry}" />
+                        </div>
+                        <ul className="list-disc space-y-2 pl-5 mt-2">
+                            <li><CopyableTag tag="{num}" /> &mdash; Порядковый номер (1, 2, 3...)</li>
+                            <li><CopyableTag tag="{name}" /> &mdash; Наименование материала</li>
+                            <li><CopyableTag tag="{doc}" /> &mdash; Документ о качестве (сертификат/паспорт)</li>
+                            <li><CopyableTag tag="{date}" /> &mdash; Дата документа</li>
+                            <li><CopyableTag tag="{count}" /> &mdash; Кол-во листов (по умолчанию пустое)</li>
+                        </ul>
+
                         <h4 className="font-semibold mt-6">Представители (Комиссия)</h4>
                         <div className="my-2 p-3 rounded-md bg-blue-50 border border-blue-200">
                             <h5 className="font-semibold text-blue-800">✨ Важное обновление синтаксиса</h5>
@@ -446,7 +554,21 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                     </div>
                 )}
             </div>
-        </div>
+
+            {/* Footer with Save Button - Fixed at bottom */}
+            {activeTab === 'general' && (
+                <div className="p-4 border-t border-slate-200 bg-white flex justify-end items-center gap-4 flex-shrink-0">
+                    {isSaved && (
+                        <p className="text-green-600 text-sm transition-opacity duration-300 font-medium">
+                        Настройки сохранены!
+                        </p>
+                    )}
+                    <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 shadow-md font-medium">
+                        Сохранить настройки
+                    </button>
+                </div>
+            )}
+        </form>
     );
 };
 

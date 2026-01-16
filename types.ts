@@ -142,6 +142,10 @@ export interface ProjectSettings {
     certificatePromptNumber?: string;
     certificatePromptDate?: string;
     certificatePromptMaterials?: string;
+
+    // Material Registry Settings
+    enableMaterialRegistry?: boolean;
+    materialRegistryThreshold?: number;
 }
 
 // Types for Import/Export feature
@@ -155,6 +159,7 @@ export interface ImportSettingsCategory {
 
 export interface ImportSettings {
     template: boolean;
+    registryTemplate?: boolean; // New
     projectSettings: boolean;
     acts: ImportSettingsCategory;
     people: ImportSettingsCategory;
@@ -167,6 +172,7 @@ export interface ImportSettings {
 
 export interface ExportSettings {
     template: boolean;
+    registryTemplate?: boolean; // New
     projectSettings: boolean;
     acts: boolean;
     people: boolean;
@@ -181,6 +187,7 @@ export interface ExportSettings {
 
 export interface ImportData {
     template?: string | null;
+    registryTemplate?: string | null; // New
     projectSettings?: ProjectSettings;
     acts?: Act[];
     people?: Person[];
