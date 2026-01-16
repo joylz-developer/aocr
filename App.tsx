@@ -641,69 +641,68 @@ const App: React.FC = () => {
 
                     // 2. Scan Certificates folders to reconstruct Certs
                     const reconstructedCerts: Certificate[] = [];
-                    // Using direct files iteration to avoid PizZip types limitation
+                    const certsRoot = zip.folder("certificates");
                     
-                    const certMap = new Map<string, { info?: any, files: CertificateFile[] }>();
+                    if (certsRoot) {
+                        const certMap = new Map<string, { info?: any, files: CertificateFile[] }>();
 
-                    Object.keys(zip.files).forEach((relativePath) => {
-                        if (!relativePath.startsWith("certificates/")) return;
-                        const fileEntry = zip.files[relativePath];
-                        if (fileEntry.dir) return; 
-                        
-                        // relativePath is like "certificates/FolderName/FileName"
-                        const parts = relativePath.split('/'); 
-                        if (parts.length < 3) return; // Must be inside a subfolder
-                        
-                        const folderName = parts[1];
-                        const fileName = parts.slice(2).join('/');
-                        
-                        if (!certMap.has(folderName)) {
-                            certMap.set(folderName, { files: [] });
-                        }
-                        const entry = certMap.get(folderName)!;
-
-                        if (fileName === 'info.json') {
-                            try {
-                                entry.info = JSON.parse(fileEntry.asText());
-                            } catch(err) { console.warn("Failed to parse info.json in " + folderName); }
-                        } else {
-                            // It's a binary file (image/pdf)
-                            const binary = fileEntry.asBinary();
-                            const b64 = binaryStringToBase64(binary);
+                        certsRoot.forEach((relativePath, fileEntry) => {
+                            if (fileEntry.dir) return; 
                             
-                            let mime = 'application/octet-stream';
-                            let type: 'pdf' | 'image' = 'image';
+                            const parts = relativePath.split('/'); 
+                            if (parts.length < 2) return;
                             
-                            if (fileName.toLowerCase().endsWith('.pdf')) {
-                                mime = 'application/pdf';
-                                type = 'pdf';
-                            } else if (fileName.toLowerCase().endsWith('.jpg') || fileName.toLowerCase().endsWith('.jpeg')) {
-                                mime = 'image/jpeg';
-                            } else if (fileName.toLowerCase().endsWith('.png')) {
-                                mime = 'image/png';
+                            const folderName = parts[0];
+                            const fileName = parts.slice(1).join('/');
+                            
+                            if (!certMap.has(folderName)) {
+                                certMap.set(folderName, { files: [] });
                             }
+                            const entry = certMap.get(folderName)!;
 
-                            entry.files.push({
-                                id: crypto.randomUUID(),
-                                name: fileName,
-                                type: type,
-                                data: `data:${mime};base64,${b64}`
-                            });
-                        }
-                    });
+                            if (fileName === 'info.json') {
+                                try {
+                                    entry.info = JSON.parse(fileEntry.asText());
+                                } catch(err) { console.warn("Failed to parse info.json in " + folderName); }
+                            } else {
+                                // It's a binary file (image/pdf)
+                                const binary = fileEntry.asBinary();
+                                const b64 = binaryStringToBase64(binary);
+                                
+                                let mime = 'application/octet-stream';
+                                let type: 'pdf' | 'image' = 'image';
+                                
+                                if (fileName.toLowerCase().endsWith('.pdf')) {
+                                    mime = 'application/pdf';
+                                    type = 'pdf';
+                                } else if (fileName.toLowerCase().endsWith('.jpg') || fileName.toLowerCase().endsWith('.jpeg')) {
+                                    mime = 'image/jpeg';
+                                } else if (fileName.toLowerCase().endsWith('.png')) {
+                                    mime = 'image/png';
+                                }
 
-                    // Convert Map to Certificate[]
-                    certMap.forEach((val) => {
-                        if (val.info) {
-                            reconstructedCerts.push({
-                                id: val.info.id || crypto.randomUUID(),
-                                number: val.info.number || '?',
-                                validUntil: val.info.validUntil || '',
-                                materials: Array.isArray(val.info.materials) ? val.info.materials : [],
-                                files: val.files
-                            });
-                        }
-                    });
+                                entry.files.push({
+                                    id: crypto.randomUUID(),
+                                    name: fileName,
+                                    type: type,
+                                    data: `data:${mime};base64,${b64}`
+                                });
+                            }
+                        });
+
+                        // Convert Map to Certificate[]
+                        certMap.forEach((val) => {
+                            if (val.info) {
+                                reconstructedCerts.push({
+                                    id: val.info.id || crypto.randomUUID(),
+                                    number: val.info.number || '?',
+                                    validUntil: val.info.validUntil || '',
+                                    materials: Array.isArray(val.info.materials) ? val.info.materials : [],
+                                    files: val.files
+                                });
+                            }
+                        });
+                    }
 
                     // Merge reconstructed certs into mainData
                     if (reconstructedCerts.length > 0) {
@@ -846,7 +845,6 @@ const App: React.FC = () => {
                             regulations={regulations}
                             certificates={certificates}
                             template={template}
-                            registryTemplate={registryTemplate}
                             settings={settings}
                             onSave={handleSaveAct} 
                             onMoveToTrash={handleMoveActsToTrash}

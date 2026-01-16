@@ -26,7 +26,6 @@ interface ActsTableProps {
     regulations: Regulation[];
     certificates?: Certificate[];
     template: string | null;
-    registryTemplate: string | null;
     settings: ProjectSettings;
     visibleColumns: Set<string>;
     columnOrder: string[];
@@ -271,7 +270,7 @@ const NextWorkPopover: React.FC<{
 
 
 // Main Table Component
-const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, certificates = [], template, registryTemplate, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, selectedCells, setSelectedCells, onSave, onRequestDelete, onReorderActs, setCurrentPage, createNewAct, onNavigateToCertificate }) => {
+const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, certificates = [], template, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, selectedCells, setSelectedCells, onSave, onRequestDelete, onReorderActs, setCurrentPage, createNewAct, onNavigateToCertificate }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [dateError, setDateError] = useState<string | null>(null);
@@ -1081,7 +1080,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         actToGenerate.nextWork = '';
                     }
                 }
-                generateDocument(template, registryTemplate, actToGenerate, people, settings);
+                generateDocument(template, actToGenerate, people);
             }
         });
     };

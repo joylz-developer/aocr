@@ -17,7 +17,6 @@ interface ActsPageProps {
     regulations: Regulation[];
     certificates: Certificate[];
     template: string | null;
-    registryTemplate: string | null;
     settings: ProjectSettings;
     onSave: (act: Act, insertAtIndex?: number) => void;
     onMoveToTrash: (ids: string[]) => void;
@@ -99,7 +98,7 @@ const ColumnPicker: React.FC<{
 };
 
 
-const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, regulations, certificates, template, registryTemplate, settings, onSave, onMoveToTrash, onPermanentlyDelete, onReorderActs, setCurrentPage, onUndo, onRedo, onNavigateToCertificate }) => {
+const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, regulations, certificates, template, settings, onSave, onMoveToTrash, onPermanentlyDelete, onReorderActs, setCurrentPage, onUndo, onRedo, onNavigateToCertificate }) => {
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
     const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
@@ -370,7 +369,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     regulations={regulations}
                     certificates={certificates}
                     template={template}
-                    registryTemplate={registryTemplate}
                     settings={settings}
                     visibleColumns={visibleColumns}
                     columnOrder={columnOrder}
