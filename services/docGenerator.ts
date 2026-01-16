@@ -117,11 +117,32 @@ export const generateDocument = (
             // --- Generate Two Documents (Act + Registry) zipped ---
             
             // 1. Generate Registry Doc
-            // Prepare registry data: simple list with index and name
+            // We use the same base data (reps, dates, etc) for the registry header/footer
+            const baseRegistryData = prepareDocData(act, people);
+            
             const registryData = {
-                act_number: act.number,
-                object_name: act.objectName,
-                materials_list: materialsList.map((m, i) => ({ index: i + 1, name: m }))
+                ...baseRegistryData, // Include all standard act fields (representatives, dates, object name)
+                materials_list: materialsList.map((m, i) => {
+                    // Try to parse "Material Name (Certificate Info)"
+                    // Pattern: Everything before the last open parenthesis is Name, everything inside is Cert.
+                    let name = m;
+                    let cert = '';
+                    
+                    const match = m.match(/^(.*)\s\((.*)\)[^)]*$/);
+                    if (match) {
+                        name = match[1].trim();
+                        cert = match[2].trim();
+                    }
+
+                    return { 
+                        index: i + 1, 
+                        name: m, // Full original string
+                        material_name: name, // Just the material name part
+                        cert_doc: cert, // Just the certificate part (if found in brackets)
+                        date: '', // Placeholder for manual entry in Word if needed
+                        amount: '' // Placeholder for quantity/sheets
+                    };
+                })
             };
             
             const registryBuffer = renderDoc(registryTemplateBase64, registryData);
@@ -132,9 +153,6 @@ export const generateDocument = (
             const actData = prepareDocData(act, people, referenceText);
             
             // Append registry to existing attachments text if possible, or ensure it's noted
-            // Check if user already uses {attachments} tag logic in App.tsx resolution. 
-            // Here act.attachments is already resolved string.
-            // We append to the string in data object.
             const existingAttachments = actData.attachments || '';
             actData.attachments = existingAttachments 
                 ? `${existingAttachments}\nПриложение №1: Реестр материалов.` 

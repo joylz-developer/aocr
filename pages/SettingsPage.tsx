@@ -522,24 +522,49 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 <>
                                     <p>Используйте эти теги в шаблоне реестра (.docx). Обязательно создайте таблицу для списка материалов.</p>
                                     
-                                    <h4 className="font-semibold mt-4">Шапка реестра</h4>
+                                    <h4 className="font-semibold mt-4">Шапка реестра (Общие данные)</h4>
                                     <div className="flex flex-wrap gap-2">
                                         <TagTooltip tag="{act_number}" description="Номер акта, к которому относится реестр" />
                                         <TagTooltip tag="{object_name}" description="Наименование объекта" />
+                                        <TagTooltip tag="{act_day}" description="День подписания акта" />
+                                        <TagTooltip tag="{act_month}" description="Месяц подписания" />
+                                        <TagTooltip tag="{act_year}" description="Год подписания" />
                                     </div>
 
                                     <h4 className="font-semibold mt-4">Таблица материалов</h4>
                                     <p className="text-xs text-slate-500 mb-2">
-                                        Вставьте эти теги внутри строки таблицы. DocGen автоматически размножит строку для каждого материала.
+                                        Вставьте эти теги внутри строки таблицы. При генерации строка будет размножена для каждого материала.
                                     </p>
-                                    <div className="border p-3 rounded bg-slate-50">
-                                        <p className="font-mono text-sm mb-2">
+                                    <div className="border p-3 rounded bg-slate-50 mb-4">
+                                        <p className="font-mono text-sm mb-2 text-slate-700">
                                             {'{#materials_list} ... {/materials_list}'}
                                         </p>
                                         <div className="flex flex-wrap gap-2 ml-4">
                                             <TagTooltip tag="{index}" description="Порядковый номер (1, 2, 3...)" />
-                                            <TagTooltip tag="{name}" description="Наименование материала и сертификата" />
+                                            <TagTooltip tag="{name}" description="Полная строка материала (как в акте)" />
+                                            <TagTooltip tag="{material_name}" description="Только наименование материала (до скобок)" />
+                                            <TagTooltip tag="{cert_doc}" description="Документ о качестве (текст внутри скобок)" />
+                                            <TagTooltip tag="{date}" description="Дата (пустая ячейка для ручного заполнения)" />
+                                            <TagTooltip tag="{amount}" description="Кол-во листов (пустая ячейка)" />
                                         </div>
+                                    </div>
+
+                                    <h4 className="font-semibold mt-4">Комиссия (Представители)</h4>
+                                    <p className="text-xs text-slate-500 mb-2">
+                                        Те же теги, что и в основном акте. Используйте их для блока подписей внизу реестра.
+                                    </p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                        {Object.entries(ROLES).map(([key, label]) => (
+                                            <div key={key} className="border p-2 rounded">
+                                                <div className="font-medium mb-1">{label} ({key})</div>
+                                                <TagTooltip tag={`{${key}_details}`} description={`Полная строка (Должность, ФИО, Приказ)`} />
+                                                <div className="mt-1 flex flex-wrap gap-1">
+                                                    <TagTooltip tag={`{${key}_name}`} description="ФИО" />
+                                                    <TagTooltip tag={`{${key}_position}`} description="Должность" />
+                                                    <TagTooltip tag={`{${key}_org}`} description="Организация" />
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 </>
                             )}
