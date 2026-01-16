@@ -1,5 +1,4 @@
-
-import { Act, Person, ProjectSettings } from '../types';
+import { Act, Person } from '../types';
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { saveAs } from 'file-saver';
@@ -16,74 +15,15 @@ function base64ToArrayBuffer(base64: string) {
     return bytes.buffer;
 }
 
-interface MaterialEntry {
-    num: number;
-    name: string;
-    doc: string;
-    date: string;
-    count: string;
-}
-
-const parseMaterialsForRegistry = (materialsString: string): MaterialEntry[] => {
-    if (!materialsString) return [];
-    
-    // Split by semicolon, filter empty
-    const items = materialsString.split(';').map(s => s.trim()).filter(Boolean);
-    
-    return items.map((item, index) => {
-        let name = item;
-        let doc = '-';
-        let date = '-';
-        
-        // Try to extract document info in parenthesis e.g. "Concrete (Cert No 1, Date)"
-        const match = item.match(/^(.*?)\s*\((.*?)\)$/);
-        if (match) {
-            name = match[1].trim();
-            const docInfo = match[2];
-            
-            // Try to extract date from docInfo
-            // Search for typical date format DD.MM.YYYY
-            const dateMatch = docInfo.match(/(\d{2}\.\d{2}\.\d{4})/);
-            if (dateMatch) {
-                date = dateMatch[1];
-                // Remove date from doc info to keep it clean, if desired, or keep it.
-                // Let's keep doc info as is but maybe without the date if it's at the end
-                doc = docInfo.trim();
-            } else {
-                doc = docInfo.trim();
-            }
-        }
-
-        return {
-            num: index + 1,
-            name: name,
-            doc: doc,
-            date: date,
-            count: '' // Default empty, user must fill or we can try to parse if format changes
-        };
-    });
-};
-
-const createDoc = (templateBase64: string, data: any) => {
-    const zip = new PizZip(base64ToArrayBuffer(templateBase64));
-    const doc = new Docxtemplater(zip, {
-        paragraphLoop: true,
-        linebreaks: true,
-        nullGetter: () => null, 
-    });
-    doc.render(data);
-    return doc.getZip().generate({ type: 'uint8array' });
-};
-
-export const generateDocument = (
-    templateBase64: string, 
-    act: Act, 
-    people: Person[], 
-    settings: ProjectSettings,
-    registryTemplateBase64?: string | null
-) => {
+export const generateDocument = (templateBase64: string, act: Act, people: Person[]) => {
     try {
-        // --- Prepare Data ---
+        const zip = new PizZip(base64ToArrayBuffer(templateBase64));
+        const doc = new Docxtemplater(zip, {
+            paragraphLoop: true,
+            linebreaks: true,
+            nullGetter: () => null, 
+        });
+
         const [actYear, actMonth, actDay] = act.date ? act.date.split('-') : ['', '', ''];
         const [workStartYear, workStartMonth, workStartDay] = act.workStartDate ? act.workStartDate.split('-') : ['', '', ''];
         const [workEndYear, workEndMonth, workEndDay] = act.workEndDate ? act.workEndDate.split('-') : ['', '', ''];
@@ -150,47 +90,14 @@ export const generateDocument = (
             }
         });
 
-        // --- Logic for Material Registry ---
-        let registryDoc: Uint8Array | null = null;
-        
-        if (settings.enableMaterialRegistry && registryTemplateBase64) {
-            const materialItems = parseMaterialsForRegistry(act.materials);
-            const threshold = settings.materialRegistryThreshold || 5;
-            
-            if (materialItems.length > threshold) {
-                // Populate data for registry
-                const registryData = {
-                    ...data, // Include all standard data just in case
-                    materials_registry: materialItems
-                };
-                try {
-                    registryDoc = createDoc(registryTemplateBase64, registryData);
-                } catch (regError) {
-                    console.error("Error creating registry doc:", regError);
-                    alert("Ошибка при генерации реестра материалов. Проверьте шаблон реестра.");
-                }
-            }
-        }
+        doc.render(data);
 
-        // --- Generate Main Document ---
-        const mainDoc = createDoc(templateBase64, data);
+        const out = doc.getZip().generate({
+            type: 'blob',
+            mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        });
 
-        // --- Output ---
-        const actName = `Акт_скрытых_работ_${act.number || 'б-н'}`;
-
-        if (registryDoc) {
-            // Create a ZIP containing both
-            const zip = new PizZip();
-            zip.file(`${actName}.docx`, mainDoc);
-            zip.file(`Реестр_материалов_${act.number || 'б-н'}.docx`, registryDoc);
-            
-            const content = zip.generate({ type: 'blob' });
-            saveAs(content, `${actName}_пакет.zip`);
-        } else {
-            // Standard single file download
-            const blob = new Blob([mainDoc], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-            saveAs(blob, `${actName}.docx`);
-        }
+        saveAs(out, `Акт_скрытых_работ_${act.number || 'б-н'}.docx`);
 
     } catch (error: any) {
         console.error('Error generating document:', error);
