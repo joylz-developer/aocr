@@ -168,6 +168,18 @@ export const LayoutListIcon: React.FC<{ className?: string }> = ({ className }) 
     </svg>
 );
 
+export const DensityMediumIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className || "w-5 h-5"} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+);
+
+export const DensityCompactIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className || "w-5 h-5"} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 5h16M4 9h16M4 13h16M4 17h16M4 21h16" />
+    </svg>
+);
+
 export const MinimizeIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg className={className || "w-5 h-5"} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path></svg>
 );
