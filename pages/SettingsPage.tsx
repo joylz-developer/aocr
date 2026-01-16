@@ -595,14 +595,26 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                                     <li><CopyableTag tag="{count}" /> &mdash; Кол-во листов (по умолчанию пустое поле)</li>
                                 </ul>
 
-                                <h4 className="font-semibold mt-6">Общие данные акта (доступны и в реестре)</h4>
-                                <p className="text-sm text-slate-600 mb-2">Вы также можете использовать эти теги в шапке или подвале реестра:</p>
-                                <div className="flex flex-wrap gap-2">
-                                    <CopyableTag tag="{object_name}" />
-                                    <CopyableTag tag="{act_number}" />
-                                    <CopyableTag tag="{act_date}" />
-                                    <CopyableTag tag="{work_name}" />
-                                </div>
+                                <h4 className="font-semibold mt-6">Общие данные акта</h4>
+                                <p className="text-sm text-slate-600 mb-2">Эти теги берутся из основного акта и доступны для использования в шапке или подвале реестра:</p>
+                                <ul className="list-disc space-y-2 pl-5 mt-2">
+                                    <li><CopyableTag tag="{object_name}" /> &mdash; Наименование объекта.</li>
+                                    <li><CopyableTag tag="{act_number}" /> &mdash; Номер акта.</li>
+                                    <li><CopyableTag tag="{act_day}" />, <CopyableTag tag="{act_month}" />, <CopyableTag tag="{act_year}" /> &mdash; Дата акта (день, месяц, год).</li>
+                                    <li><CopyableTag tag="{work_name}" /> &mdash; Наименование работ.</li>
+                                </ul>
+
+                                <h4 className="font-semibold mt-6">Представители (Комиссия)</h4>
+                                <p className="text-sm text-slate-600 mb-2">Используйте эти теги для блока подписей (аналогично основному акту):</p>
+                                
+                                <ul className="list-disc space-y-2 pl-5 text-sm mt-3">
+                                    {Object.entries(ROLES).map(([key, label]) => (
+                                        <li key={key} className="leading-relaxed">
+                                            <strong>{label}</strong> (код: <code>{key}</code>)<br/>
+                                            Теги: <CopyableTag tag={`{${key}_name}`} />, <CopyableTag tag={`{${key}_position}`} />, <CopyableTag tag={`{${key}_org}`} />, <CopyableTag tag={`{${key}_auth_doc}`} />
+                                        </li>
+                                    ))}
+                                </ul>
                             </>
                         )}
                     </div>
