@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ProjectSettings, ROLES } from '../types';
-import { ImportIcon, ExportIcon, TemplateIcon } from '../components/Icons';
+import { ImportIcon, ExportIcon, TemplateIcon, DownloadIcon } from '../components/Icons';
 
 interface SettingsPageProps {
     settings: ProjectSettings;
@@ -9,6 +9,7 @@ interface SettingsPageProps {
     onImport: () => void;
     onExport: () => void;
     onChangeTemplate: () => void;
+    onDownloadTemplate: () => void;
     isTemplateLoaded: boolean;
 }
 
@@ -107,7 +108,7 @@ const SettingToggle: React.FC<SettingToggleProps> = ({ id, label, description, c
 
 type SettingsTab = 'general' | 'data' | 'help';
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport, onExport, onChangeTemplate, isTemplateLoaded }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport, onExport, onChangeTemplate, onDownloadTemplate, isTemplateLoaded }) => {
     const [activeTab, setActiveTab] = useState<SettingsTab>('general');
     const [formData, setFormData] = useState<ProjectSettings>(settings);
     const [isSaved, setIsSaved] = useState(false);
@@ -358,7 +359,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 <ImportIcon className="w-5 h-5"/> Управление данными
                             </h3>
                             <p className="text-sm text-slate-600 mb-4">
-                                Вы можете сохранить резервную копию всех данных (акты, люди, настройки) в файл JSON или восстановить данные из файла.
+                                Вы можете сохранить резервную копию выбранных данных в файл JSON или восстановить данные из файла.
                             </p>
                             <div className="flex gap-3">
                                 <button 
@@ -369,8 +370,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 </button>
                                 <button 
                                     onClick={onExport}
-                                    disabled={!isTemplateLoaded}
-                                    className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
                                 >
                                     <ExportIcon className="w-4 h-4" /> Экспорт данных
                                 </button>
@@ -382,15 +382,23 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 <TemplateIcon className="w-5 h-5"/> Шаблон документа
                             </h3>
                             <p className="text-sm text-slate-600 mb-4">
-                                Текущий шаблон используется для генерации всех актов. Вы можете заменить его на новый файл .docx.
+                                Текущий шаблон используется для генерации всех актов. Вы можете заменить его или скачать текущую версию.
                             </p>
-                            <button 
-                                onClick={onChangeTemplate}
-                                disabled={!isTemplateLoaded}
-                                className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <TemplateIcon className="w-4 h-4" /> Сменить шаблон
-                            </button>
+                            <div className="flex gap-3">
+                                <button 
+                                    onClick={onChangeTemplate}
+                                    className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
+                                >
+                                    <TemplateIcon className="w-4 h-4" /> Сменить шаблон
+                                </button>
+                                <button 
+                                    onClick={onDownloadTemplate}
+                                    disabled={!isTemplateLoaded}
+                                    className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <DownloadIcon className="w-4 h-4" /> Скачать текущий
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}

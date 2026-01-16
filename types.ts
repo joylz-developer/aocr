@@ -165,6 +165,19 @@ export interface ImportSettings {
     deletedActs?: ImportSettingsCategory;
 }
 
+export interface ExportSettings {
+    template: boolean;
+    projectSettings: boolean;
+    acts: boolean;
+    people: boolean;
+    organizations: boolean;
+    groups: boolean;
+    regulations: boolean;
+    certificates: boolean;
+    deletedActs: boolean;
+    deletedCertificates: boolean;
+}
+
 
 export interface ImportData {
     template?: string | null;

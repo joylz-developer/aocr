@@ -1,9 +1,10 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry } from './types';
+import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry, ExportSettings } from './types';
 import TemplateUploader from './components/TemplateUploader';
 import ImportModal from './components/ImportModal';
+import ExportModal from './components/ExportModal';
 import ConfirmationModal from './components/ConfirmationModal';
 import RestoreGroupConfirmationModal from './components/RestoreGroupConfirmationModal';
 import ActsPage from './pages/ActsPage';
@@ -31,6 +32,23 @@ const fileToBase64 = (file: File): Promise<string> =>
         };
         reader.onerror = (error) => reject(error);
     });
+
+const base64ToBlob = (base64: string, mimeType: string = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'): Blob => {
+    const byteCharacters = atob(base64);
+    const byteArrays = [];
+
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+            byteNumbers[i] = slice.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+    }
+
+    return new Blob(byteArrays, { type: mimeType });
+};
 
 const DEFAULT_PROMPT_NUMBER = "Тип документа (обязательно укажи 'Паспорт качества', 'Сертификат соответствия' или другой тип) + Номер документа. Пример: 'Паспорт качества № 123'";
 const DEFAULT_PROMPT_DATE = "Дата выдачи/составления документа (НЕ дата окончания).";
@@ -74,6 +92,8 @@ const App: React.FC = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const importInputRef = useRef<HTMLInputElement>(null);
     const [importData, setImportData] = useState<ImportData | null>(null);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
     const [confirmation, setConfirmation] = useState<{
         title: string;
         message: React.ReactNode;
@@ -124,6 +144,20 @@ const App: React.FC = () => {
         } catch (error) {
             console.error("Error converting file to base64:", error);
             alert("Не удалось загрузить шаблон.");
+        }
+    };
+
+    const handleDownloadTemplate = () => {
+        if (!template) {
+            alert('Шаблон не загружен.');
+            return;
+        }
+        try {
+            const blob = base64ToBlob(template);
+            saveAs(blob, 'template.docx');
+        } catch (error) {
+            console.error('Error downloading template:', error);
+            alert('Ошибка при скачивании шаблона.');
         }
     };
 
@@ -461,24 +495,31 @@ const App: React.FC = () => {
         setSettings(newSettings);
     }, [setSettings]);
     
-    const handleExportData = () => {
+    const handleExportClick = () => {
+        setIsExportModalOpen(true);
+    };
+
+    const handleExecuteExport = (exportSettings: ExportSettings) => {
         try {
-            const dataToExport = {
-                template,
-                acts,
-                people,
-                organizations,
-                groups,
-                regulations,
-                certificates,
-                projectSettings: settings,
-                deletedActs,
-                deletedCertificates,
-            };
+            const dataToExport: any = {};
+
+            if (exportSettings.template) dataToExport.template = template;
+            if (exportSettings.projectSettings) dataToExport.projectSettings = settings;
+            if (exportSettings.acts) dataToExport.acts = acts;
+            if (exportSettings.people) dataToExport.people = people;
+            if (exportSettings.organizations) dataToExport.organizations = organizations;
+            if (exportSettings.groups) dataToExport.groups = groups;
+            if (exportSettings.regulations) dataToExport.regulations = regulations;
+            if (exportSettings.certificates) dataToExport.certificates = certificates;
+            if (exportSettings.deletedActs) dataToExport.deletedActs = deletedActs;
+            if (exportSettings.deletedCertificates) dataToExport.deletedCertificates = deletedCertificates;
+
             const jsonString = JSON.stringify(dataToExport, null, 2);
             const blob = new Blob([jsonString], { type: 'application/json' });
             const timestamp = new Date().toISOString().split('.')[0].replace('T', '_').replace(/:/g, '-');
             saveAs(blob, `docgen-ai-backup-${timestamp}.json`);
+            
+            setIsExportModalOpen(false);
         } catch (error) {
             console.error('Export error:', error);
             alert('Не удалось экспортировать данные.');
@@ -661,8 +702,9 @@ const App: React.FC = () => {
                             settings={settings} 
                             onSave={handleSaveSettings} 
                             onImport={handleImportClick}
-                            onExport={handleExportData}
+                            onExport={handleExportClick}
                             onChangeTemplate={handleChangeTemplate}
+                            onDownloadTemplate={handleDownloadTemplate}
                             isTemplateLoaded={!!template}
                         />;
             default:
@@ -700,6 +742,24 @@ const App: React.FC = () => {
                     data={importData}
                     onClose={() => setImportData(null)}
                     onImport={handleExecuteImport}
+                />
+            )}
+
+            {isExportModalOpen && (
+                <ExportModal
+                    onClose={() => setIsExportModalOpen(false)}
+                    onExport={handleExecuteExport}
+                    counts={{
+                        acts: acts.length,
+                        people: people.length,
+                        organizations: organizations.length,
+                        groups: groups.length,
+                        regulations: regulations.length,
+                        certificates: certificates.length,
+                        deletedActs: deletedActs.length,
+                        deletedCertificates: deletedCertificates.length,
+                        hasTemplate: !!template
+                    }}
                 />
             )}
 
