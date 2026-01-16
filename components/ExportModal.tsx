@@ -16,12 +16,14 @@ interface ExportModalProps {
         deletedActs: number;
         deletedCertificates: number;
         hasTemplate: boolean;
+        hasRegistryTemplate: boolean;
     };
 }
 
 const ExportModal: React.FC<ExportModalProps> = ({ onClose, onExport, counts }) => {
     const [settings, setSettings] = useState<ExportSettings>({
         template: counts.hasTemplate,
+        registryTemplate: counts.hasRegistryTemplate,
         projectSettings: true,
         acts: counts.acts > 0,
         people: counts.people > 0,
@@ -40,6 +42,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ onClose, onExport, counts }) 
     const handleSelectAll = (select: boolean) => {
         setSettings({
             template: select && counts.hasTemplate,
+            registryTemplate: select && counts.hasRegistryTemplate,
             projectSettings: select,
             acts: select && counts.acts > 0,
             people: select && counts.people > 0,
@@ -93,7 +96,8 @@ const ExportModal: React.FC<ExportModalProps> = ({ onClose, onExport, counts }) 
                 </div>
 
                 <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
-                    <OptionRow id="template" label="Шаблон документа (.docx)" disabled={!counts.hasTemplate} />
+                    <OptionRow id="template" label="Шаблон документа (Акт)" disabled={!counts.hasTemplate} />
+                    <OptionRow id="registryTemplate" label="Шаблон реестра материалов" disabled={!counts.hasRegistryTemplate} />
                     <OptionRow id="projectSettings" label="Настройки приложения" />
                     
                     <div className="border-t my-2"></div>

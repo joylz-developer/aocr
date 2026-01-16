@@ -1,4 +1,5 @@
-import { Act, Person } from '../types';
+
+import { Act, Person, ProjectSettings } from '../types';
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { saveAs } from 'file-saver';
@@ -15,89 +16,147 @@ function base64ToArrayBuffer(base64: string) {
     return bytes.buffer;
 }
 
-export const generateDocument = (templateBase64: string, act: Act, people: Person[]) => {
+// Function to generate data object for templates
+const prepareDocData = (act: Act, people: Person[], overrideMaterials?: string) => {
+    const [actYear, actMonth, actDay] = act.date ? act.date.split('-') : ['', '', ''];
+    const [workStartYear, workStartMonth, workStartDay] = act.workStartDate ? act.workStartDate.split('-') : ['', '', ''];
+    const [workEndYear, workEndMonth, workEndDay] = act.workEndDate ? act.workEndDate.split('-') : ['', '', ''];
+    
+    const data: { [key: string]: any } = {
+        // Header
+        object_name: act.objectName,
+        builder_details: act.builderDetails,
+        contractor_details: act.contractorDetails,
+        designer_details: act.designerDetails,
+        // Act info
+        act_number: act.number,
+        act_day: actDay,
+        act_month: actMonth,
+        act_year: actYear,
+        work_performer: act.workPerformer,
+        // Work details
+        work_name: act.workName,
+        project_docs: act.projectDocs,
+        materials: overrideMaterials !== undefined ? overrideMaterials : act.materials, // Use override if provided
+        certs: act.certs,
+        // Sections
+        work_start_day: workStartDay,
+        work_start_month: workStartMonth,
+        work_start_year: workStartYear,
+        work_end_day: workEndDay,
+        work_end_month: workEndMonth,
+        work_end_year: workEndYear,
+        regulations: act.regulations,
+        next_work: act.nextWork,
+        // Footer
+        additional_info: act.additionalInfo,
+        copies_count: act.copiesCount,
+        attachments: act.attachments,
+    };
+
+    // Add representatives data
+    ROLES_KEYS.forEach(roleKey => {
+        const personId = act.representatives[roleKey];
+        const person = people.find(p => p.id === personId);
+
+        if (person) {
+            const personData = {
+                name: person.name || '',
+                position: person.position || '',
+                org: person.organization || '',
+                auth_doc: person.authDoc || '',
+                details: `${person.position}, ${person.name}, ${person.authDoc || '(нет данных о документе)'}`
+            };
+            
+            data[roleKey] = personData;
+            data[`${roleKey}_name`] = personData.name;
+            data[`${roleKey}_position`] = personData.position;
+            data[`${roleKey}_org`] = personData.org;
+            data[`${roleKey}_auth_doc`] = personData.auth_doc;
+            data[`${roleKey}_details`] = personData.details;
+        } else {
+            data[roleKey] = null;
+            data[`${roleKey}_name`] = null;
+            data[`${roleKey}_position`] = null;
+            data[`${roleKey}_org`] = null;
+            data[`${roleKey}_auth_doc`] = null;
+            data[`${roleKey}_details`] = null;
+        }
+    });
+
+    return data;
+};
+
+const renderDoc = (templateBase64: string, data: any): ArrayBuffer => {
+    const zip = new PizZip(base64ToArrayBuffer(templateBase64));
+    const doc = new Docxtemplater(zip, {
+        paragraphLoop: true,
+        linebreaks: true,
+        nullGetter: () => null, 
+    });
+    doc.render(data);
+    return doc.getZip().generate({
+        type: 'arraybuffer',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+};
+
+export const generateDocument = (
+    templateBase64: string, 
+    registryTemplateBase64: string | null,
+    act: Act, 
+    people: Person[], 
+    settings: ProjectSettings
+) => {
     try {
-        const zip = new PizZip(base64ToArrayBuffer(templateBase64));
-        const doc = new Docxtemplater(zip, {
-            paragraphLoop: true,
-            linebreaks: true,
-            nullGetter: () => null, 
-        });
+        const materialsList = act.materials.split(';').map(s => s.trim()).filter(Boolean);
+        const threshold = settings.registryThreshold || 5;
+        const shouldUseRegistry = materialsList.length > threshold && registryTemplateBase64;
 
-        const [actYear, actMonth, actDay] = act.date ? act.date.split('-') : ['', '', ''];
-        const [workStartYear, workStartMonth, workStartDay] = act.workStartDate ? act.workStartDate.split('-') : ['', '', ''];
-        const [workEndYear, workEndMonth, workEndDay] = act.workEndDate ? act.workEndDate.split('-') : ['', '', ''];
-        
-        const data: { [key: string]: any } = {
-            // Header
-            object_name: act.objectName,
-            builder_details: act.builderDetails,
-            contractor_details: act.contractorDetails,
-            designer_details: act.designerDetails,
-            // Act info
-            act_number: act.number,
-            act_day: actDay,
-            act_month: actMonth,
-            act_year: actYear,
-            work_performer: act.workPerformer,
-            // Work details
-            work_name: act.workName,
-            project_docs: act.projectDocs,
-            materials: act.materials,
-            certs: act.certs,
-            // Sections
-            work_start_day: workStartDay,
-            work_start_month: workStartMonth,
-            work_start_year: workStartYear,
-            work_end_day: workEndDay,
-            work_end_month: workEndMonth,
-            work_end_year: workEndYear,
-            regulations: act.regulations,
-            next_work: act.nextWork,
-            // Footer
-            additional_info: act.additionalInfo,
-            copies_count: act.copiesCount,
-            attachments: act.attachments,
-        };
+        if (shouldUseRegistry) {
+            // --- Generate Two Documents (Act + Registry) zipped ---
+            
+            // 1. Generate Registry Doc
+            // Prepare registry data: simple list with index and name
+            const registryData = {
+                act_number: act.number,
+                object_name: act.objectName,
+                materials_list: materialsList.map((m, i) => ({ index: i + 1, name: m }))
+            };
+            
+            const registryBuffer = renderDoc(registryTemplateBase64, registryData);
 
-        // Add representatives data
-        ROLES_KEYS.forEach(roleKey => {
-            const personId = act.representatives[roleKey];
-            const person = people.find(p => p.id === personId);
+            // 2. Generate Main Act Doc
+            // Replace materials text with reference
+            const referenceText = `см. Приложение №1 (Реестр материалов)`;
+            const actData = prepareDocData(act, people, referenceText);
+            
+            // Append registry to existing attachments text if possible, or ensure it's noted
+            // Check if user already uses {attachments} tag logic in App.tsx resolution. 
+            // Here act.attachments is already resolved string.
+            // We append to the string in data object.
+            const existingAttachments = actData.attachments || '';
+            actData.attachments = existingAttachments 
+                ? `${existingAttachments}\nПриложение №1: Реестр материалов.` 
+                : `Приложение №1: Реестр материалов.`;
 
-            if (person) {
-                const personData = {
-                    name: person.name || '',
-                    position: person.position || '',
-                    org: person.organization || '',
-                    auth_doc: person.authDoc || '',
-                    details: `${person.position}, ${person.name}, ${person.authDoc || '(нет данных о документе)'}`
-                };
-                
-                data[roleKey] = personData;
-                data[`${roleKey}_name`] = personData.name;
-                data[`${roleKey}_position`] = personData.position;
-                data[`${roleKey}_org`] = personData.org;
-                data[`${roleKey}_auth_doc`] = personData.auth_doc;
-                data[`${roleKey}_details`] = personData.details;
-            } else {
-                data[roleKey] = null;
-                data[`${roleKey}_name`] = null;
-                data[`${roleKey}_position`] = null;
-                data[`${roleKey}_org`] = null;
-                data[`${roleKey}_auth_doc`] = null;
-                data[`${roleKey}_details`] = null;
-            }
-        });
+            const actBuffer = renderDoc(templateBase64, actData);
 
-        doc.render(data);
+            // 3. Zip them together
+            const packageZip = new PizZip();
+            packageZip.file(`Акт_№${act.number || 'б-н'}.docx`, actBuffer);
+            packageZip.file(`Приложение_1_Реестр_к_Акту_№${act.number || 'б-н'}.docx`, registryBuffer);
 
-        const out = doc.getZip().generate({
-            type: 'blob',
-            mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        });
+            const content = packageZip.generate({ type: "blob" });
+            saveAs(content, `Пакет_Акт_№${act.number || 'б-н'}.zip`);
 
-        saveAs(out, `Акт_скрытых_работ_${act.number || 'б-н'}.docx`);
+        } else {
+            // --- Generate Single Document ---
+            const data = prepareDocData(act, people);
+            const buffer = renderDoc(templateBase64, data);
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+            saveAs(blob, `Акт_скрытых_работ_${act.number || 'б-н'}.docx`);
+        }
 
     } catch (error: any) {
         console.error('Error generating document:', error);
