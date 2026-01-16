@@ -475,13 +475,23 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const performBulkUpdate = useCallback((modifiedActsMap: Map<string, Act>) => {
         if (modifiedActsMap.size === 0) return;
         
+        let hasChanges = false;
+
         const finalActs = acts.map(act => {
             if (modifiedActsMap.has(act.id)) {
-                return applyTemplatesToAct(modifiedActsMap.get(act.id)!);
+                const updatedAct = applyTemplatesToAct(modifiedActsMap.get(act.id)!);
+                // Check if content actually changed to avoid unnecessary history entries
+                if (JSON.stringify(act) !== JSON.stringify(updatedAct)) {
+                    hasChanges = true;
+                    return updatedAct;
+                }
             }
             return act;
         });
-        onReorderActs(finalActs);
+        
+        if (hasChanges) {
+            onReorderActs(finalActs);
+        }
     }, [acts, applyTemplatesToAct, onReorderActs]);
 
     const getOrgDetailsString = useCallback((org: Organization): string => {
