@@ -19,23 +19,33 @@ interface SettingsPageProps {
 }
 
 // Helper component for interactive tags in the help tab
-const CopyableTag: React.FC<{ tag: string }> = ({ tag }) => {
+const CopyableTag: React.FC<{ tag: string; description?: string }> = ({ tag, description }) => {
     const [copied, setCopied] = useState(false);
 
-    const handleCopy = () => {
+    const handleCopy = (e: React.MouseEvent) => {
+        e.stopPropagation();
         navigator.clipboard.writeText(tag);
         setCopied(true);
         setTimeout(() => setCopied(false), 1500); // Reset after 1.5 seconds
     };
 
     return (
-        <code
-            onClick={handleCopy}
-            className="bg-slate-200 text-blue-700 px-1.5 py-0.5 rounded-md cursor-pointer hover:bg-blue-200 transition-colors font-mono"
-            title="Нажмите, чтобы скопировать"
-        >
-            {copied ? 'Скопировано!' : tag}
-        </code>
+        <div className="relative inline-block group mr-1.5 align-middle">
+            <code
+                onClick={handleCopy}
+                className="bg-slate-200 text-blue-700 px-1.5 py-0.5 rounded-md cursor-pointer hover:bg-blue-200 transition-colors font-mono text-sm border border-slate-300 select-none whitespace-nowrap"
+                title={description ? undefined : "Нажмите, чтобы скопировать"}
+            >
+                {copied ? 'Скопировано!' : tag}
+            </code>
+            {description && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-[250px] px-3 py-2 bg-slate-800 text-white text-xs rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 text-center whitespace-normal leading-snug">
+                    {description}
+                    {/* Triangle Arrow */}
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                </div>
+            )}
+        </div>
     );
 };
 
@@ -530,27 +540,49 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                             <>
                                 <p className="mb-4 text-sm bg-blue-50 p-3 rounded-md border border-blue-100">
                                     Этот набор тегов используется для основного шаблона (формат .docx), который генерируется для каждого акта.
-                                    Нажмите на любой тег, чтобы скопировать его.
+                                    Наведите курсор на тег, чтобы увидеть описание. Нажмите, чтобы скопировать.
                                 </p>
                                 
                                 <h4 className="font-semibold mt-4">Основные теги</h4>
                                 <ul className="list-disc space-y-2 pl-5 mt-2">
-                                    <li><CopyableTag tag="{object_name}" /> &mdash; Наименование объекта.</li>
-                                    <li><CopyableTag tag="{act_number}" />, <CopyableTag tag="{act_day}" />, <CopyableTag tag="{act_month}" />, <CopyableTag tag="{act_year}" /></li>
-                                    <li><CopyableTag tag="{builder_details}" />, <CopyableTag tag="{contractor_details}" />, <CopyableTag tag="{designer_details}" />, <CopyableTag tag="{work_performer}" /></li>
-                                    <li><CopyableTag tag="{work_start_day}" />, <CopyableTag tag="{work_start_month}" />, <CopyableTag tag="{work_start_year}" /> &mdash; Дата начала работ.</li>
-                                    <li><CopyableTag tag="{work_end_day}" />, <CopyableTag tag="{work_end_month}" />, <CopyableTag tag="{work_end_year}" /> &mdash; Дата окончания работ.</li>
-                                    <li><CopyableTag tag="{regulations}" /> &mdash; Нормативные документы.</li>
-                                    <li><CopyableTag tag="{next_work}" /> &mdash; Разрешается производство следующих работ.</li>
-                                    <li><CopyableTag tag="{additional_info}" />, <CopyableTag tag="{copies_count}" />, <CopyableTag tag="{attachments}" /></li>
+                                    <li><CopyableTag tag="{object_name}" description="Полное наименование объекта строительства (из настроек)" /> &mdash; Наименование объекта.</li>
+                                    <li>
+                                        <CopyableTag tag="{act_number}" description="Номер текущего акта" />, 
+                                        <CopyableTag tag="{act_day}" description="День подписания (01-31)" />, 
+                                        <CopyableTag tag="{act_month}" description="Месяц подписания (01-12)" />, 
+                                        <CopyableTag tag="{act_year}" description="Год подписания (4 цифры)" />
+                                    </li>
+                                    <li>
+                                        <CopyableTag tag="{builder_details}" description="Реквизиты Застройщика" />, 
+                                        <CopyableTag tag="{contractor_details}" description="Реквизиты Лица, осуществляющего строительство" />, 
+                                        <CopyableTag tag="{designer_details}" description="Реквизиты Проектировщика" />, 
+                                        <CopyableTag tag="{work_performer}" description="Реквизиты Исполнителя работ" />
+                                    </li>
+                                    <li>
+                                        <CopyableTag tag="{work_start_day}" description="День начала работ" />, 
+                                        <CopyableTag tag="{work_start_month}" description="Месяц начала работ" />, 
+                                        <CopyableTag tag="{work_start_year}" description="Год начала работ" /> &mdash; Дата начала работ.
+                                    </li>
+                                    <li>
+                                        <CopyableTag tag="{work_end_day}" description="День окончания работ" />, 
+                                        <CopyableTag tag="{work_end_month}" description="Месяц окончания работ" />, 
+                                        <CopyableTag tag="{work_end_year}" description="Год окончания работ" /> &mdash; Дата окончания работ.
+                                    </li>
+                                    <li><CopyableTag tag="{regulations}" description="Перечень нормативных документов (СП, ГОСТ)" /> &mdash; Нормативные документы.</li>
+                                    <li><CopyableTag tag="{next_work}" description="Разрешенные последующие работы" /> &mdash; Разрешается производство следующих работ.</li>
+                                    <li>
+                                        <CopyableTag tag="{additional_info}" description="Дополнительные сведения из формы" />, 
+                                        <CopyableTag tag="{copies_count}" description="Количество экземпляров акта" />, 
+                                        <CopyableTag tag="{attachments}" description="Список приложений к акту" />
+                                    </li>
                                 </ul>
                                 
                                 <h4 className="font-semibold mt-6">Выполненные работы</h4>
                                 <ul className="list-disc space-y-2 pl-5 mt-2">
-                                    <li><CopyableTag tag="{work_name}" /> &mdash; Наименование работ.</li>
-                                    <li><CopyableTag tag="{project_docs}" /> &mdash; Проектная документация.</li>
-                                    <li><CopyableTag tag="{materials}" /> &mdash; Примененные материалы (одной строкой).</li>
-                                    <li><CopyableTag tag="{certs}" /> &mdash; Исполнительные схемы.</li>
+                                    <li><CopyableTag tag="{work_name}" description="Наименование скрытых работ" /> &mdash; Наименование работ.</li>
+                                    <li><CopyableTag tag="{project_docs}" description="Шифр проекта, номера чертежей" /> &mdash; Проектная документация.</li>
+                                    <li><CopyableTag tag="{materials}" description="Список материалов и документов (строкой)" /> &mdash; Примененные материалы (одной строкой).</li>
+                                    <li><CopyableTag tag="{certs}" description="Список исполнительных схем" /> &mdash; Исполнительные схемы.</li>
                                 </ul>
 
                                 <h4 className="font-semibold mt-6">Представители (Комиссия)</h4>
@@ -560,9 +592,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
                                 <ul className="list-disc space-y-2 pl-5 text-sm mt-3">
                                     {Object.entries(ROLES).map(([key, label]) => (
-                                        <li key={key} className="leading-relaxed">
+                                        <li key={key} className="leading-relaxed mb-2">
                                             <strong>{label}</strong> (код: <code>{key}</code>)<br/>
-                                            Теги: <CopyableTag tag={`{${key}_name}`} />, <CopyableTag tag={`{${key}_position}`} />, <CopyableTag tag={`{${key}_org}`} />, <CopyableTag tag={`{${key}_auth_doc}`} />
+                                            Теги: 
+                                            <CopyableTag tag={`{${key}_name}`} description={`ФИО представителя: ${label}`} />
+                                            <CopyableTag tag={`{${key}_position}`} description={`Должность представителя: ${label}`} />
+                                            <CopyableTag tag={`{${key}_org}`} description={`Организация представителя: ${label}`} />
+                                            <CopyableTag tag={`{${key}_auth_doc}`} description={`Приказ/Доверенность: ${label}`} />
                                         </li>
                                     ))}
                                 </ul>
@@ -580,28 +616,32 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                                     <h5 className="font-semibold text-slate-800 mb-2">Как создать таблицу в Word:</h5>
                                     <ol className="list-decimal list-inside text-sm text-slate-600 space-y-2">
                                         <li>Создайте таблицу в Word с нужным количеством столбцов (например: № п/п, Наименование, Документ, Дата, Кол-во).</li>
-                                        <li>В <strong>первую ячейку</strong> строки данных добавьте открывающий тег цикла: <CopyableTag tag="{#materials_registry}" /></li>
+                                        <li>В <strong>первую ячейку</strong> строки данных добавьте открывающий тег цикла: <CopyableTag tag="{#materials_registry}" description="Начало цикла списка материалов (ставить в первой ячейке строки)" /></li>
                                         <li>Заполните остальные ячейки тегами данных (см. ниже).</li>
-                                        <li>В <strong>последнюю ячейку</strong> той же строки добавьте закрывающий тег: <CopyableTag tag="{/materials_registry}" /></li>
+                                        <li>В <strong>последнюю ячейку</strong> той же строки добавьте закрывающий тег: <CopyableTag tag="{/materials_registry}" description="Конец цикла списка материалов (ставить в последней ячейке строки)" /></li>
                                     </ol>
                                 </div>
 
                                 <h4 className="font-semibold mt-4">Теги столбцов таблицы</h4>
                                 <ul className="list-disc space-y-2 pl-5 mt-2">
-                                    <li><CopyableTag tag="{num}" /> &mdash; Порядковый номер (1, 2, 3...)</li>
-                                    <li><CopyableTag tag="{name}" /> &mdash; Наименование материала (извлекается из акта)</li>
-                                    <li><CopyableTag tag="{doc}" /> &mdash; Документ о качестве (извлекается из скобок в названии материала)</li>
-                                    <li><CopyableTag tag="{date}" /> &mdash; Дата документа (если найдена)</li>
-                                    <li><CopyableTag tag="{count}" /> &mdash; Кол-во листов (по умолчанию пустое поле)</li>
+                                    <li><CopyableTag tag="{num}" description="Порядковый номер в списке (1, 2, 3...)" /> &mdash; Порядковый номер (1, 2, 3...)</li>
+                                    <li><CopyableTag tag="{name}" description="Название материала (без инфо о сертификате)" /> &mdash; Наименование материала (извлекается из акта)</li>
+                                    <li><CopyableTag tag="{doc}" description="Номер и тип документа о качестве" /> &mdash; Документ о качестве (извлекается из скобок в названии материала)</li>
+                                    <li><CopyableTag tag="{date}" description="Дата документа о качестве" /> &mdash; Дата документа (если найдена)</li>
+                                    <li><CopyableTag tag="{count}" description="Пустое поле для ввода количества" /> &mdash; Кол-во листов (по умолчанию пустое поле)</li>
                                 </ul>
 
                                 <h4 className="font-semibold mt-6">Общие данные акта</h4>
                                 <p className="text-sm text-slate-600 mb-2">Эти теги берутся из основного акта и доступны для использования в шапке или подвале реестра:</p>
                                 <ul className="list-disc space-y-2 pl-5 mt-2">
-                                    <li><CopyableTag tag="{object_name}" /> &mdash; Наименование объекта.</li>
-                                    <li><CopyableTag tag="{act_number}" /> &mdash; Номер акта.</li>
-                                    <li><CopyableTag tag="{act_day}" />, <CopyableTag tag="{act_month}" />, <CopyableTag tag="{act_year}" /> &mdash; Дата акта (день, месяц, год).</li>
-                                    <li><CopyableTag tag="{work_name}" /> &mdash; Наименование работ.</li>
+                                    <li><CopyableTag tag="{object_name}" description="Наименование объекта строительства" /> &mdash; Наименование объекта.</li>
+                                    <li><CopyableTag tag="{act_number}" description="Номер акта" /> &mdash; Номер акта.</li>
+                                    <li>
+                                        <CopyableTag tag="{act_day}" description="День акта" />, 
+                                        <CopyableTag tag="{act_month}" description="Месяц акта" />, 
+                                        <CopyableTag tag="{act_year}" description="Год акта" /> &mdash; Дата акта.
+                                    </li>
+                                    <li><CopyableTag tag="{work_name}" description="Наименование работ из акта" /> &mdash; Наименование работ.</li>
                                 </ul>
 
                                 <h4 className="font-semibold mt-6">Представители (Комиссия)</h4>
@@ -609,9 +649,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                                 
                                 <ul className="list-disc space-y-2 pl-5 text-sm mt-3">
                                     {Object.entries(ROLES).map(([key, label]) => (
-                                        <li key={key} className="leading-relaxed">
+                                        <li key={key} className="leading-relaxed mb-2">
                                             <strong>{label}</strong> (код: <code>{key}</code>)<br/>
-                                            Теги: <CopyableTag tag={`{${key}_name}`} />, <CopyableTag tag={`{${key}_position}`} />, <CopyableTag tag={`{${key}_org}`} />, <CopyableTag tag={`{${key}_auth_doc}`} />
+                                            Теги: 
+                                            <CopyableTag tag={`{${key}_name}`} description={`ФИО представителя: ${label}`} />
+                                            <CopyableTag tag={`{${key}_position}`} description={`Должность представителя: ${label}`} />
+                                            <CopyableTag tag={`{${key}_org}`} description={`Организация представителя: ${label}`} />
+                                            <CopyableTag tag={`{${key}_auth_doc}`} description={`Приказ/Доверенность: ${label}`} />
                                         </li>
                                     ))}
                                 </ul>
