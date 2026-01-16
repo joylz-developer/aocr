@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Page, Theme } from '../types';
-import { ChevronLeftIcon, ActsIcon, PeopleIcon, OrganizationsIcon, SettingsIcon, ImportIcon, ExportIcon, TemplateIcon, GroupsIcon, TrashIcon, BookIcon, CertificateIcon, SunIcon, MoonIcon, EyeIcon } from './Icons';
+import { ChevronLeftIcon, ActsIcon, PeopleIcon, OrganizationsIcon, SettingsIcon, GroupsIcon, TrashIcon, BookIcon, CertificateIcon, SunIcon, MoonIcon, EyeIcon } from './Icons';
 
 interface SidebarProps {
     isOpen: boolean;
@@ -10,9 +10,6 @@ interface SidebarProps {
     setCurrentPage: (page: Page) => void;
     isTemplateLoaded: boolean;
     trashCount: number;
-    onImport: () => void;
-    onExport: () => void;
-    onChangeTemplate: () => void;
     theme: Theme;
     onToggleTheme: () => void;
 }
@@ -54,7 +51,7 @@ const SidebarButton: React.FC<{
     );
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentPage, setCurrentPage, isTemplateLoaded, trashCount, onImport, onExport, onChangeTemplate, theme, onToggleTheme }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentPage, setCurrentPage, isTemplateLoaded, trashCount, theme, onToggleTheme }) => {
     const navItems = [
         { page: 'acts', label: 'Акты', icon: <ActsIcon className="w-5 h-5" /> },
         { page: 'people', label: 'Участники', icon: <PeopleIcon className="w-5 h-5" /> },
@@ -117,26 +114,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentPage, setCu
                     disabled={!isTemplateLoaded}
                     onClick={() => setCurrentPage('trash')}
                     badge={trashCount}
-                 />
-                 <SidebarButton
-                    icon={<ImportIcon className="w-5 h-5" />}
-                    label="Импорт"
-                    isOpen={isOpen}
-                    onClick={onImport}
-                 />
-                 <SidebarButton
-                    icon={<ExportIcon className="w-5 h-5" />}
-                    label="Экспорт"
-                    isOpen={isOpen}
-                    disabled={!isTemplateLoaded}
-                    onClick={onExport}
-                 />
-                 <SidebarButton
-                    icon={<TemplateIcon className="w-5 h-5" />}
-                    label="Сменить шаблон"
-                    isOpen={isOpen}
-                    disabled={!isTemplateLoaded}
-                    onClick={onChangeTemplate}
                  />
                  
                  <div className="my-1 border-t border-slate-100 pt-1"></div>

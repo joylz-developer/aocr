@@ -1,11 +1,37 @@
 
 import React, { useState, useEffect } from 'react';
-import { ProjectSettings } from '../types';
+import { ProjectSettings, ROLES } from '../types';
+import { ImportIcon, ExportIcon, TemplateIcon } from '../components/Icons';
 
 interface SettingsPageProps {
     settings: ProjectSettings;
     onSave: (settings: ProjectSettings) => void;
+    onImport: () => void;
+    onExport: () => void;
+    onChangeTemplate: () => void;
+    isTemplateLoaded: boolean;
 }
+
+// Helper component for interactive tags in the help tab
+const CopyableTag: React.FC<{ tag: string }> = ({ tag }) => {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(tag);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500); // Reset after 1.5 seconds
+    };
+
+    return (
+        <code
+            onClick={handleCopy}
+            className="bg-slate-200 text-blue-700 px-1.5 py-0.5 rounded-md cursor-pointer hover:bg-blue-200 transition-colors font-mono"
+            title="Нажмите, чтобы скопировать"
+        >
+            {copied ? 'Скопировано!' : tag}
+        </code>
+    );
+};
 
 const VariableHelpTooltip: React.FC = () => {
     const [isVisible, setIsVisible] = useState(false);
@@ -79,8 +105,10 @@ const SettingToggle: React.FC<SettingToggleProps> = ({ id, label, description, c
     </div>
 );
 
+type SettingsTab = 'general' | 'data' | 'help';
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport, onExport, onChangeTemplate, isTemplateLoaded }) => {
+    const [activeTab, setActiveTab] = useState<SettingsTab>('general');
     const [formData, setFormData] = useState<ProjectSettings>(settings);
     const [isSaved, setIsSaved] = useState(false);
 
@@ -115,187 +143,301 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave }) => {
     const labelClass = "block text-sm font-medium text-slate-700";
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md max-w-2xl mx-auto">
-            <h1 className="text-2xl font-bold text-slate-800 mb-6">Настройки проекта</h1>
-            <form onSubmit={handleSubmit} className="space-y-6">
-                <div>
-                    <label htmlFor="objectName" className={labelClass}>
-                        Наименование объекта капитального строительства
-                    </label>
-                    <textarea
-                        id="objectName"
-                        name="objectName"
-                        value={formData.objectName}
-                        onChange={handleChange}
-                        className={inputClass}
-                        rows={3}
-                        required
-                    />
-                    <p className="text-xs text-slate-500 mt-1">Это название будет автоматически подставляться во все новые акты.</p>
-                </div>
-                
-                 <div>
-                    <label htmlFor="geminiApiKey" className={labelClass}>
-                        Gemini API Key
-                    </label>
-                    <input
-                        type="password"
-                        id="geminiApiKey"
-                        name="geminiApiKey"
-                        value={formData.geminiApiKey || ''}
-                        onChange={handleChange}
-                        className={inputClass}
-                        placeholder="Введите ваш API ключ"
-                    />
-                     <p className="text-xs text-slate-500 mt-1">
-                        Получите ваш ключ в <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Google AI Studio</a>.
-                        Ключ хранится локально в вашем браузере.
-                    </p>
-                </div>
+        <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col max-w-4xl mx-auto">
+            <h1 className="text-2xl font-bold text-slate-800 mb-6 flex-shrink-0">Настройки и Справка</h1>
+            
+            {/* Tabs */}
+            <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg mb-6 flex-shrink-0 self-start">
+                <button
+                    onClick={() => setActiveTab('general')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'general' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                    Общие настройки
+                </button>
+                <button
+                    onClick={() => setActiveTab('data')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'data' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                    Данные и Шаблон
+                </button>
+                <button
+                    onClick={() => setActiveTab('help')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'help' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                    Справка по тегам
+                </button>
+            </div>
 
-                <fieldset className="space-y-4 pt-4 border-t">
-                    <legend className="text-base font-medium text-slate-800">Настройки ИИ (Сканирование сертификатов)</legend>
-                    <p className="text-xs text-slate-500 mb-4">Настройте, как ИИ должен искать информацию в документах. Пишите простым языком.</p>
-                    
-                    <div className="space-y-4">
+            <div className="flex-grow overflow-y-auto pr-2">
+                {activeTab === 'general' && (
+                    <form onSubmit={handleSubmit} className="space-y-6">
                         <div>
-                            <label htmlFor="certificatePromptNumber" className={labelClass}>
-                                Правило поиска Номера документа
+                            <label htmlFor="objectName" className={labelClass}>
+                                Наименование объекта капитального строительства
                             </label>
                             <textarea
-                                id="certificatePromptNumber"
-                                name="certificatePromptNumber"
-                                value={formData.certificatePromptNumber || ''}
+                                id="objectName"
+                                name="objectName"
+                                value={formData.objectName}
                                 onChange={handleChange}
-                                className={`${inputClass} text-sm`}
-                                rows={2}
-                                placeholder="Что искать в поле номера..."
-                            />
-                        </div>
-
-                        <div>
-                            <label htmlFor="certificatePromptDate" className={labelClass}>
-                                Правило поиска Даты документа
-                            </label>
-                            <textarea
-                                id="certificatePromptDate"
-                                name="certificatePromptDate"
-                                value={formData.certificatePromptDate || ''}
-                                onChange={handleChange}
-                                className={`${inputClass} text-sm`}
-                                rows={2}
-                                placeholder="Какую дату искать..."
-                            />
-                        </div>
-
-                        <div>
-                            <label htmlFor="certificatePromptMaterials" className={labelClass}>
-                                Правило поиска Материалов
-                            </label>
-                            <textarea
-                                id="certificatePromptMaterials"
-                                name="certificatePromptMaterials"
-                                value={formData.certificatePromptMaterials || ''}
-                                onChange={handleChange}
-                                className={`${inputClass} text-sm`}
+                                className={inputClass}
                                 rows={3}
-                                placeholder="Как описывать материалы..."
+                                required
                             />
+                            <p className="text-xs text-slate-500 mt-1">Это название будет автоматически подставляться во все новые акты.</p>
                         </div>
-                    </div>
-                </fieldset>
-
-                <fieldset className="space-y-4 pt-4 border-t">
-                    <legend className="text-base font-medium text-slate-800">Настройки формы акта</legend>
-
-                    <div>
-                        <label htmlFor="historyDepth" className={labelClass}>
-                            Количество действий для отмены (History Undo/Redo)
-                        </label>
-                        <input
-                            type="number"
-                            id="historyDepth"
-                            name="historyDepth"
-                            value={formData.historyDepth ?? 20}
-                            onChange={handleNumberChange}
-                            className={inputClass}
-                            min="1"
-                            max="500"
-                        />
-                        <p className="text-xs text-slate-500 mt-1">Сколько последних изменений сохранять для возможности отмены (Ctrl+Z).</p>
-                    </div>
-
-                    <SettingToggle id="showAdditionalInfo" label='Показывать поле "Дополнительные сведения"' formData={formData} handleChange={handleChange}>
-                        <div className="mt-2">
-                            <label htmlFor="defaultAdditionalInfo" className="flex items-center text-xs font-medium text-slate-600 mb-1">
-                                <span>Значение по умолчанию</span>
-                                <VariableHelpTooltip />
+                        
+                        <div>
+                            <label htmlFor="geminiApiKey" className={labelClass}>
+                                Gemini API Key
                             </label>
-                            <textarea id="defaultAdditionalInfo" name="defaultAdditionalInfo" value={formData.defaultAdditionalInfo || ''} onChange={handleChange} className={`${inputClass} text-sm`} rows={2} placeholder="Например: Работы выполнены в соответствии с..." />
-                            <p className="text-xs text-slate-500 mt-1">
-                                <strong className="text-amber-700">Внимание:</strong> при изменении других полей акта, это поле будет автоматически обновляться, перезаписывая ручной ввод.
-                            </p>
-                        </div>
-                    </SettingToggle>
-
-                    <SettingToggle id="showAttachments" label='Показывать поле "Приложения"' formData={formData} handleChange={handleChange}>
-                         <div className="mt-2">
-                            <label htmlFor="defaultAttachments" className="flex items-center text-xs font-medium text-slate-600 mb-1">
-                                <span>Значение по умолчанию</span>
-                                <VariableHelpTooltip />
-                            </label>
-                            <textarea id="defaultAttachments" name="defaultAttachments" value={formData.defaultAttachments || ''} onChange={handleChange} className={`${inputClass} text-sm`} rows={2} placeholder="Например: Исполнительные схемы: {certs}" />
-                             <p className="text-xs text-slate-500 mt-1">
-                                <strong className="text-amber-700">Внимание:</strong> при изменении других полей акта, это поле будет автоматически обновляться, перезаписывая ручной ввод.
-                            </p>
-                        </div>
-                    </SettingToggle>
-
-                    <SettingToggle id="showCopiesCount" label='Показывать поле "Количество экземпляров"' formData={formData} handleChange={handleChange}>
-                        <div className="mt-2">
-                            <label htmlFor="defaultCopiesCount" className="block text-xs font-medium text-slate-600 mb-1">
-                                Количество экземпляров по умолчанию
-                            </label>
-                            <input type="number" id="defaultCopiesCount" name="defaultCopiesCount" value={formData.defaultCopiesCount} onChange={handleNumberChange} className={inputClass} min="1" required />
-                        </div>
-                    </SettingToggle>
-                    
-                    <SettingToggle id="showActDate" label='Показывать поле "Дата акта"' description="Полезно, если нужно вручную корректировать дату." formData={formData} handleChange={handleChange}>
-                        <div className="mt-2">
-                             <label htmlFor="defaultActDate" className="flex items-center text-xs font-medium text-slate-600 mb-1">
-                                <span>Значение по умолчанию</span>
-                                <VariableHelpTooltip />
-                            </label>
-                            <input 
-                                type="text" 
-                                id="defaultActDate" 
-                                name="defaultActDate" 
-                                value={formData.defaultActDate || ''} 
-                                onChange={handleChange} 
-                                className={`${inputClass} text-sm`} 
-                                placeholder="По умолчанию: {workEndDate}" 
+                            <input
+                                type="password"
+                                id="geminiApiKey"
+                                name="geminiApiKey"
+                                value={formData.geminiApiKey || ''}
+                                onChange={handleChange}
+                                className={inputClass}
+                                placeholder="Введите ваш API ключ"
                             />
                             <p className="text-xs text-slate-500 mt-1">
-                                По умолчанию дата акта равна дате окончания работ.
+                                Получите ваш ключ в <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Google AI Studio</a>.
+                                Ключ хранится локально в вашем браузере.
                             </p>
                         </div>
-                    </SettingToggle>
-                       
-                    <SettingToggle id="showParticipantDetails" label='Показывать раздел "Реквизиты участников"' description="Этот раздел в модальном окне редактирования участников заполняется автоматически, его можно скрыть для экономии места." formData={formData} handleChange={handleChange}/>
 
-                </fieldset>
-                
-                <div className="flex justify-end items-center pt-4 gap-4">
-                    {isSaved && (
-                        <p className="text-green-600 text-sm transition-opacity duration-300">
-                           Настройки успешно сохранены!
-                        </p>
-                     )}
-                     <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700">
-                        Сохранить настройки
-                    </button>
-                </div>
-            </form>
+                        <fieldset className="space-y-4 pt-4 border-t">
+                            <legend className="text-base font-medium text-slate-800">Настройки ИИ (Сканирование сертификатов)</legend>
+                            <p className="text-xs text-slate-500 mb-4">Настройте, как ИИ должен искать информацию в документах. Пишите простым языком.</p>
+                            
+                            <div className="space-y-4">
+                                <div>
+                                    <label htmlFor="certificatePromptNumber" className={labelClass}>
+                                        Правило поиска Номера документа
+                                    </label>
+                                    <textarea
+                                        id="certificatePromptNumber"
+                                        name="certificatePromptNumber"
+                                        value={formData.certificatePromptNumber || ''}
+                                        onChange={handleChange}
+                                        className={`${inputClass} text-sm`}
+                                        rows={2}
+                                        placeholder="Что искать в поле номера..."
+                                    />
+                                </div>
+
+                                <div>
+                                    <label htmlFor="certificatePromptDate" className={labelClass}>
+                                        Правило поиска Даты документа
+                                    </label>
+                                    <textarea
+                                        id="certificatePromptDate"
+                                        name="certificatePromptDate"
+                                        value={formData.certificatePromptDate || ''}
+                                        onChange={handleChange}
+                                        className={`${inputClass} text-sm`}
+                                        rows={2}
+                                        placeholder="Какую дату искать..."
+                                    />
+                                </div>
+
+                                <div>
+                                    <label htmlFor="certificatePromptMaterials" className={labelClass}>
+                                        Правило поиска Материалов
+                                    </label>
+                                    <textarea
+                                        id="certificatePromptMaterials"
+                                        name="certificatePromptMaterials"
+                                        value={formData.certificatePromptMaterials || ''}
+                                        onChange={handleChange}
+                                        className={`${inputClass} text-sm`}
+                                        rows={3}
+                                        placeholder="Как описывать материалы..."
+                                    />
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <fieldset className="space-y-4 pt-4 border-t">
+                            <legend className="text-base font-medium text-slate-800">Настройки формы акта</legend>
+
+                            <div>
+                                <label htmlFor="historyDepth" className={labelClass}>
+                                    Количество действий для отмены (History Undo/Redo)
+                                </label>
+                                <input
+                                    type="number"
+                                    id="historyDepth"
+                                    name="historyDepth"
+                                    value={formData.historyDepth ?? 20}
+                                    onChange={handleNumberChange}
+                                    className={inputClass}
+                                    min="1"
+                                    max="500"
+                                />
+                                <p className="text-xs text-slate-500 mt-1">Сколько последних изменений сохранять для возможности отмены (Ctrl+Z).</p>
+                            </div>
+
+                            <SettingToggle id="showAdditionalInfo" label='Показывать поле "Дополнительные сведения"' formData={formData} handleChange={handleChange}>
+                                <div className="mt-2">
+                                    <label htmlFor="defaultAdditionalInfo" className="flex items-center text-xs font-medium text-slate-600 mb-1">
+                                        <span>Значение по умолчанию</span>
+                                        <VariableHelpTooltip />
+                                    </label>
+                                    <textarea id="defaultAdditionalInfo" name="defaultAdditionalInfo" value={formData.defaultAdditionalInfo || ''} onChange={handleChange} className={`${inputClass} text-sm`} rows={2} placeholder="Например: Работы выполнены в соответствии с..." />
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        <strong className="text-amber-700">Внимание:</strong> при изменении других полей акта, это поле будет автоматически обновляться, перезаписывая ручной ввод.
+                                    </p>
+                                </div>
+                            </SettingToggle>
+
+                            <SettingToggle id="showAttachments" label='Показывать поле "Приложения"' formData={formData} handleChange={handleChange}>
+                                <div className="mt-2">
+                                    <label htmlFor="defaultAttachments" className="flex items-center text-xs font-medium text-slate-600 mb-1">
+                                        <span>Значение по умолчанию</span>
+                                        <VariableHelpTooltip />
+                                    </label>
+                                    <textarea id="defaultAttachments" name="defaultAttachments" value={formData.defaultAttachments || ''} onChange={handleChange} className={`${inputClass} text-sm`} rows={2} placeholder="Например: Исполнительные схемы: {certs}" />
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        <strong className="text-amber-700">Внимание:</strong> при изменении других полей акта, это поле будет автоматически обновляться, перезаписывая ручной ввод.
+                                    </p>
+                                </div>
+                            </SettingToggle>
+
+                            <SettingToggle id="showCopiesCount" label='Показывать поле "Количество экземпляров"' formData={formData} handleChange={handleChange}>
+                                <div className="mt-2">
+                                    <label htmlFor="defaultCopiesCount" className="block text-xs font-medium text-slate-600 mb-1">
+                                        Количество экземпляров по умолчанию
+                                    </label>
+                                    <input type="number" id="defaultCopiesCount" name="defaultCopiesCount" value={formData.defaultCopiesCount} onChange={handleNumberChange} className={inputClass} min="1" required />
+                                </div>
+                            </SettingToggle>
+                            
+                            <SettingToggle id="showActDate" label='Показывать поле "Дата акта"' description="Полезно, если нужно вручную корректировать дату." formData={formData} handleChange={handleChange}>
+                                <div className="mt-2">
+                                    <label htmlFor="defaultActDate" className="flex items-center text-xs font-medium text-slate-600 mb-1">
+                                        <span>Значение по умолчанию</span>
+                                        <VariableHelpTooltip />
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        id="defaultActDate" 
+                                        name="defaultActDate" 
+                                        value={formData.defaultActDate || ''} 
+                                        onChange={handleChange} 
+                                        className={`${inputClass} text-sm`} 
+                                        placeholder="По умолчанию: {workEndDate}" 
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        По умолчанию дата акта равна дате окончания работ.
+                                    </p>
+                                </div>
+                            </SettingToggle>
+                            
+                            <SettingToggle id="showParticipantDetails" label='Показывать раздел "Реквизиты участников"' description="Этот раздел в модальном окне редактирования участников заполняется автоматически, его можно скрыть для экономии места." formData={formData} handleChange={handleChange}/>
+
+                        </fieldset>
+                        
+                        <div className="flex justify-end items-center pt-4 gap-4">
+                            {isSaved && (
+                                <p className="text-green-600 text-sm transition-opacity duration-300">
+                                Настройки успешно сохранены!
+                                </p>
+                            )}
+                            <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700">
+                                Сохранить настройки
+                            </button>
+                        </div>
+                    </form>
+                )}
+
+                {activeTab === 'data' && (
+                    <div className="space-y-6">
+                        <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
+                            <h3 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+                                <ImportIcon className="w-5 h-5"/> Управление данными
+                            </h3>
+                            <p className="text-sm text-slate-600 mb-4">
+                                Вы можете сохранить резервную копию всех данных (акты, люди, настройки) в файл JSON или восстановить данные из файла.
+                            </p>
+                            <div className="flex gap-3">
+                                <button 
+                                    onClick={onImport}
+                                    className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
+                                >
+                                    <ImportIcon className="w-4 h-4" /> Импорт данных
+                                </button>
+                                <button 
+                                    onClick={onExport}
+                                    disabled={!isTemplateLoaded}
+                                    className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <ExportIcon className="w-4 h-4" /> Экспорт данных
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
+                            <h3 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+                                <TemplateIcon className="w-5 h-5"/> Шаблон документа
+                            </h3>
+                            <p className="text-sm text-slate-600 mb-4">
+                                Текущий шаблон используется для генерации всех актов. Вы можете заменить его на новый файл .docx.
+                            </p>
+                            <button 
+                                onClick={onChangeTemplate}
+                                disabled={!isTemplateLoaded}
+                                className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <TemplateIcon className="w-4 h-4" /> Сменить шаблон
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'help' && (
+                    <div className="prose max-w-none text-slate-700 allow-text-selection">
+                        <p>Для генерации документов ваш .docx шаблон должен содержать теги-заполнители. Приложение заменит эти теги на данные из формы. Нажмите на любой тег ниже, чтобы скопировать его.</p>
+                        
+                        <h4 className="font-semibold mt-4">Основные теги</h4>
+                        <ul className="list-disc space-y-2 pl-5 mt-2">
+                            <li><CopyableTag tag="{object_name}" /> &mdash; Наименование объекта.</li>
+                            <li><CopyableTag tag="{act_number}" />, <CopyableTag tag="{act_day}" />, <CopyableTag tag="{act_month}" />, <CopyableTag tag="{act_year}" /></li>
+                            <li><CopyableTag tag="{builder_details}" />, <CopyableTag tag="{contractor_details}" />, <CopyableTag tag="{designer_details}" />, <CopyableTag tag="{work_performer}" /></li>
+                            <li><CopyableTag tag="{work_start_day}" />, <CopyableTag tag="{work_start_month}" />, <CopyableTag tag="{work_start_year}" /> &mdash; Дата начала работ.</li>
+                            <li><CopyableTag tag="{work_end_day}" />, <CopyableTag tag="{work_end_month}" />, <CopyableTag tag="{work_end_year}" /> &mdash; Дата окончания работ.</li>
+                            <li><CopyableTag tag="{regulations}" /> &mdash; Нормативные документы.</li>
+                            <li><CopyableTag tag="{next_work}" /> &mdash; Разрешается производство следующих работ.</li>
+                            <li><CopyableTag tag="{additional_info}" />, <CopyableTag tag="{copies_count}" />, <CopyableTag tag="{attachments}" /></li>
+                        </ul>
+                        
+                        <h4 className="font-semibold mt-6">Выполненные работы</h4>
+                        <ul className="list-disc space-y-2 pl-5 mt-2">
+                            <li><CopyableTag tag="{work_name}" /> &mdash; Наименование работ.</li>
+                            <li><CopyableTag tag="{project_docs}" /> &mdash; Проектная документация.</li>
+                            <li><CopyableTag tag="{materials}" /> &mdash; Примененные материалы.</li>
+                            <li><CopyableTag tag="{certs}" /> &mdash; Исполнительные схемы.</li>
+                        </ul>
+
+                        <h4 className="font-semibold mt-6">Представители (Комиссия)</h4>
+                        <div className="my-2 p-3 rounded-md bg-blue-50 border border-blue-200">
+                            <h5 className="font-semibold text-blue-800">✨ Важное обновление синтаксиса</h5>
+                            <p className="text-sm mt-1">Для вставки данных представителей теперь рекомендуется использовать синтаксис с подчеркиванием, например <CopyableTag tag="{tnz_name}" />. Этот формат более надежен.</p>
+                        </div>
+
+                        <p className="mt-2">Используйте <strong>условные блоки</strong>, чтобы скрыть строки, если представитель не выбран. Для этого оберните нужный текст в теги <code>{`{#ключ}...{/ключ}`}</code>, где "ключ" - это код роли (например, <code>tnz</code>).</p>
+
+                        <p className="mt-2 font-medium">Расшифровка ключей ролей:</p>
+                        <ul className="list-disc space-y-1 pl-5 text-sm">
+                            {Object.entries(ROLES).map(([key, label]) => (
+                                <li key={key}>
+                                    <code>{key}</code> - {label} (теги: <CopyableTag tag={`{${key}_name}`} />, <CopyableTag tag={`{${key}_position}`} />, <CopyableTag tag={`{${key}_org}`} />, <CopyableTag tag={`{${key}_auth_doc}`} />)
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };

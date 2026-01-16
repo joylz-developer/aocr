@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation, Certificate } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import Modal from '../components/Modal';
-import { HelpIcon, ColumnsIcon, SparklesIcon } from '../components/Icons';
+import { ColumnsIcon, SparklesIcon } from '../components/Icons';
 import ActsTable from '../components/ActsTable';
 import DeleteActsConfirmationModal from '../components/DeleteActsConfirmationModal';
 import { ALL_COLUMNS } from '../components/ActsTableConfig';
@@ -27,27 +27,6 @@ interface ActsPageProps {
     onRedo?: () => void;
     onNavigateToCertificate?: (id: string) => void;
 }
-
-// Helper component for interactive tags in the help modal
-const CopyableTag: React.FC<{ tag: string }> = ({ tag }) => {
-    const [copied, setCopied] = useState(false);
-
-    const handleCopy = () => {
-        navigator.clipboard.writeText(tag);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500); // Reset after 1.5 seconds
-    };
-
-    return (
-        <code
-            onClick={handleCopy}
-            className="bg-slate-200 text-blue-700 px-1.5 py-0.5 rounded-md cursor-pointer hover:bg-blue-200 transition-colors font-mono"
-            title="Нажмите, чтобы скопировать"
-        >
-            {copied ? 'Скопировано!' : tag}
-        </code>
-    );
-};
 
 const ColumnPicker: React.FC<{
     pickableColumns: typeof ALL_COLUMNS;
@@ -120,7 +99,6 @@ const ColumnPicker: React.FC<{
 
 
 const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, regulations, certificates, template, settings, onSave, onMoveToTrash, onPermanentlyDelete, onReorderActs, setCurrentPage, onUndo, onRedo, onNavigateToCertificate }) => {
-    const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
     const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
@@ -364,9 +342,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
             <div className="flex justify-between items-center mb-6 flex-shrink-0">
                 <div className="flex items-center gap-4">
                     <h1 className="text-2xl font-bold text-slate-800">Акты скрытых работ</h1>
-                    <button onClick={() => setIsHelpModalOpen(true)} className="text-slate-500 hover:text-blue-600" title="Справка">
-                        <HelpIcon />
-                    </button>
                 </div>
                 <div className="flex items-center gap-3">
                      <button 
@@ -455,49 +430,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                             {aiLoading ? 'Обработка...' : <><SparklesIcon className="w-4 h-4" /> Выполнить</>}
                         </button>
                     </div>
-                </div>
-            </Modal>
-
-            <Modal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} title="Справка по заполнению шаблона">
-                <div className="prose max-w-none text-slate-700 allow-text-selection">
-                    <p>Для генерации документов ваш .docx шаблон должен содержать теги-заполнители. Приложение заменит эти теги на данные из формы. Нажмите на любой тег ниже, чтобы скопировать его.</p>
-                    
-                    <h4 className="font-semibold mt-4">Основные теги</h4>
-                    <ul className="list-disc space-y-2 pl-5 mt-2">
-                        <li><CopyableTag tag="{object_name}" /> &mdash; Наименование объекта.</li>
-                        <li><CopyableTag tag="{act_number}" />, <CopyableTag tag="{act_day}" />, <CopyableTag tag="{act_month}" />, <CopyableTag tag="{act_year}" /></li>
-                        <li><CopyableTag tag="{builder_details}" />, <CopyableTag tag="{contractor_details}" />, <CopyableTag tag="{designer_details}" />, <CopyableTag tag="{work_performer}" /></li>
-                        <li><CopyableTag tag="{work_start_day}" />, <CopyableTag tag="{work_start_month}" />, <CopyableTag tag="{work_start_year}" /> &mdash; Дата начала работ.</li>
-                        <li><CopyableTag tag="{work_end_day}" />, <CopyableTag tag="{work_end_month}" />, <CopyableTag tag="{work_end_year}" /> &mdash; Дата окончания работ.</li>
-                        <li><CopyableTag tag="{regulations}" /> &mdash; Нормативные документы.</li>
-                        <li><CopyableTag tag="{next_work}" /> &mdash; Разрешается производство следующих работ.</li>
-                        <li><CopyableTag tag="{additional_info}" />, <CopyableTag tag="{copies_count}" />, <CopyableTag tag="{attachments}" /></li>
-                    </ul>
-                    
-                    <h4 className="font-semibold mt-6">Выполненные работы</h4>
-                    <ul className="list-disc space-y-2 pl-5 mt-2">
-                        <li><CopyableTag tag="{work_name}" /> &mdash; Наименование работ.</li>
-                        <li><CopyableTag tag="{project_docs}" /> &mdash; Проектная документация.</li>
-                        <li><CopyableTag tag="{materials}" /> &mdash; Примененные материалы.</li>
-                        <li><CopyableTag tag="{certs}" /> &mdash; Исполнительные схемы.</li>
-                    </ul>
-
-                    <h4 className="font-semibold mt-6">Представители (Комиссия)</h4>
-                    <div className="my-2 p-3 rounded-md bg-blue-50 border border-blue-200">
-                        <h5 className="font-semibold text-blue-800">✨ Важное обновление синтаксиса</h5>
-                        <p className="text-sm mt-1">Для вставки данных представителей теперь рекомендуется использовать синтаксис с подчеркиванием, например <CopyableTag tag="{tnz_name}" />. Этот формат более надежен.</p>
-                    </div>
-
-                    <p className="mt-2">Используйте <strong>условные блоки</strong>, чтобы скрыть строки, если представитель не выбран. Для этого оберните нужный текст в теги <code>{`{#ключ}...{/ключ}`}</code>, где "ключ" - это код роли (например, <code>tnz</code>).</p>
-
-                    <p className="mt-2 font-medium">Расшифровка ключей ролей:</p>
-                    <ul className="list-disc space-y-1 pl-5 text-sm">
-                        {Object.entries(ROLES).map(([key, label]) => (
-                            <li key={key}>
-                                <code>{key}</code> - {label} (теги: <CopyableTag tag={`{${key}_name}`} />, <CopyableTag tag={`{${key}_position}`} />, <CopyableTag tag={`{${key}_org}`} />, <CopyableTag tag={`{${key}_auth_doc}`} />)
-                            </li>
-                        ))}
-                    </ul>
                 </div>
             </Modal>
         </div>

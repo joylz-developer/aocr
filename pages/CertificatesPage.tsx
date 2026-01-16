@@ -5,6 +5,7 @@ import Modal from '../components/Modal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon, LayoutListIcon, LayoutGridIcon, ColumnsIcon, LinkIcon, ChevronDownIcon, MinimizeIcon, MaximizeIcon, ArrowRightIcon, CheckIcon, XIcon } from '../components/Icons';
 import { GoogleGenAI } from '@google/genai';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 
 interface CertificatesPageProps {
     certificates: Certificate[];
@@ -60,6 +61,81 @@ const levenshteinDistance = (a: string, b: string): number => {
         }
     }
     return matrix[b.length][a.length];
+};
+
+const HighlightMatch: React.FC<{ text: string; query: string }> = ({ text, query }) => {
+    if (!query || !text) return <>{text}</>;
+
+    const t = text.toLowerCase();
+    const tokens = query.toLowerCase().split(/\s+/).filter(tk => tk.length > 0);
+    const n = t.length;
+    
+    if (tokens.length === 0) return <>{text}</>;
+
+    const matchedIndices = new Set<number>();
+
+    const computeLCSIndices = (token: string) => {
+        const m = token.length;
+        if (m === 0) return;
+        
+        const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
+
+        for (let i = 1; i <= n; i++) {
+            for (let j = 1; j <= m; j++) {
+                if (t[i - 1] === token[j - 1]) {
+                    dp[i][j] = dp[i - 1][j - 1] + 1;
+                } else {
+                    dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+                }
+            }
+        }
+
+        let i = n, j = m;
+        while (i > 0 && j > 0) {
+            if (t[i - 1] === token[j - 1]) {
+                matchedIndices.add(i - 1);
+                i--;
+                j--;
+            } else if (dp[i - 1][j] > dp[i][j - 1]) {
+                i--;
+            } else {
+                j--;
+            }
+        }
+    };
+
+    tokens.forEach(token => computeLCSIndices(token));
+
+    const elements: React.ReactNode[] = [];
+    let lastIdx = 0;
+    let isHighlighting = false;
+
+    for (let k = 0; k < n; k++) {
+        const isMatch = matchedIndices.has(k);
+        if (isMatch !== isHighlighting) {
+            if (k > lastIdx) {
+                const chunk = text.substring(lastIdx, k);
+                elements.push(
+                    isHighlighting 
+                        ? <span key={lastIdx} className="font-extrabold text-blue-600 bg-blue-50 rounded-[1px] px-0">{chunk}</span>
+                        : <span key={lastIdx}>{chunk}</span>
+                );
+            }
+            lastIdx = k;
+            isHighlighting = isMatch;
+        }
+    }
+    
+    if (lastIdx < n) {
+        const chunk = text.substring(lastIdx);
+        elements.push(
+            isHighlighting 
+                ? <span key={lastIdx} className="font-extrabold text-blue-600 bg-blue-50 rounded-[1px] px-0">{chunk}</span>
+                : <span key={lastIdx}>{chunk}</span>
+        );
+    }
+
+    return <>{elements}</>;
 };
 
 const calculateDiff = (oldList: string[], newList: string[]): DiffItem[] => {
@@ -1161,10 +1237,10 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
     const [editingCert, setEditingCert] = useState<Certificate | null>(null);
     const [previewFile, setPreviewFile] = useState<{ type: 'pdf' | 'image', data: string } | null>(null);
     
-    // View Controls State
-    const [searchQuery, setSearchQuery] = useState('');
-    const [viewMode, setViewMode] = useState<ViewMode>('card');
-    const [columnCount, setColumnCount] = useState<ColumnCount>(3);
+    // View Controls State - Persisted
+    const [searchQuery, setSearchQuery] = useLocalStorage<string>('cert_search_query', '');
+    const [viewMode, setViewMode] = useLocalStorage<ViewMode>('cert_view_mode', 'card');
+    const [columnCount, setColumnCount] = useLocalStorage<ColumnCount>('cert_column_count', 3);
     
     // Delete Confirmation State
     const [deleteWarning, setDeleteWarning] = useState<{ cert: Certificate, usedInActs: string[] } | null>(null);
@@ -1183,12 +1259,58 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
     }, [initialOpenId, certificates, onClearInitialOpenId]);
 
     const filteredCertificates = useMemo(() => {
-        if (!searchQuery) return certificates;
-        const lower = searchQuery.toLowerCase();
-        return certificates.filter(c => 
-            c.number.toLowerCase().includes(lower) || 
-            c.materials.some(m => m.toLowerCase().includes(lower))
-        );
+        if (!searchQuery.trim()) return certificates;
+        const tokens = searchQuery.toLowerCase().split(/\s+/).filter(t => t.length > 0);
+        
+        return certificates.filter(c => {
+            const certNumLower = c.number.toLowerCase();
+            let bestScoreForCert = 10000;
+            let totalScore = 0;
+            let allTokensMatch = true;
+
+            for (const token of tokens) {
+                let tokenMatched = false;
+                let bestTokenScore = 1000;
+
+                // 1. Exact/Substring in Certificate Number
+                if (certNumLower.includes(token)) {
+                    tokenMatched = true;
+                    bestTokenScore = 0; 
+                } 
+                else {
+                    // 2. Fuzzy Match against Material words
+                    for (const mat of c.materials) {
+                        const lowerMat = mat.toLowerCase();
+                        if (lowerMat.includes(token)) {
+                            tokenMatched = true;
+                            bestTokenScore = 0;
+                            break;
+                        }
+                        
+                        const matWords = lowerMat.split(/[\s,.\(\)]+/).filter(w => w.length > 0);
+                        const threshold = token.length < 3 ? 0 : Math.floor(token.length / 3);
+                        
+                        for (const word of matWords) {
+                            if (Math.abs(word.length - token.length) <= 3) {
+                                const dist = levenshteinDistance(token, word);
+                                if (dist <= threshold) {
+                                    tokenMatched = true;
+                                    bestTokenScore = Math.min(bestTokenScore, 10 + dist);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (!tokenMatched) {
+                    allTokensMatch = false;
+                    break;
+                }
+                totalScore += bestTokenScore;
+            }
+            
+            return allTokensMatch;
+        });
     }, [certificates, searchQuery]);
 
     const handleOpenModal = (cert: Certificate | null = null) => {
@@ -1336,11 +1458,18 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                         <CertificateIcon className="w-6 h-6" />
                                     </div>
                                     <div className="flex-grow min-w-0">
-                                         <h3 className="font-bold text-slate-800 text-sm truncate">{cert.number}</h3>
+                                         <h3 className="font-bold text-slate-800 text-sm truncate">
+                                            <HighlightMatch text={cert.number} query={searchQuery} />
+                                         </h3>
                                          <p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p>
                                     </div>
                                     <div className="text-xs text-slate-500 truncate w-1/4">
-                                        {cert.materials.join(', ')}
+                                        {cert.materials.map((m, i) => (
+                                            <span key={i}>
+                                                {i > 0 && ', '}
+                                                <HighlightMatch text={m} query={searchQuery} />
+                                            </span>
+                                        ))}
                                     </div>
                                     <div className="flex gap-1 flex-shrink-0">
                                         <button onClick={() => handleOpenModal(cert)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
@@ -1400,7 +1529,9 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                             <div className="p-4 flex flex-col flex-grow">
                                 <div className="flex justify-between items-start mb-2">
                                     <div>
-                                        <h3 className="font-bold text-slate-800 text-sm leading-tight mb-1">{cert.number}</h3>
+                                        <h3 className="font-bold text-slate-800 text-sm leading-tight mb-1">
+                                            <HighlightMatch text={cert.number} query={searchQuery} />
+                                        </h3>
                                         <p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p>
                                     </div>
                                     <div className="flex gap-1 ml-2">
@@ -1413,7 +1544,9 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Материалы:</p>
                                     <ul className="text-xs text-slate-700 space-y-1">
                                         {cert.materials.slice(0, 3).map((m, i) => (
-                                            <li key={i} className="truncate border-l-2 border-blue-100 pl-2">{m}</li>
+                                            <li key={i} className="truncate border-l-2 border-blue-100 pl-2">
+                                                <HighlightMatch text={m} query={searchQuery} />
+                                            </li>
                                         ))}
                                         {cert.materials.length > 3 && (
                                             <li className="text-slate-400 pl-2 italic">...и еще {cert.materials.length - 3}</li>

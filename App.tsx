@@ -65,7 +65,9 @@ const App: React.FC = () => {
     // Theme State
     const [theme, setTheme] = useLocalStorage<Theme>('app_theme', 'light');
 
-    const [currentPage, setCurrentPage] = useState<Page>('acts');
+    // Persist current page to localStorage
+    const [currentPage, setCurrentPage] = useLocalStorage<Page>('app_current_page', 'acts');
+    
     // State to handle cross-page navigation to a specific certificate
     const [targetCertificateId, setTargetCertificateId] = useState<string | null>(null);
 
@@ -655,7 +657,14 @@ const App: React.FC = () => {
                             onClearInitialOpenId={() => setTargetCertificateId(null)}
                         />;
             case 'settings':
-                return <SettingsPage settings={settings} onSave={handleSaveSettings} />;
+                return <SettingsPage 
+                            settings={settings} 
+                            onSave={handleSaveSettings} 
+                            onImport={handleImportClick}
+                            onExport={handleExportData}
+                            onChangeTemplate={handleChangeTemplate}
+                            isTemplateLoaded={!!template}
+                        />;
             default:
                 return null;
         }
@@ -671,9 +680,6 @@ const App: React.FC = () => {
                 setCurrentPage={setCurrentPage}
                 isTemplateLoaded={!!template}
                 trashCount={deletedActs.length + deletedCertificates.length}
-                onImport={handleImportClick}
-                onExport={handleExportData}
-                onChangeTemplate={handleChangeTemplate}
                 theme={theme}
                 onToggleTheme={handleToggleTheme}
             />
