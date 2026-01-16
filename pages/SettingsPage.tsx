@@ -534,7 +534,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                     </p>
                                     <div className="border p-3 rounded bg-slate-50">
                                         <p className="font-mono text-sm mb-2">
-                                            {#materials_list} ... {/materials_list}
+                                            {'{#materials_list} ... {/materials_list}'}
                                         </p>
                                         <div className="flex flex-wrap gap-2 ml-4">
                                             <TagTooltip tag="{index}" description="Порядковый номер (1, 2, 3...)" />
