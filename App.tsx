@@ -17,6 +17,7 @@ import RegulationsPage from './pages/RegulationsPage';
 import CertificatesPage from './pages/CertificatesPage';
 import Sidebar from './components/Sidebar';
 import { saveAs } from 'file-saver';
+import PizZip from 'pizzip';
 
 const fileToBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -501,28 +502,94 @@ const App: React.FC = () => {
 
     const handleExecuteExport = (exportSettings: ExportSettings) => {
         try {
-            const dataToExport: any = {};
+            const zip = new PizZip();
 
-            if (exportSettings.template) dataToExport.template = template;
-            if (exportSettings.projectSettings) dataToExport.projectSettings = settings;
-            if (exportSettings.acts) dataToExport.acts = acts;
-            if (exportSettings.people) dataToExport.people = people;
-            if (exportSettings.organizations) dataToExport.organizations = organizations;
-            if (exportSettings.groups) dataToExport.groups = groups;
-            if (exportSettings.regulations) dataToExport.regulations = regulations;
-            if (exportSettings.certificates) dataToExport.certificates = certificates;
-            if (exportSettings.deletedActs) dataToExport.deletedActs = deletedActs;
-            if (exportSettings.deletedCertificates) dataToExport.deletedCertificates = deletedCertificates;
+            // 1. Create the "System Backup" JSON (for restoring later via Import)
+            const fullBackupData: any = {};
+            if (exportSettings.template) fullBackupData.template = template;
+            if (exportSettings.projectSettings) fullBackupData.projectSettings = settings;
+            if (exportSettings.acts) fullBackupData.acts = acts;
+            if (exportSettings.people) fullBackupData.people = people;
+            if (exportSettings.organizations) fullBackupData.organizations = organizations;
+            if (exportSettings.groups) fullBackupData.groups = groups;
+            if (exportSettings.regulations) fullBackupData.regulations = regulations;
+            if (exportSettings.certificates) fullBackupData.certificates = certificates;
+            if (exportSettings.deletedActs) fullBackupData.deletedActs = deletedActs;
+            if (exportSettings.deletedCertificates) fullBackupData.deletedCertificates = deletedCertificates;
 
-            const jsonString = JSON.stringify(dataToExport, null, 2);
-            const blob = new Blob([jsonString], { type: 'application/json' });
+            // Add the restore file to root
+            zip.file("backup_restore.json", JSON.stringify(fullBackupData, null, 2));
+
+            // 2. Add Human Readable separate JSONs
+            if (exportSettings.projectSettings) zip.file("settings.json", JSON.stringify(settings, null, 2));
+            if (exportSettings.people && people.length > 0) zip.file("people.json", JSON.stringify(people, null, 2));
+            if (exportSettings.organizations && organizations.length > 0) zip.file("organizations.json", JSON.stringify(organizations, null, 2));
+            if (exportSettings.acts && acts.length > 0) zip.file("acts.json", JSON.stringify(acts, null, 2));
+            if (exportSettings.regulations && regulations.length > 0) zip.file("regulations.json", JSON.stringify(regulations, null, 2));
+
+            // 3. Template File (Real DOCX)
+            if (exportSettings.template && template) {
+                 zip.file("template.docx", template, { base64: true });
+            }
+
+            // 4. Certificates Folder with real files
+            if (exportSettings.certificates && certificates.length > 0) {
+                const certFolder = zip.folder("certificates");
+                if (certFolder) {
+                    const readableCerts = certificates.map(cert => {
+                        const certFiles: string[] = [];
+                        
+                        // Helper to process and add file
+                        const addFileToZip = (dataUrl: string, index: number | null) => {
+                            const mimeMatch = dataUrl.match(/^data:(.*?);base64,(.*)$/);
+                            if (mimeMatch) {
+                                const mime = mimeMatch[1];
+                                const b64 = mimeMatch[2];
+                                let ext = 'bin';
+                                if (mime.includes('pdf')) ext = 'pdf';
+                                else if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg';
+                                else if (mime.includes('png')) ext = 'png';
+                                
+                                // Sanitize filename
+                                const safeNum = cert.number.replace(/[^a-z0-9а-яё]/gi, '_');
+                                const suffix = index !== null ? `_${index + 1}` : '';
+                                const fileName = `${safeNum}${suffix}.${ext}`;
+                                
+                                certFolder.file(fileName, b64, { base64: true });
+                                certFiles.push(fileName);
+                            }
+                        };
+
+                        // Handle new array-based files
+                        if (cert.files && cert.files.length > 0) {
+                            cert.files.forEach((file, idx) => addFileToZip(file.data, idx));
+                        } 
+                        // Handle legacy single file
+                        else if (cert.fileData) {
+                             addFileToZip(cert.fileData, null);
+                        }
+
+                        return {
+                            number: cert.number,
+                            validUntil: cert.validUntil,
+                            materials: cert.materials,
+                            files: certFiles // List of filenames inside the zip folder
+                        };
+                    });
+                    
+                    certFolder.file("index.json", JSON.stringify(readableCerts, null, 2));
+                }
+            }
+
+            // Generate Zip
+            const content = zip.generate({ type: "blob" });
             const timestamp = new Date().toISOString().split('.')[0].replace('T', '_').replace(/:/g, '-');
-            saveAs(blob, `docgen-ai-backup-${timestamp}.json`);
+            saveAs(content, `Project_Export_${timestamp}.zip`);
             
             setIsExportModalOpen(false);
         } catch (error) {
             console.error('Export error:', error);
-            alert('Не удалось экспортировать данные.');
+            alert('Не удалось создать архив экспорта.');
         }
     };
     
@@ -540,12 +607,14 @@ const App: React.FC = () => {
                 const text = e.target?.result;
                 if (typeof text !== 'string') throw new Error("Failed to read file");
                 
+                // Only JSON imports are supported currently via this method
+                // (User extracts zip and uploads backup_restore.json)
                 const data: ImportData = JSON.parse(text);
                 
                 if (data.template !== undefined || Array.isArray(data.acts) || Array.isArray(data.people) || Array.isArray(data.organizations) || Array.isArray(data.groups) || Array.isArray(data.regulations) || Array.isArray(data.certificates) || data.projectSettings || Array.isArray(data.deletedActs)) {
                     setImportData(data);
                 } else {
-                    alert('Ошибка: Неверный формат файла.');
+                    alert('Ошибка: Неверный формат файла. Убедитесь, что вы загружаете JSON файл резервной копии (например, backup_restore.json из архива).');
                 }
             } catch (error) {
                 console.error('Import error:', error);
