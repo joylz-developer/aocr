@@ -102,17 +102,18 @@ const CopyableCode: React.FC<{ children: React.ReactNode; textToCopy: string; ti
 const TagGenerator: React.FC = () => {
     const [fieldInput, setFieldInput] = useState('');
     
+    // NOW: Uses _clean suffix for list logic (no implicit breaks)
     const generateList = () => {
         const cleanName = fieldInput.trim().replace(/[{}]/g, '');
         if (!cleanName) return '';
-        // THIS is the key: All on one line for the Word Paragraph Loop to work as a native list
-        return `{#${cleanName}_list}{${cleanName}}{/${cleanName}_list}`;
+        return `{#${cleanName}_list}{${cleanName}_clean}{/${cleanName}_list}`;
     };
 
+    // NOW: Uses default tag name which implies breaks (for inline)
     const generateInline = () => {
         const cleanName = fieldInput.trim().replace(/[{}]/g, '');
         if (!cleanName) return '';
-        return `{#${cleanName}_list}{${cleanName}_br}{/${cleanName}_list}`;
+        return `{#${cleanName}_list}{${cleanName}}{/${cleanName}_list}`;
     };
 
     const listCode = generateList();
@@ -140,32 +141,31 @@ const TagGenerator: React.FC = () => {
 
             {listCode && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-white p-3 rounded border border-blue-200 shadow-sm relative">
+                    <div className="bg-white p-3 rounded border border-slate-200 shadow-sm relative hover:border-blue-300">
                         <h5 className="font-bold text-xs text-slate-700 mb-2 flex items-center gap-1">
-                            <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">1</span>
-                            Для Нумерованного списка Word
+                            <span className="bg-slate-400 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">1</span>
+                            Для текста в одной ячейке (переносы)
                         </h5>
                         <p className="text-[10px] text-slate-500 mb-2 leading-snug">
-                            1. Скопируйте код ниже.<br/>
-                            2. Вставьте в Word.<br/>
-                            3. Выделите вставленный код и <strong>нажмите кнопку "Нумерованный список"</strong> в Word.<br/>
-                            4. Результат в Word должен выглядеть как одна строка под цифрой 1.
+                            Используйте этот код, чтобы текст выводился в одну ячейку таблицы с переносами строк (как в поле ввода).
                         </p>
-                        <CopyableCode textToCopy={listCode}>
-                            <div className="whitespace-nowrap overflow-x-auto">{listCode}</div>
+                        <CopyableCode textToCopy={inlineCode}>
+                            <div className="whitespace-pre-wrap">{inlineCode}</div>
                         </CopyableCode>
                     </div>
 
                     <div className="bg-white p-3 rounded border border-slate-200 relative opacity-80 hover:opacity-100 transition-opacity">
                         <h5 className="font-bold text-xs text-slate-700 mb-2 flex items-center gap-1">
-                            <span className="bg-slate-400 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">2</span>
-                            Для текста в одной ячейке
+                            <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">2</span>
+                            Для Нумерованного списка Word
                         </h5>
                         <p className="text-[10px] text-slate-500 mb-2 leading-snug">
-                            Используйте этот код, если нужно просто вывести текст с переносами строк внутри одной ячейки таблицы, без нумерации Word.
+                            Используйте это для создания списка Word (1. 2. 3.).<br/>
+                            1. Вставьте код.<br/>
+                            2. Выделите и нажмите кнопку "Нумерованный список" в Word.
                         </p>
-                        <CopyableCode textToCopy={inlineCode}>
-                            <div className="whitespace-pre-wrap">{inlineCode}</div>
+                        <CopyableCode textToCopy={listCode}>
+                            <div className="whitespace-nowrap overflow-x-auto">{listCode}</div>
                         </CopyableCode>
                     </div>
                 </div>

@@ -156,8 +156,9 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
                 data[listKey] = lines.map((line, index) => {
                     const isLast = index === lines.length - 1;
                     
-                    // 1. Text with forced newline (for inline table cells)
+                    // 1. Text with forced newline (Default)
                     // We append '\n' to all except the last one.
+                    // This ensures that when looping in a single cell, lines don't merge.
                     const textWithBreak = isLast ? line : line + '\n';
                     
                     // 2. Clean text (for native Word lists)
@@ -165,13 +166,13 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
                     const textClean = line; 
                     
                     const item: any = { 
-                        text: textClean,       // Default {text} is now clean (best for lists)
-                        text_br: textWithBreak // {text_br} has explicit breaks
+                        text: textWithBreak, // Default {text} now has breaks
+                        text_clean: textClean // {text_clean} is plain
                     };
                     
-                    // Support using the key name itself (e.g. {attachments})
-                    item[key] = textClean;          // {attachments} -> clean
-                    item[`${key}_br`] = textWithBreak; // {attachments_br} -> with break
+                    // Support using the key name itself
+                    item[key] = textWithBreak;          // {attachments} -> has break (GOOD for inline)
+                    item[`${key}_clean`] = textClean;   // {attachments_clean} -> no break (GOOD for lists)
                     
                     return item;
                 });
