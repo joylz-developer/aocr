@@ -28,17 +28,32 @@ const shortenName = (fullName: string): string => {
 // Helper to resolve simple templates inside text strings (e.g. default Attachments)
 const resolveStringTemplate = (templateStr: string, act: Act, overrides: Record<string, string> = {}): string => {
     if (!templateStr) return '';
+
+    // Mapping from Word Template tags to internal Act properties
+    const keyMap: Record<string, keyof Act> = {
+        'act_number': 'number',
+        'object_name': 'objectName',
+        'work_name': 'workName',
+        'project_docs': 'projectDocs',
+        'work_start_date': 'workStartDate', // Allow snake_case
+        'work_end_date': 'workEndDate',     // Allow snake_case
+        'act_date': 'date',                 // Allow snake_case
+    };
+
     return templateStr.replace(/\{(\w+)\}/g, (_, key) => {
         // 1. Check overrides first (e.g. for smart materials logic)
         if (overrides[key] !== undefined) {
             return overrides[key];
         }
         
-        // 2. Check direct Act properties
-        const value = (act as any)[key];
+        // 2. Map alias to actual key (e.g. act_number -> number), or use key as is
+        const mappedKey = keyMap[key] || key;
+        
+        // 3. Check direct Act properties
+        const value = (act as any)[mappedKey];
         
         // Format dates for display if needed
-        if ((key === 'workStartDate' || key === 'workEndDate' || key === 'date') && value) {
+        if ((mappedKey === 'workStartDate' || mappedKey === 'workEndDate' || mappedKey === 'date') && value) {
              const parts = value.split('-');
              if (parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0]}`;
         }

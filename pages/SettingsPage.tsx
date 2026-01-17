@@ -74,14 +74,17 @@ const TagTooltip: React.FC<{ tag: string; description: string }> = ({ tag, descr
 const VariableHelpTooltip: React.FC = () => {
     const [isVisible, setIsVisible] = useState(false);
 
+    // Using unified tags that match Word template usage
     const variables = [
-        { name: '{number}', desc: 'Номер акта' },
+        { name: '{act_number}', desc: 'Номер акта' },
         { name: '{materials}', desc: 'Список материалов' },
         { name: '{certs}', desc: 'Исполнительные схемы' },
-        { name: '{workStartDate}', desc: 'Дата начала работ' },
-        { name: '{workEndDate}', desc: 'Дата окончания работ' },
-        { name: '{projectDocs}', desc: 'Проектная документация' },
+        { name: '{work_start_date}', desc: 'Дата начала работ' },
+        { name: '{work_end_date}', desc: 'Дата окончания работ' },
+        { name: '{project_docs}', desc: 'Проектная документация' },
         { name: '{regulations}', desc: 'Нормативные документы' },
+        { name: '{object_name}', desc: 'Наименование объекта' },
+        { name: '{work_name}', desc: 'Наименование работ' },
     ];
 
     return (
@@ -337,7 +340,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         value={formData.defaultActDate || ''} 
                                         onChange={handleChange} 
                                         className={`${inputClass} text-sm`} 
-                                        placeholder="По умолчанию: {workEndDate}" 
+                                        placeholder="По умолчанию: {work_end_date}" 
                                     />
                                 </div>
                             </SettingToggle>
