@@ -102,22 +102,14 @@ const CopyableCode: React.FC<{ children: React.ReactNode; textToCopy: string; ti
 const TagGenerator: React.FC = () => {
     const [fieldInput, setFieldInput] = useState('');
     
-    // NOW: Uses _clean suffix for list logic (no implicit breaks)
+    // Updated: Use standard tag for consistency and wrapping support
     const generateList = () => {
-        const cleanName = fieldInput.trim().replace(/[{}]/g, '');
-        if (!cleanName) return '';
-        return `{#${cleanName}_list}{${cleanName}_clean}{/${cleanName}_list}`;
-    };
-
-    // NOW: Uses default tag name which implies breaks (for inline)
-    const generateInline = () => {
         const cleanName = fieldInput.trim().replace(/[{}]/g, '');
         if (!cleanName) return '';
         return `{#${cleanName}_list}{${cleanName}}{/${cleanName}_list}`;
     };
 
     const listCode = generateList();
-    const inlineCode = generateInline();
 
     return (
         <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg my-4">
@@ -144,13 +136,13 @@ const TagGenerator: React.FC = () => {
                     <div className="bg-white p-3 rounded border border-slate-200 shadow-sm relative hover:border-blue-300">
                         <h5 className="font-bold text-xs text-slate-700 mb-2 flex items-center gap-1">
                             <span className="bg-slate-400 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">1</span>
-                            Для текста в одной ячейке (переносы)
+                            Для текста в одной ячейке
                         </h5>
                         <p className="text-[10px] text-slate-500 mb-2 leading-snug">
                             Используйте этот код, чтобы текст выводился в одну ячейку таблицы с переносами строк (как в поле ввода).
                         </p>
-                        <CopyableCode textToCopy={inlineCode}>
-                            <div className="whitespace-pre-wrap">{inlineCode}</div>
+                        <CopyableCode textToCopy={listCode}>
+                            <div className="whitespace-pre-wrap">{listCode}</div>
                         </CopyableCode>
                     </div>
 
@@ -399,14 +391,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                     <p className="text-xs text-slate-500 mt-1">Если материалов в акте больше этого числа, будет создан отдельный файл реестра.</p>
                                 </div>
                             </div>
-
-                            <SettingToggle 
-                                id="autoAppendRegistryReference" 
-                                label='Автоматически добавлять ссылку на Реестр в поле "Приложения"' 
-                                description="Если включено, фраза «Приложение №1: Реестр материалов» будет добавляться автоматически при превышении порога материалов, даже если вы изменили текст приложений вручную."
-                                formData={formData} 
-                                handleChange={handleChange}
-                            />
 
                             <SettingToggle id="showAdditionalInfo" label='Показывать поле "Дополнительные сведения"' formData={formData} handleChange={handleChange}>
                                 <div className="mt-2">

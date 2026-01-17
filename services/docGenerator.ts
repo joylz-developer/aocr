@@ -163,22 +163,22 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
                     const isLast = index === lines.length - 1;
                     
                     // 1. Text with forced newline (Default)
-                    // We append '\n' to all except the last one.
-                    // This ensures that when looping in a single cell, lines don't merge.
+                    // We append '\n' to all except the last one to ensure breaks are respected.
                     const textWithBreak = isLast ? line : line + '\n';
                     
-                    // 2. Clean text (for native Word lists)
-                    // No newlines, let Word handle the list item flow
-                    const textClean = line; 
+                    // 2. Clean text
+                    // To prevent merging (e.g. "Text1Text2"), we MUST include the newline if it was present.
+                    // This ensures "As Written" structure is preserved even in inline loops.
+                    const textClean = textWithBreak; 
                     
                     const item: any = { 
-                        text: textWithBreak, // Default {text} now has breaks
-                        text_clean: textClean // {text_clean} is plain
+                        text: textWithBreak, 
+                        text_clean: textClean 
                     };
                     
                     // Support using the key name itself
-                    item[key] = textWithBreak;          // {attachments} -> has break (GOOD for inline)
-                    item[`${key}_clean`] = textClean;   // {attachments_clean} -> no break (GOOD for lists)
+                    item[key] = textWithBreak;          // {attachments}
+                    item[`${key}_clean`] = textClean;   // {attachments_clean} -> now includes breaks to fix merging
                     
                     return item;
                 });
@@ -262,8 +262,9 @@ export const generateDocument = (
 
             let finalAttachments = resolvedAttachments;
             
-            // Append registry reference ONLY if setting enabled
-            const autoAppendRegistry = settings.autoAppendRegistryReference !== false; // Default true
+            // Append registry reference ONLY if setting enabled explicitly
+            // Important: Explicit check for true, defaulting to false if undefined/missing
+            const autoAppendRegistry = settings.autoAppendRegistryReference === true; 
             
             if (autoAppendRegistry) {
                 // Check if already present to avoid duplication
