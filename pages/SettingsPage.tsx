@@ -103,65 +103,99 @@ const TagGenerator: React.FC = () => {
     const [fieldInput, setFieldInput] = useState('');
     
     // Updated: Use standard tag for consistency and wrapping support
-    const generateList = () => {
-        const cleanName = fieldInput.trim().replace(/[{}]/g, '');
-        if (!cleanName) return '';
-        return `{#${cleanName}_list}{${cleanName}_clean}{/${cleanName}_list}`;
+    const generateListCode = (type: 'clean' | 'simple') => {
+        const cleanName = fieldInput.trim().replace(/[{}]/g, '') || 'имя_поля';
+        if (type === 'clean') {
+            return `{#${cleanName}_list}{${cleanName}_clean}{/${cleanName}_list}`;
+        }
+        return `{#${cleanName}_list}{${cleanName}}{/${cleanName}_list}`;
     };
-
-    const listCode = generateList();
 
     return (
         <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg my-4">
-            <h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
-                <SparklesIcon className="w-4 h-4" /> Генератор тегов для списков
+            <h4 className="font-semibold text-blue-800 mb-4 flex items-center gap-2">
+                <SparklesIcon className="w-5 h-5" /> Генератор тегов для списков
             </h4>
-            <p className="text-xs text-blue-800 mb-3">
-                Введите имя поля (например, <code>attachments</code>), чтобы получить код для вставки.
-            </p>
             
-            <div className="flex gap-2 items-center mb-4">
-                <label className="text-xs font-bold text-slate-600 whitespace-nowrap">Имя поля:</label>
-                <input 
-                    type="text" 
-                    value={fieldInput}
-                    onChange={(e) => setFieldInput(e.target.value)}
-                    placeholder="attachments"
-                    className="flex-grow text-sm border border-slate-300 rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"
-                />
+            <div className="mb-6">
+                <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Шаг 1: Введите имя поля</label>
+                <div className="flex items-center gap-2">
+                    <input 
+                        type="text" 
+                        value={fieldInput}
+                        onChange={(e) => setFieldInput(e.target.value)}
+                        placeholder="например: attachments"
+                        className="w-full max-w-sm text-sm border border-slate-300 rounded px-3 py-2 focus:outline-none focus:border-blue-500 shadow-sm"
+                    />
+                    <span className="text-sm text-slate-500">
+                        (например: <code>attachments</code>, <code>additional_info</code>)
+                    </span>
+                </div>
             </div>
 
-            {listCode && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-white p-3 rounded border border-slate-200 shadow-sm relative hover:border-blue-300">
-                        <h5 className="font-bold text-xs text-slate-700 mb-2 flex items-center gap-1">
-                            <span className="bg-slate-400 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">1</span>
-                            Для текста в одной ячейке
-                        </h5>
-                        <p className="text-[10px] text-slate-500 mb-2 leading-snug">
-                            Используйте этот код, чтобы текст выводился в одну ячейку таблицы с переносами строк (как в поле ввода).
-                        </p>
-                        <CopyableCode textToCopy={`{#${fieldInput}_list}{${fieldInput}}{/${fieldInput}_list}`}>
-                            <div className="whitespace-pre-wrap">{`{#${fieldInput}_list}{${fieldInput}}{/${fieldInput}_list}`}</div>
-                        </CopyableCode>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* RECOMMENDED OPTION */}
+                <div className="bg-white p-5 rounded-lg border-2 border-blue-400 shadow-md relative overflow-hidden">
+                    <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] px-3 py-1 rounded-bl-lg font-bold uppercase tracking-widest shadow-sm">
+                        Рекомендуем
+                    </div>
+                    
+                    <h5 className="font-bold text-base text-blue-900 mb-4 flex items-center gap-2">
+                        <span className="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs shadow-sm border border-blue-200">1</span>
+                        Автоматический список Word
+                    </h5>
+                    
+                    <div className="text-sm text-slate-600 space-y-3 mb-4">
+                        <p className="font-medium text-slate-800">Как это работает:</p>
+                        <ol className="list-decimal pl-5 space-y-2 marker:text-blue-500 marker:font-bold">
+                            <li>
+                                В приложении заполняйте поле, разделяя пункты нажатием <strong>Enter</strong> (каждый пункт с новой строки).
+                            </li>
+                            <li>
+                                Скопируйте код ниже и вставьте в шаблон Word.
+                            </li>
+                            <li>
+                                <span className="text-red-600 font-bold">Самое важное:</span> В Word выделите этот код и нажмите кнопку <strong>"Нумерованный список"</strong> (или Маркированный) на панели инструментов.
+                            </li>
+                        </ol>
                     </div>
 
-                    <div className="bg-white p-3 rounded border border-slate-200 relative opacity-80 hover:opacity-100 transition-opacity">
-                        <h5 className="font-bold text-xs text-slate-700 mb-2 flex items-center gap-1">
-                            <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">2</span>
-                            Для Нумерованного списка Word
-                        </h5>
-                        <p className="text-[10px] text-slate-500 mb-2 leading-snug">
-                            Используйте это для создания списка Word (1. 2. 3.).<br/>
-                            1. Вставьте код.<br/>
-                            2. Выделите и нажмите кнопку "Нумерованный список" в Word.
-                        </p>
-                        <CopyableCode textToCopy={listCode}>
-                            <div className="whitespace-nowrap overflow-x-auto">{listCode}</div>
-                        </CopyableCode>
+                    <CopyableCode textToCopy={generateListCode('clean')} title="Код для шаблона">
+                        <div className="whitespace-pre-wrap break-all text-blue-700 font-bold bg-blue-50 p-2 rounded border border-blue-100">{generateListCode('clean')}</div>
+                    </CopyableCode>
+                    
+                    <div className="text-xs text-slate-500 italic mt-3 bg-slate-50 p-2 rounded">
+                        Результат: Word сам создаст красивый список (1., 2., 3...) с правильными отступами.
                     </div>
                 </div>
-            )}
+
+                {/* SIMPLE OPTION */}
+                <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm relative opacity-90 hover:opacity-100 transition-opacity">
+                    <h5 className="font-bold text-base text-slate-700 mb-4 flex items-center gap-2">
+                        <span className="bg-slate-100 text-slate-500 rounded-full w-6 h-6 flex items-center justify-center text-xs border border-slate-200">2</span>
+                        Простой текст (как есть)
+                    </h5>
+                    
+                    <div className="text-sm text-slate-600 space-y-3 mb-4">
+                        <p className="font-medium text-slate-800">Как это работает:</p>
+                        <ul className="list-disc pl-5 space-y-2 marker:text-slate-400">
+                            <li>
+                                Весь текст вставляется в одну ячейку/строку.
+                            </li>
+                            <li>
+                                Переносы строк (Enter) сохраняются, но это не список Word.
+                            </li>
+                            <li>
+                                Используйте, если вам не нужна автоматическая нумерация или вы пишете цифры (1., 2.) вручную.
+                            </li>
+                        </ul>
+                    </div>
+
+                    <CopyableCode textToCopy={generateListCode('simple')} title="Код для шаблона">
+                        <div className="whitespace-pre-wrap break-all text-slate-600 bg-slate-50 p-2 rounded border border-slate-200">{generateListCode('simple')}</div>
+                    </CopyableCode>
+                </div>
+            </div>
         </div>
     );
 };
