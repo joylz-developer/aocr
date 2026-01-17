@@ -400,6 +400,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 </div>
                             </div>
 
+                            <SettingToggle 
+                                id="autoAppendRegistryReference" 
+                                label='Автоматически добавлять ссылку на Реестр в поле "Приложения"' 
+                                description="Если включено, фраза «Приложение №1: Реестр материалов» будет добавляться автоматически при превышении порога материалов, даже если вы изменили текст приложений вручную."
+                                formData={formData} 
+                                handleChange={handleChange}
+                            />
+
                             <SettingToggle id="showAdditionalInfo" label='Показывать поле "Дополнительные сведения"' formData={formData} handleChange={handleChange}>
                                 <div className="mt-2">
                                     <label htmlFor="defaultAdditionalInfo" className="flex items-center text-xs font-medium text-slate-600 mb-1">

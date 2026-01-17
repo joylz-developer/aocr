@@ -84,6 +84,7 @@ const App: React.FC = () => {
         defaultActDate: '{workEndDate}',
         historyDepth: 20,
         registryThreshold: 5,
+        autoAppendRegistryReference: true,
         certificatePromptNumber: DEFAULT_PROMPT_NUMBER,
         certificatePromptDate: DEFAULT_PROMPT_DATE,
         certificatePromptMaterials: DEFAULT_PROMPT_MATERIALS

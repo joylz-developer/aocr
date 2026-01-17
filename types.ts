@@ -140,6 +140,7 @@ export interface ProjectSettings {
     
     // Registry Settings
     registryThreshold?: number; // Count of materials to trigger registry generation
+    autoAppendRegistryReference?: boolean; // New: control auto-appending registry text
     
     // AI Prompts
     certificatePromptNumber?: string;

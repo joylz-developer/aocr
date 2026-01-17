@@ -25,6 +25,12 @@ const shortenName = (fullName: string): string => {
     return `${surname} ${initials}`;
 };
 
+// Normalize newlines to ensure Docxtemplater handles them correctly
+const normalizeNewlines = (str: string): string => {
+    if (!str) return '';
+    return str.replace(/\r\n|\r|\n/g, '\n');
+};
+
 // Helper to resolve simple templates inside text strings (e.g. default Attachments)
 const resolveStringTemplate = (templateStr: string, act: Act, overrides: Record<string, string> = {}): string => {
     if (!templateStr) return '';
@@ -147,8 +153,8 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
         const val = data[key];
         if (typeof val === 'string') {
             const listKey = `${key}_list`;
-            // Fixed: Do NOT trim or filter empty lines. Split strictly by newline to preserve user intent.
-            const lines = val.split('\n');
+            // Ensure we split strictly by normalized newline
+            const lines = normalizeNewlines(val).split('\n');
             
             if (lines.length === 0) {
                 data[listKey] = [];
@@ -222,9 +228,13 @@ export const generateDocument = (
             attachmentsTemplate = settings.defaultAttachments;
         }
 
+        // 1. Resolve template tags
         let resolvedAttachments = resolveStringTemplate(attachmentsTemplate || '', act, {
             materials: smartMaterialsValue
-        }).replace(/\r\n/g, '\n');
+        });
+        
+        // 2. Normalize newlines to plain \n
+        resolvedAttachments = normalizeNewlines(resolvedAttachments);
 
         if (shouldUseRegistry) {
             const baseRegistryData = prepareDocData(act, people, resolvedAttachments);
@@ -251,12 +261,16 @@ export const generateDocument = (
             const registryBuffer = renderDoc(registryTemplateBase64, registryData);
 
             let finalAttachments = resolvedAttachments;
-            // Ensure proper line break if appending logic is triggered
-            if (!finalAttachments.includes('Реестр материалов')) {
-                 if (finalAttachments && !finalAttachments.endsWith('\n')) {
-                     finalAttachments += '\n';
-                 }
-                 finalAttachments += registryReferenceString;
+            
+            // Append registry reference ONLY if setting enabled
+            const autoAppendRegistry = settings.autoAppendRegistryReference !== false; // Default true
+            
+            if (autoAppendRegistry) {
+                // Check if already present to avoid duplication
+                if (!finalAttachments.includes('Реестр материалов')) {
+                     // Join cleanly to ensure separate lines
+                     finalAttachments = [finalAttachments, registryReferenceString].filter(Boolean).join('\n');
+                }
             }
 
             const actData = prepareDocData(act, people, finalAttachments, registryReferenceString, registryReferenceString);
