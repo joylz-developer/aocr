@@ -143,8 +143,6 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
     });
 
     // UNIVERSAL LIST GENERATOR
-    // Takes any string field (like 'attachments', 'additional_info') and creates a corresponding '_list' array.
-    // This allows loops in Word like {#attachments_list}...{/attachments_list}
     Object.keys(data).forEach(key => {
         const val = data[key];
         if (typeof val === 'string') {
@@ -157,20 +155,23 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
             } else {
                 data[listKey] = lines.map((line, index) => {
                     const isLast = index === lines.length - 1;
-                    // Inject a newline character for all items except the last one.
-                    // Docxtemplater with linebreaks:true will convert \n to <w:br/>.
-                    // This allows "inline" loops to still render visually on separate lines.
+                    
+                    // 1. Text with forced newline (for inline table cells)
+                    // We append '\n' to all except the last one.
                     const textWithBreak = isLast ? line : line + '\n';
                     
+                    // 2. Clean text (for native Word lists)
+                    // No newlines, let Word handle the list item flow
+                    const textClean = line; 
+                    
                     const item: any = { 
-                        text: textWithBreak,
-                        // Provide clean version just in case
-                        text_clean: line 
+                        text: textClean,       // Default {text} is now clean (best for lists)
+                        text_br: textWithBreak // {text_br} has explicit breaks
                     };
                     
-                    // Support using the key name itself (e.g. {attachments}) inside the loop
-                    item[key] = textWithBreak;
-                    item[`${key}_clean`] = line;
+                    // Support using the key name itself (e.g. {attachments})
+                    item[key] = textClean;          // {attachments} -> clean
+                    item[`${key}_br`] = textWithBreak; // {attachments_br} -> with break
                     
                     return item;
                 });
@@ -208,8 +209,6 @@ export const generateDocument = (
         const shouldUseRegistry = materialsList.length > threshold && registryTemplateBase64;
 
         // --- Prepare dynamic values ---
-        // Determine what {materials} should map to in templates/strings
-        // UPDATED: Removed "см." and parens as requested
         const registryReferenceString = `Приложение №1: Реестр материалов.`;
         
         const smartMaterialsValue = shouldUseRegistry 
@@ -217,39 +216,27 @@ export const generateDocument = (
             : act.materials;
 
         // --- Resolve Attachments Field ---
-        // 1. Get the template string (either from Act or Default Settings)
         let attachmentsTemplate = act.attachments;
         if (!attachmentsTemplate && settings.showAttachments && settings.defaultAttachments) {
             attachmentsTemplate = settings.defaultAttachments;
         }
 
-        // 2. Resolve tags inside the attachments string
-        // We pass 'materials' override so {materials} inside attachments respects the registry logic
-        // We also explicitly normalize carriage returns to ensure docxtemplater picks them up correctly with linebreaks: true
         let resolvedAttachments = resolveStringTemplate(attachmentsTemplate || '', act, {
             materials: smartMaterialsValue
         }).replace(/\r\n/g, '\n');
 
         if (shouldUseRegistry) {
-            // --- Generate Two Documents (Act + Registry) zipped ---
-            
-            // 1. Generate Registry Doc
-            // Note: For registry, 'registryReferenceText' is typically not needed inside the registry itself.
             const baseRegistryData = prepareDocData(act, people, resolvedAttachments);
-            
-            // Special handling for registry table which requires parsed objects, not just text lines
             const registryData = {
                 ...baseRegistryData, 
                 materials_list: materialsList.map((m, i) => {
                     let name = m;
                     let cert = '';
-                    
                     const match = m.match(/^(.*)\s\((.*)\)[^)]*$/);
                     if (match) {
                         name = match[1].trim();
                         cert = match[2].trim();
                     }
-
                     return { 
                         index: i + 1, 
                         name: m, 
@@ -260,14 +247,8 @@ export const generateDocument = (
                     };
                 })
             };
-            
             const registryBuffer = renderDoc(registryTemplateBase64, registryData);
 
-            // 2. Generate Main Act Doc
-            
-            // Append registry reference to attachments text IF it's not already there.
-            // If the user used {materials} in their attachment template, 'resolvedAttachments' 
-            // already contains 'Приложение №1: Реестр материалов.' because of smartMaterialsValue above.
             let finalAttachments = resolvedAttachments;
             if (!finalAttachments.includes('Реестр материалов')) {
                  finalAttachments = finalAttachments 
@@ -275,13 +256,9 @@ export const generateDocument = (
                     : registryReferenceString;
             }
 
-            // Pass referenceText as BOTH overrideMaterials and registryReferenceText
-            // This ensures row 3 "Materials" gets exactly "Приложение №1: Реестр материалов."
             const actData = prepareDocData(act, people, finalAttachments, registryReferenceString, registryReferenceString);
-            
             const actBuffer = renderDoc(templateBase64, actData);
 
-            // 3. Zip them together
             const packageZip = new PizZip();
             packageZip.file(`Акт_№${act.number || 'б-н'}.docx`, actBuffer);
             packageZip.file(`Приложение_1_Реестр_к_Акту_№${act.number || 'б-н'}.docx`, registryBuffer);
@@ -290,9 +267,6 @@ export const generateDocument = (
             saveAs(content, `Пакет_Акт_№${act.number || 'б-н'}.zip`);
 
         } else {
-            // --- Generate Single Document ---
-            // overrideMaterials = undefined (use act.materials)
-            // registryReferenceText = '' (empty)
             const data = prepareDocData(act, people, resolvedAttachments, undefined, '');
             const buffer = renderDoc(templateBase64, data);
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });

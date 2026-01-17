@@ -102,22 +102,21 @@ const CopyableCode: React.FC<{ children: React.ReactNode; textToCopy: string; ti
 const TagGenerator: React.FC = () => {
     const [fieldInput, setFieldInput] = useState('');
     
-    const generateInline = () => {
-        const cleanName = fieldInput.trim().replace(/[{}]/g, '');
-        if (!cleanName) return '';
-        // Inline loop: produces text with line breaks
-        return `{#${cleanName}_list}{${cleanName}}{/${cleanName}_list}`;
-    };
-
     const generateList = () => {
         const cleanName = fieldInput.trim().replace(/[{}]/g, '');
         if (!cleanName) return '';
-        // List block: intended to wrap a numbered item in Word
-        return `{#${cleanName}_list}\n1. {${cleanName}}\n{/${cleanName}_list}`;
+        // THIS is the key: All on one line for the Word Paragraph Loop to work as a native list
+        return `{#${cleanName}_list}{${cleanName}}{/${cleanName}_list}`;
     };
 
-    const inlineCode = generateInline();
+    const generateInline = () => {
+        const cleanName = fieldInput.trim().replace(/[{}]/g, '');
+        if (!cleanName) return '';
+        return `{#${cleanName}_list}{${cleanName}_br}{/${cleanName}_list}`;
+    };
+
     const listCode = generateList();
+    const inlineCode = generateInline();
 
     return (
         <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg my-4">
@@ -125,7 +124,7 @@ const TagGenerator: React.FC = () => {
                 <SparklesIcon className="w-4 h-4" /> Генератор тегов для списков
             </h4>
             <p className="text-xs text-blue-800 mb-3">
-                Введите название поля (например, <code>attachments</code>), чтобы создать код для вставки в Word.
+                Введите имя поля (например, <code>attachments</code>), чтобы получить код для вставки.
             </p>
             
             <div className="flex gap-2 items-center mb-4">
@@ -139,31 +138,36 @@ const TagGenerator: React.FC = () => {
                 />
             </div>
 
-            {inlineCode && (
+            {listCode && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <CopyableCode 
-                        textToCopy={inlineCode} 
-                        title="Вариант 1: Текст с переносами строк"
-                    >
-                        <div className="whitespace-pre-wrap">{inlineCode}</div>
-                        <p className="text-[10px] text-slate-400 mt-1 italic">
-                            Вставьте это в одну строку. Результат будет выглядеть как текст, разделенный Enter-ом.
+                    <div className="bg-white p-3 rounded border border-blue-200 shadow-sm relative">
+                        <h5 className="font-bold text-xs text-slate-700 mb-2 flex items-center gap-1">
+                            <span className="bg-blue-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">1</span>
+                            Для Нумерованного списка Word
+                        </h5>
+                        <p className="text-[10px] text-slate-500 mb-2 leading-snug">
+                            1. Скопируйте код ниже.<br/>
+                            2. Вставьте в Word.<br/>
+                            3. Выделите вставленный код и <strong>нажмите кнопку "Нумерованный список"</strong> в Word.<br/>
+                            4. Результат в Word должен выглядеть как одна строка под цифрой 1.
                         </p>
-                    </CopyableCode>
+                        <CopyableCode textToCopy={listCode}>
+                            <div className="whitespace-nowrap overflow-x-auto">{listCode}</div>
+                        </CopyableCode>
+                    </div>
 
-                    <CopyableCode 
-                        textToCopy={`{#${fieldInput.trim()}_list}`} 
-                        title="Вариант 2: Настоящий нумерованный список"
-                    >
-                        <div>
-                            {`{#${fieldInput.trim()}_list}`}<br/>
-                            1. {`{${fieldInput.trim()}}`}<br/>
-                            {`{/${fieldInput.trim()}_list}`}
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-1 italic">
-                            В Word создайте список 1. 2. 3. и оберните <strong>один пункт</strong> в этот цикл. Будет создана новая цифра для каждой строки.
+                    <div className="bg-white p-3 rounded border border-slate-200 relative opacity-80 hover:opacity-100 transition-opacity">
+                        <h5 className="font-bold text-xs text-slate-700 mb-2 flex items-center gap-1">
+                            <span className="bg-slate-400 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">2</span>
+                            Для текста в одной ячейке
+                        </h5>
+                        <p className="text-[10px] text-slate-500 mb-2 leading-snug">
+                            Используйте этот код, если нужно просто вывести текст с переносами строк внутри одной ячейки таблицы, без нумерации Word.
                         </p>
-                    </CopyableCode>
+                        <CopyableCode textToCopy={inlineCode}>
+                            <div className="whitespace-pre-wrap">{inlineCode}</div>
+                        </CopyableCode>
+                    </div>
                 </div>
             )}
         </div>
