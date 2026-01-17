@@ -103,10 +103,10 @@ const TagGenerator: React.FC = () => {
     const [fieldInput, setFieldInput] = useState('');
     
     // Updated: Use standard tag for consistency and wrapping support
-    const generateListCode = (type: 'clean' | 'simple') => {
+    const generateListCode = (type: 'sandwich' | 'simple') => {
         const cleanName = fieldInput.trim().replace(/[{}]/g, '') || 'имя_поля';
-        if (type === 'clean') {
-            return `{#${cleanName}_list}{${cleanName}_clean}{/${cleanName}_list}`;
+        if (type === 'sandwich') {
+            return `{#${cleanName}_list}\n{${cleanName}_clean}\n{/${cleanName}_list}`;
         }
         return `{#${cleanName}_list}{${cleanName}}{/${cleanName}_list}`;
     };
@@ -142,31 +142,35 @@ const TagGenerator: React.FC = () => {
                     
                     <h5 className="font-bold text-base text-blue-900 mb-4 flex items-center gap-2">
                         <span className="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs shadow-sm border border-blue-200">1</span>
-                        Автоматический список Word
+                        Метод "Сэндвич" (для нумерации)
                     </h5>
                     
                     <div className="text-sm text-slate-600 space-y-3 mb-4">
-                        <p className="font-medium text-slate-800">Как это работает:</p>
+                        <p className="font-medium text-slate-800">Чтобы Word создавал список (1. 2. 3.), теги нужно разнести по строкам:</p>
                         <ol className="list-decimal pl-5 space-y-2 marker:text-blue-500 marker:font-bold">
                             <li>
-                                В приложении заполняйте поле, разделяя пункты нажатием <strong>Enter</strong> (каждый пункт с новой строки).
+                                Скопируйте блок ниже и вставьте в ячейку таблицы Word.
                             </li>
                             <li>
-                                Скопируйте код ниже и вставьте в шаблон Word.
+                                <span className="text-red-600 font-bold">Важно:</span> Выделите <strong>только среднюю строку</strong> (где имя поля) и нажмите кнопку "Нумерованный список" в Word.
                             </li>
                             <li>
-                                <span className="text-red-600 font-bold">Самое важное:</span> В Word выделите этот код и нажмите кнопку <strong>"Нумерованный список"</strong> (или Маркированный) на панели инструментов.
+                                Верхний и нижний теги должны остаться <strong>без цифр</strong>.
                             </li>
                         </ol>
                     </div>
 
-                    <CopyableCode textToCopy={generateListCode('clean')} title="Код для шаблона">
-                        <div className="whitespace-pre-wrap break-all text-blue-700 font-bold bg-blue-50 p-2 rounded border border-blue-100">{generateListCode('clean')}</div>
+                    <CopyableCode textToCopy={generateListCode('sandwich')} title="Код для шаблона (3 строки)">
+                        <div className="whitespace-pre-wrap break-all text-blue-700 font-bold bg-blue-50 p-2 rounded border border-blue-100 font-mono text-xs">
+                            {generateListCode('sandwich')}
+                        </div>
                     </CopyableCode>
                     
-                    <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded mt-3">
-                        <strong>Если текст слипается в одну строку</strong> (1. ПерваяВтораяТретья):<br/>
-                        Убедитесь, что между открывающим тегом <code>{`{#...}`}</code>, тегом <code>{`{...}`}</code> и закрывающим <code>{`{/...}`}</code> в Word <strong>нет пробелов</strong>.
+                    <div className="text-xs text-slate-500 italic mt-3 bg-slate-50 p-2 rounded border border-slate-100">
+                        <span className="font-bold">Как это будет выглядеть в Word:</span><br/>
+                        {`{#${fieldInput || '...'}_list}`}<br/>
+                        1. {`{${fieldInput || '...'}_clean}`}<br/>
+                        {`{/${fieldInput || '...'}_list}`}
                     </div>
                 </div>
 
@@ -174,26 +178,26 @@ const TagGenerator: React.FC = () => {
                 <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm relative opacity-90 hover:opacity-100 transition-opacity">
                     <h5 className="font-bold text-base text-slate-700 mb-4 flex items-center gap-2">
                         <span className="bg-slate-100 text-slate-500 rounded-full w-6 h-6 flex items-center justify-center text-xs border border-slate-200">2</span>
-                        Простой текст (как есть)
+                        Простой текст (одной строкой)
                     </h5>
                     
                     <div className="text-sm text-slate-600 space-y-3 mb-4">
                         <p className="font-medium text-slate-800">Как это работает:</p>
                         <ul className="list-disc pl-5 space-y-2 marker:text-slate-400">
                             <li>
-                                Весь текст вставляется в одну ячейку/строку.
+                                Весь текст вставляется в одну ячейку.
                             </li>
                             <li>
-                                Переносы строк (Enter) сохраняются, но это не список Word.
+                                Переносы строк сохраняются, но это не список Word.
                             </li>
                             <li>
-                                Используйте, если вам не нужна автоматическая нумерация или вы пишете цифры (1., 2.) вручную.
+                                Подходит, если вы не используете авто-нумерацию Word.
                             </li>
                         </ul>
                     </div>
 
                     <CopyableCode textToCopy={generateListCode('simple')} title="Код для шаблона">
-                        <div className="whitespace-pre-wrap break-all text-slate-600 bg-slate-50 p-2 rounded border border-slate-200">{generateListCode('simple')}</div>
+                        <div className="whitespace-pre-wrap break-all text-slate-600 bg-slate-50 p-2 rounded border border-slate-200 font-mono text-xs">{generateListCode('simple')}</div>
                     </CopyableCode>
                 </div>
             </div>
