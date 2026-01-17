@@ -16,8 +16,24 @@ function base64ToArrayBuffer(base64: string) {
     return bytes.buffer;
 }
 
+// Helper to resolve simple templates like {materials} inside generator
+const resolveTemplate = (template: string, act: Act): string => {
+    if (!template) return '';
+    return template.replace(/\{(\w+)\}/g, (_, key) => {
+        let value = (act as any)[key];
+        
+        // Format dates for display if needed, matching ActsTable logic roughly
+        if ((key === 'workStartDate' || key === 'workEndDate') && value) {
+             const parts = value.split('-');
+             if (parts.length === 3) value = `${parts[2]}.${parts[1]}.${parts[0]}`;
+        }
+        
+        return value !== undefined && value !== null ? String(value) : '';
+    });
+};
+
 // Function to generate data object for templates
-const prepareDocData = (act: Act, people: Person[], overrideMaterials?: string) => {
+const prepareDocData = (act: Act, people: Person[], currentAttachments: string, overrideMaterials?: string) => {
     const [actYear, actMonth, actDay] = act.date ? act.date.split('-') : ['', '', ''];
     const [workStartYear, workStartMonth, workStartDay] = act.workStartDate ? act.workStartDate.split('-') : ['', '', ''];
     const [workEndYear, workEndMonth, workEndDay] = act.workEndDate ? act.workEndDate.split('-') : ['', '', ''];
@@ -51,7 +67,7 @@ const prepareDocData = (act: Act, people: Person[], overrideMaterials?: string) 
         // Footer
         additional_info: act.additionalInfo,
         copies_count: act.copiesCount,
-        attachments: act.attachments,
+        attachments: currentAttachments, // Use processed attachments
     };
 
     // Add representatives data
@@ -113,12 +129,23 @@ export const generateDocument = (
         const threshold = settings.registryThreshold || 5;
         const shouldUseRegistry = materialsList.length > threshold && registryTemplateBase64;
 
+        // --- Logic to resolve Attachments on the fly if empty ---
+        let resolvedAttachments = act.attachments;
+        // If attachments field is empty in the Act, but settings has a default template enabled, resolve it now.
+        if (!resolvedAttachments && settings.showAttachments && settings.defaultAttachments) {
+            resolvedAttachments = resolveTemplate(settings.defaultAttachments, act);
+        }
+        // Fallback to empty string
+        resolvedAttachments = resolvedAttachments || '';
+
         if (shouldUseRegistry) {
             // --- Generate Two Documents (Act + Registry) zipped ---
             
             // 1. Generate Registry Doc
             // We use the same base data (reps, dates, etc) for the registry header/footer
-            const baseRegistryData = prepareDocData(act, people);
+            // Note: For registry header, we usually don't need the 'See Appendix' override in the header section, 
+            // but the registry template usually doesn't use the {materials} tag in the header anyway.
+            const baseRegistryData = prepareDocData(act, people, resolvedAttachments);
             
             const registryData = {
                 ...baseRegistryData, // Include all standard act fields (representatives, dates, object name)
@@ -148,16 +175,16 @@ export const generateDocument = (
             const registryBuffer = renderDoc(registryTemplateBase64, registryData);
 
             // 2. Generate Main Act Doc
-            // Replace materials text with reference
+            // Replace materials text in the body with reference
             const referenceText = `см. Приложение №1 (Реестр материалов)`;
-            const actData = prepareDocData(act, people, referenceText);
             
-            // Append registry to existing attachments text if possible, or ensure it's noted
-            const existingAttachments = actData.attachments || '';
-            actData.attachments = existingAttachments 
-                ? `${existingAttachments}\nПриложение №1: Реестр материалов.` 
+            // Append registry reference to attachments text
+            const finalAttachments = resolvedAttachments 
+                ? `${resolvedAttachments}\nПриложение №1: Реестр материалов.` 
                 : `Приложение №1: Реестр материалов.`;
 
+            const actData = prepareDocData(act, people, finalAttachments, referenceText);
+            
             const actBuffer = renderDoc(templateBase64, actData);
 
             // 3. Zip them together
@@ -170,7 +197,8 @@ export const generateDocument = (
 
         } else {
             // --- Generate Single Document ---
-            const data = prepareDocData(act, people);
+            // Use the resolved attachments directly
+            const data = prepareDocData(act, people, resolvedAttachments);
             const buffer = renderDoc(templateBase64, data);
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
             saveAs(blob, `Акт_скрытых_работ_${act.number || 'б-н'}.docx`);
