@@ -453,12 +453,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             });
         };
 
-        if (settings.showAttachments && settings.defaultAttachments) {
-            actToSave.attachments = resolve(settings.defaultAttachments, actToSave);
-        }
-        if (settings.showAdditionalInfo && settings.defaultAdditionalInfo) {
-            actToSave.additionalInfo = resolve(settings.defaultAdditionalInfo, actToSave);
-        }
+        // REMOVED: Auto-overwriting of attachments and additionalInfo with defaults.
+        // This was preventing manual edits. Defaults are now applied only on creation.
         
         const dateTemplate = settings.defaultActDate !== undefined ? settings.defaultActDate : '{workEndDate}';
         const resolvedDateString = resolve(dateTemplate, actToSave);
