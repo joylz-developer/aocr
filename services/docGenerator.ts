@@ -150,16 +150,31 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
         if (typeof val === 'string') {
             const listKey = `${key}_list`;
             // Split by newline, trim whitespace, remove empty lines
-            data[listKey] = val.split('\n')
-                .map(line => {
-                    // Create an object for the loop item
-                    const item: any = { text: line.trim() };
-                    // ALSO add the key itself as a property (e.g. { attachments: "line content" })
-                    // This allows users to use {#attachments_list}{attachments}{/attachments_list}
-                    item[key] = line.trim();
+            const lines = val.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            
+            if (lines.length === 0) {
+                data[listKey] = [];
+            } else {
+                data[listKey] = lines.map((line, index) => {
+                    const isLast = index === lines.length - 1;
+                    // Inject a newline character for all items except the last one.
+                    // Docxtemplater with linebreaks:true will convert \n to <w:br/>.
+                    // This allows "inline" loops to still render visually on separate lines.
+                    const textWithBreak = isLast ? line : line + '\n';
+                    
+                    const item: any = { 
+                        text: textWithBreak,
+                        // Provide clean version just in case
+                        text_clean: line 
+                    };
+                    
+                    // Support using the key name itself (e.g. {attachments}) inside the loop
+                    item[key] = textWithBreak;
+                    item[`${key}_clean`] = line;
+                    
                     return item;
-                })
-                .filter(item => item.text.length > 0);
+                });
+            }
         }
     });
 

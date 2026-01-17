@@ -69,7 +69,7 @@ const TagTooltip: React.FC<{ tag: string; description: string }> = ({ tag, descr
     );
 };
 
-const CopyableCode: React.FC<{ children: React.ReactNode; textToCopy: string }> = ({ children, textToCopy }) => {
+const CopyableCode: React.FC<{ children: React.ReactNode; textToCopy: string; title?: string }> = ({ children, textToCopy, title }) => {
     const [copied, setCopied] = useState(false);
 
     const handleCopy = () => {
@@ -79,19 +79,22 @@ const CopyableCode: React.FC<{ children: React.ReactNode; textToCopy: string }> 
     };
 
     return (
-        <div 
-            className="group relative bg-white p-3 rounded border border-slate-200 text-xs font-mono text-slate-600 cursor-pointer hover:border-blue-400 hover:shadow-sm transition-all"
-            onClick={handleCopy}
-            title="Нажмите, чтобы скопировать код"
-        >
-            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                {copied ? (
-                    <span className="text-green-600 font-bold bg-green-50 px-1 rounded">Скопировано!</span>
-                ) : (
-                    <CopyIcon className="w-4 h-4 text-blue-500" />
-                )}
+        <div className="mb-3">
+            {title && <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">{title}</p>}
+            <div 
+                className="group relative bg-white p-3 rounded border border-slate-200 text-xs font-mono text-slate-600 cursor-pointer hover:border-blue-400 hover:shadow-sm transition-all"
+                onClick={handleCopy}
+                title="Нажмите, чтобы скопировать код"
+            >
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {copied ? (
+                        <span className="text-green-600 font-bold bg-green-50 px-1 rounded">Скопировано!</span>
+                    ) : (
+                        <CopyIcon className="w-4 h-4 text-blue-500" />
+                    )}
+                </div>
+                {children}
             </div>
-            {children}
         </div>
     );
 };
@@ -99,14 +102,22 @@ const CopyableCode: React.FC<{ children: React.ReactNode; textToCopy: string }> 
 const TagGenerator: React.FC = () => {
     const [fieldInput, setFieldInput] = useState('');
     
-    const generateTag = () => {
+    const generateInline = () => {
         const cleanName = fieldInput.trim().replace(/[{}]/g, '');
         if (!cleanName) return '';
-        // Uses the new universal support: both {text} and {field_name} work inside the loop
-        return `{#${cleanName}_list}\n  {${cleanName}}\n{/${cleanName}_list}`;
+        // Inline loop: produces text with line breaks
+        return `{#${cleanName}_list}{${cleanName}}{/${cleanName}_list}`;
     };
 
-    const generatedCode = generateTag();
+    const generateList = () => {
+        const cleanName = fieldInput.trim().replace(/[{}]/g, '');
+        if (!cleanName) return '';
+        // List block: intended to wrap a numbered item in Word
+        return `{#${cleanName}_list}\n1. {${cleanName}}\n{/${cleanName}_list}`;
+    };
+
+    const inlineCode = generateInline();
+    const listCode = generateList();
 
     return (
         <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg my-4">
@@ -114,28 +125,47 @@ const TagGenerator: React.FC = () => {
                 <SparklesIcon className="w-4 h-4" /> Генератор тегов для списков
             </h4>
             <p className="text-xs text-blue-800 mb-3">
-                Чтобы вставить многострочный текст (Приложения, Доп. сведения и т.д.) так, чтобы в Word работала автоматическая нумерация списков, используйте этот инструмент.
+                Введите название поля (например, <code>attachments</code>), чтобы создать код для вставки в Word.
             </p>
             
-            <div className="flex gap-2 items-center mb-3">
+            <div className="flex gap-2 items-center mb-4">
                 <label className="text-xs font-bold text-slate-600 whitespace-nowrap">Имя поля:</label>
                 <input 
                     type="text" 
                     value={fieldInput}
                     onChange={(e) => setFieldInput(e.target.value)}
-                    placeholder="например: attachments"
+                    placeholder="attachments"
                     className="flex-grow text-sm border border-slate-300 rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"
                 />
             </div>
 
-            {generatedCode && (
-                <CopyableCode textToCopy={generatedCode}>
-                    <div className="whitespace-pre-wrap">{generatedCode}</div>
-                </CopyableCode>
+            {inlineCode && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <CopyableCode 
+                        textToCopy={inlineCode} 
+                        title="Вариант 1: Текст с переносами строк"
+                    >
+                        <div className="whitespace-pre-wrap">{inlineCode}</div>
+                        <p className="text-[10px] text-slate-400 mt-1 italic">
+                            Вставьте это в одну строку. Результат будет выглядеть как текст, разделенный Enter-ом.
+                        </p>
+                    </CopyableCode>
+
+                    <CopyableCode 
+                        textToCopy={`{#${fieldInput.trim()}_list}`} 
+                        title="Вариант 2: Настоящий нумерованный список"
+                    >
+                        <div>
+                            {`{#${fieldInput.trim()}_list}`}<br/>
+                            1. {`{${fieldInput.trim()}}`}<br/>
+                            {`{/${fieldInput.trim()}_list}`}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1 italic">
+                            В Word создайте список 1. 2. 3. и оберните <strong>один пункт</strong> в этот цикл. Будет создана новая цифра для каждой строки.
+                        </p>
+                    </CopyableCode>
+                </div>
             )}
-            <p className="text-[10px] text-slate-500 mt-2 italic">
-                Инструкция: 1. Скопируйте код. 2. В Word создайте нумерованный список. 3. Вставьте код прямо в пункт списка.
-            </p>
         </div>
     );
 };
