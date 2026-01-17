@@ -154,7 +154,7 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
         if (typeof val === 'string') {
             const listKey = `${key}_list`;
             // Ensure we split strictly by normalized newline
-            const lines = normalizeNewlines(val).split('\n');
+            const lines = normalizeNewlines(val).split('\n').filter(line => line.trim() !== ''); // Filter empty lines for lists
             
             if (lines.length === 0) {
                 data[listKey] = [];
@@ -177,8 +177,8 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
                     };
                     
                     // Support using the key name itself
-                    item[key] = textWithBreak;          // {attachments}
-                    item[`${key}_clean`] = textClean;   // {attachments_clean}
+                    item[key] = textWithBreak;          // {attachments} -> "Text\n"
+                    item[`${key}_clean`] = textClean;   // {attachments_clean} -> "Text"
                     
                     return item;
                 });
