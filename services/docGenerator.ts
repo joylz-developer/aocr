@@ -142,15 +142,15 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
         }
     });
 
-    // Universal List Generation:
-    // For every string field, create a corresponding "_list" array field.
-    // This allows Word to loop over lines using {#field_list}...{/field_list} for auto-numbering.
+    // UNIVERSAL LIST GENERATOR
+    // Takes any string field (like 'attachments', 'additional_info') and creates a corresponding '_list' array.
+    // This array contains objects { text: 'line content' }.
+    // Usage in Word: {#field_name_list} {text} {/field_name_list}
     Object.keys(data).forEach(key => {
         const val = data[key];
         if (typeof val === 'string') {
             const listKey = `${key}_list`;
-            // Only create if it doesn't strictly exist (though here we build fresh)
-            // Split by newline, trim, and ignore empty lines to ensure numbering doesn't bullet empty spaces
+            // Split by newline, trim whitespace, remove empty lines
             data[listKey] = val.split('\n')
                 .map(line => ({ text: line.trim() }))
                 .filter(item => item.text.length > 0);

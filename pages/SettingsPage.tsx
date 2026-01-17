@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ProjectSettings, ROLES } from '../types';
-import { ImportIcon, ExportIcon, TemplateIcon, DownloadIcon, QuestionMarkCircleIcon, CloudUploadIcon, DeleteIcon, CopyIcon } from '../components/Icons';
+import { ImportIcon, ExportIcon, TemplateIcon, DownloadIcon, QuestionMarkCircleIcon, CloudUploadIcon, DeleteIcon, CopyIcon, SparklesIcon } from '../components/Icons';
 
 interface SettingsPageProps {
     settings: ProjectSettings;
@@ -25,12 +25,10 @@ const TagTooltip: React.FC<{ tag: string; description: string }> = ({ tag, descr
     const handleMouseEnter = () => {
         if (triggerRef.current) {
             const rect = triggerRef.current.getBoundingClientRect();
-            // Calculate position: above the element, centered
             let top = rect.top - 10;
             let left = rect.left + rect.width / 2;
             
-            // Adjust if out of bounds (simplified check)
-            if (top < 50) top = rect.bottom + 10; // Flip to bottom if too close to top
+            if (top < 50) top = rect.bottom + 10;
             if (left < 100) left = 100;
             if (left > window.innerWidth - 100) left = window.innerWidth - 100;
 
@@ -82,18 +80,61 @@ const CopyableCode: React.FC<{ children: React.ReactNode; textToCopy: string }> 
 
     return (
         <div 
-            className="group relative bg-white p-2 rounded border border-green-200 text-xs font-mono text-slate-600 cursor-pointer hover:border-green-400 hover:shadow-sm transition-all"
+            className="group relative bg-white p-3 rounded border border-slate-200 text-xs font-mono text-slate-600 cursor-pointer hover:border-blue-400 hover:shadow-sm transition-all"
             onClick={handleCopy}
             title="Нажмите, чтобы скопировать код"
         >
-            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 {copied ? (
-                    <span className="text-green-600 font-bold bg-green-50 px-1 rounded">Copied!</span>
+                    <span className="text-green-600 font-bold bg-green-50 px-1 rounded">Скопировано!</span>
                 ) : (
-                    <CopyIcon className="w-4 h-4 text-slate-400" />
+                    <CopyIcon className="w-4 h-4 text-blue-500" />
                 )}
             </div>
             {children}
+        </div>
+    );
+};
+
+const TagGenerator: React.FC = () => {
+    const [fieldInput, setFieldInput] = useState('');
+    
+    const generateTag = () => {
+        const cleanName = fieldInput.trim().replace(/[{}]/g, '');
+        if (!cleanName) return '';
+        return `{#${cleanName}_list}\n  {text}\n{/${cleanName}_list}`;
+    };
+
+    const generatedCode = generateTag();
+
+    return (
+        <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg my-4">
+            <h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                <SparklesIcon className="w-4 h-4" /> Генератор тегов для списков
+            </h4>
+            <p className="text-xs text-blue-800 mb-3">
+                Чтобы вставить многострочный текст (Приложения, Доп. сведения и т.д.) так, чтобы в Word работала автоматическая нумерация списков, используйте этот инструмент.
+            </p>
+            
+            <div className="flex gap-2 items-center mb-3">
+                <label className="text-xs font-bold text-slate-600 whitespace-nowrap">Имя поля:</label>
+                <input 
+                    type="text" 
+                    value={fieldInput}
+                    onChange={(e) => setFieldInput(e.target.value)}
+                    placeholder="например: attachments"
+                    className="flex-grow text-sm border border-slate-300 rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"
+                />
+            </div>
+
+            {generatedCode && (
+                <CopyableCode textToCopy={generatedCode}>
+                    <div className="whitespace-pre-wrap">{generatedCode}</div>
+                </CopyableCode>
+            )}
+            <p className="text-[10px] text-slate-500 mt-2 italic">
+                Инструкция: 1. Скопируйте код. 2. В Word создайте нумерованный список. 3. Вставьте код прямо в пункт списка.
+            </p>
         </div>
     );
 };
@@ -130,9 +171,6 @@ const VariableHelpTooltip: React.FC = () => {
                             </li>
                         ))}
                     </ul>
-                    <div className="text-xs text-slate-400 border-t border-slate-600 pt-2">
-                        Совет: Добавьте <code>_list</code> к любому тегу для создания списка в Word (например, <code>{`{materials_list}`}</code>).
-                    </div>
                     <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-0 h-0 border-l-8 border-l-transparent border-r-8 border-r-transparent border-t-8 border-t-slate-800 -mb-2"></div>
                 </div>
             )}
@@ -527,37 +565,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         <TagTooltip tag="{attachments}" description="Текст из поля Приложения (одной строкой с переносами)" />
                                     </div>
 
-                                    {/* UNIVERSAL LIST HELP SECTION */}
-                                    <div className="bg-green-50 border border-green-100 p-3 rounded my-4">
-                                        <h4 className="font-semibold text-green-800 mb-1 flex items-center gap-2">
-                                            <span>Многострочные списки (Нумерация Word)</span>
-                                        </h4>
-                                        <p className="text-xs text-green-800 mb-2">
-                                            Чтобы Word автоматически пронумеровал строки из многострочного поля, используйте тег с суффиксом <code>_list</code>.
-                                            Это работает для любого текстового поля (Приложения, Материалы, Доп. инфо и т.д.).
-                                        </p>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">Приложения списком</p>
-                                                <CopyableCode textToCopy="{#attachments_list}{text}{/attachments_list}">
-                                                    1. {'{#attachments_list}'}<br/>
-                                                    &nbsp;&nbsp;&nbsp;{'{text}'}<br/>
-                                                    &nbsp;&nbsp;&nbsp;{'{/attachments_list}'}
-                                                </CopyableCode>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">Доп. сведения списком</p>
-                                                <CopyableCode textToCopy="{#additional_info_list}{text}{/additional_info_list}">
-                                                    • {'{#additional_info_list}'}<br/>
-                                                    &nbsp;&nbsp;&nbsp;{'{text}'}<br/>
-                                                    &nbsp;&nbsp;&nbsp;{'{/additional_info_list}'}
-                                                </CopyableCode>
-                                            </div>
-                                        </div>
-                                        <p className="text-[10px] text-green-700 mt-2 italic">
-                                            Совет: В самом шаблоне Word создайте нумерованный или маркированный список и поместите теги внутрь первого пункта.
-                                        </p>
-                                    </div>
+                                    {/* GENERATOR COMPONENT */}
+                                    <TagGenerator />
 
                                     <h4 className="font-semibold mt-4">Организации</h4>
                                     <div className="flex flex-wrap gap-2">
