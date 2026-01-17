@@ -68,11 +68,6 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
     const [workStartYear, workStartMonth, workStartDay] = act.workStartDate ? act.workStartDate.split('-') : ['', '', ''];
     const [workEndYear, workEndMonth, workEndDay] = act.workEndDate ? act.workEndDate.split('-') : ['', '', ''];
     
-    // Split attachments into an array for looping in Word (supports auto-numbering)
-    const attachmentsList = currentAttachments
-        ? currentAttachments.split('\n').map(line => ({ text: line.trim() })).filter(item => item.text)
-        : [];
-
     const data: { [key: string]: any } = {
         // Header
         object_name: act.objectName,
@@ -108,7 +103,6 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
         additional_info: act.additionalInfo,
         copies_count: act.copiesCount,
         attachments: currentAttachments, // Use processed attachments string
-        attachments_list: attachmentsList, // Use array for loops
     };
 
     // Add representatives data
@@ -145,6 +139,21 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
             data[`${roleKey}_auth_doc`] = null;
             data[`${roleKey}_details`] = null;
             data[`${roleKey}_details_short`] = null;
+        }
+    });
+
+    // Universal List Generation:
+    // For every string field, create a corresponding "_list" array field.
+    // This allows Word to loop over lines using {#field_list}...{/field_list} for auto-numbering.
+    Object.keys(data).forEach(key => {
+        const val = data[key];
+        if (typeof val === 'string') {
+            const listKey = `${key}_list`;
+            // Only create if it doesn't strictly exist (though here we build fresh)
+            // Split by newline, trim, and ignore empty lines to ensure numbering doesn't bullet empty spaces
+            data[listKey] = val.split('\n')
+                .map(line => ({ text: line.trim() }))
+                .filter(item => item.text.length > 0);
         }
     });
 
@@ -207,6 +216,7 @@ export const generateDocument = (
             // Note: For registry, 'registryReferenceText' is typically not needed inside the registry itself.
             const baseRegistryData = prepareDocData(act, people, resolvedAttachments);
             
+            // Special handling for registry table which requires parsed objects, not just text lines
             const registryData = {
                 ...baseRegistryData, 
                 materials_list: materialsList.map((m, i) => {

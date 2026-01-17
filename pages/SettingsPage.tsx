@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ProjectSettings, ROLES } from '../types';
-import { ImportIcon, ExportIcon, TemplateIcon, DownloadIcon, QuestionMarkCircleIcon, CloudUploadIcon, DeleteIcon } from '../components/Icons';
+import { ImportIcon, ExportIcon, TemplateIcon, DownloadIcon, QuestionMarkCircleIcon, CloudUploadIcon, DeleteIcon, CopyIcon } from '../components/Icons';
 
 interface SettingsPageProps {
     settings: ProjectSettings;
@@ -71,6 +71,33 @@ const TagTooltip: React.FC<{ tag: string; description: string }> = ({ tag, descr
     );
 };
 
+const CopyableCode: React.FC<{ children: React.ReactNode; textToCopy: string }> = ({ children, textToCopy }) => {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(textToCopy);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <div 
+            className="group relative bg-white p-2 rounded border border-green-200 text-xs font-mono text-slate-600 cursor-pointer hover:border-green-400 hover:shadow-sm transition-all"
+            onClick={handleCopy}
+            title="Нажмите, чтобы скопировать код"
+        >
+            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                {copied ? (
+                    <span className="text-green-600 font-bold bg-green-50 px-1 rounded">Copied!</span>
+                ) : (
+                    <CopyIcon className="w-4 h-4 text-slate-400" />
+                )}
+            </div>
+            {children}
+        </div>
+    );
+};
+
 const VariableHelpTooltip: React.FC = () => {
     const [isVisible, setIsVisible] = useState(false);
 
@@ -93,9 +120,9 @@ const VariableHelpTooltip: React.FC = () => {
                 <QuestionMarkCircleIcon className="w-4 h-4" />
             </button>
             {isVisible && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 bg-slate-800 text-white text-sm rounded-lg shadow-lg p-3 z-10">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-80 bg-slate-800 text-white text-sm rounded-lg shadow-lg p-3 z-10">
                     <h4 className="font-bold mb-2 text-xs uppercase tracking-wider text-slate-400">Можно использовать теги:</h4>
-                    <ul className="space-y-1">
+                    <ul className="space-y-1 mb-2">
                         {variables.map(v => (
                              <li key={v.name} className="flex justify-between">
                                 <code className="text-cyan-300">{v.name}</code>
@@ -103,6 +130,9 @@ const VariableHelpTooltip: React.FC = () => {
                             </li>
                         ))}
                     </ul>
+                    <div className="text-xs text-slate-400 border-t border-slate-600 pt-2">
+                        Совет: Добавьте <code>_list</code> к любому тегу для создания списка в Word (например, <code>{`{materials_list}`}</code>).
+                    </div>
                     <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-0 h-0 border-l-8 border-l-transparent border-r-8 border-r-transparent border-t-8 border-t-slate-800 -mb-2"></div>
                 </div>
             )}
@@ -497,20 +527,36 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         <TagTooltip tag="{attachments}" description="Текст из поля Приложения (одной строкой с переносами)" />
                                     </div>
 
-                                    {/* NEW HELP SECTION FOR ATTACHMENTS LOOP */}
+                                    {/* UNIVERSAL LIST HELP SECTION */}
                                     <div className="bg-green-50 border border-green-100 p-3 rounded my-4">
                                         <h4 className="font-semibold text-green-800 mb-1 flex items-center gap-2">
-                                            <span>Автоматическая нумерация строк в Word</span>
+                                            <span>Многострочные списки (Нумерация Word)</span>
                                         </h4>
                                         <p className="text-xs text-green-800 mb-2">
-                                            Если вам нужно, чтобы каждая строка из поля "Приложения" автоматически нумеровалась функцией списка Word, используйте цикл по <code>attachments_list</code>.
+                                            Чтобы Word автоматически пронумеровал строки из многострочного поля, используйте тег с суффиксом <code>_list</code>.
+                                            Это работает для любого текстового поля (Приложения, Материалы, Доп. инфо и т.д.).
                                         </p>
-                                        <div className="bg-white p-2 rounded border border-green-200 text-xs font-mono text-slate-600">
-                                            <p className="mb-1 text-slate-400">// В шаблоне создайте нумерованный список и вставьте:</p>
-                                            1. {'{#attachments_list}'}<br/>
-                                            &nbsp;&nbsp;&nbsp;{'{text}'}<br/>
-                                            &nbsp;&nbsp;&nbsp;{'{/attachments_list}'}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">Приложения списком</p>
+                                                <CopyableCode textToCopy="{#attachments_list}{text}{/attachments_list}">
+                                                    1. {'{#attachments_list}'}<br/>
+                                                    &nbsp;&nbsp;&nbsp;{'{text}'}<br/>
+                                                    &nbsp;&nbsp;&nbsp;{'{/attachments_list}'}
+                                                </CopyableCode>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">Доп. сведения списком</p>
+                                                <CopyableCode textToCopy="{#additional_info_list}{text}{/additional_info_list}">
+                                                    • {'{#additional_info_list}'}<br/>
+                                                    &nbsp;&nbsp;&nbsp;{'{text}'}<br/>
+                                                    &nbsp;&nbsp;&nbsp;{'{/additional_info_list}'}
+                                                </CopyableCode>
+                                            </div>
                                         </div>
+                                        <p className="text-[10px] text-green-700 mt-2 italic">
+                                            Совет: В самом шаблоне Word создайте нумерованный или маркированный список и поместите теги внутрь первого пункта.
+                                        </p>
                                     </div>
 
                                     <h4 className="font-semibold mt-4">Организации</h4>
