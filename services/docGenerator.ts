@@ -189,9 +189,10 @@ export const generateDocument = (
 
         // 2. Resolve tags inside the attachments string
         // We pass 'materials' override so {materials} inside attachments respects the registry logic
+        // We also explicitly normalize carriage returns to ensure docxtemplater picks them up correctly with linebreaks: true
         let resolvedAttachments = resolveStringTemplate(attachmentsTemplate || '', act, {
             materials: smartMaterialsValue
-        });
+        }).replace(/\r\n/g, '\n');
 
         if (shouldUseRegistry) {
             // --- Generate Two Documents (Act + Registry) zipped ---
