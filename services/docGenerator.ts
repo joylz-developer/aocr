@@ -144,15 +144,21 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
 
     // UNIVERSAL LIST GENERATOR
     // Takes any string field (like 'attachments', 'additional_info') and creates a corresponding '_list' array.
-    // This array contains objects { text: 'line content' }.
-    // Usage in Word: {#field_name_list} {text} {/field_name_list}
+    // This allows loops in Word like {#attachments_list}...{/attachments_list}
     Object.keys(data).forEach(key => {
         const val = data[key];
         if (typeof val === 'string') {
             const listKey = `${key}_list`;
             // Split by newline, trim whitespace, remove empty lines
             data[listKey] = val.split('\n')
-                .map(line => ({ text: line.trim() }))
+                .map(line => {
+                    // Create an object for the loop item
+                    const item: any = { text: line.trim() };
+                    // ALSO add the key itself as a property (e.g. { attachments: "line content" })
+                    // This allows users to use {#attachments_list}{attachments}{/attachments_list}
+                    item[key] = line.trim();
+                    return item;
+                })
                 .filter(item => item.text.length > 0);
         }
     });

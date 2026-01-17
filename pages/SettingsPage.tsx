@@ -102,7 +102,8 @@ const TagGenerator: React.FC = () => {
     const generateTag = () => {
         const cleanName = fieldInput.trim().replace(/[{}]/g, '');
         if (!cleanName) return '';
-        return `{#${cleanName}_list}\n  {text}\n{/${cleanName}_list}`;
+        // Uses the new universal support: both {text} and {field_name} work inside the loop
+        return `{#${cleanName}_list}\n  {${cleanName}}\n{/${cleanName}_list}`;
     };
 
     const generatedCode = generateTag();
