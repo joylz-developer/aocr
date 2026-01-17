@@ -231,7 +231,9 @@ export const generateDocument = (
 
         // 1. Resolve template tags
         let resolvedAttachments = resolveStringTemplate(attachmentsTemplate || '', act, {
-            materials: smartMaterialsValue
+            materials: smartMaterialsValue,
+            materials_raw: act.materials, // EXPLICITLY allow raw materials in attachments even if registry is active
+            certs: act.certs
         });
         
         // 2. Normalize newlines to plain \n

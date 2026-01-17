@@ -437,7 +437,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         <span>Значение по умолчанию</span>
                                         <VariableHelpTooltip />
                                     </label>
-                                    <textarea id="defaultAdditionalInfo" name="defaultAdditionalInfo" value={formData.defaultAdditionalInfo || ''} onChange={handleChange} className={`${inputClass} text-sm`} rows={4} placeholder="Например: Работы выполнены в соответствии с..." />
+                                    <textarea id="defaultAdditionalInfo" name="defaultAdditionalInfo" value={formData.defaultAdditionalInfo || ''} onChange={handleChange} className={`${inputClass} text-sm`} rows={6} placeholder="Например: Работы выполнены в соответствии с..." />
                                 </div>
                             </SettingToggle>
 
@@ -447,8 +447,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         <span>Значение по умолчанию</span>
                                         <VariableHelpTooltip />
                                     </label>
-                                    <textarea id="defaultAttachments" name="defaultAttachments" value={formData.defaultAttachments || ''} onChange={handleChange} className={`${inputClass} text-sm`} rows={4} placeholder="Например: Исполнительные схемы: {certs}" />
-                                    <p className="text-xs text-slate-500 mt-1">Вы можете использовать теги (например, {'{materials}'}) в этом поле. При генерации они заменятся на данные из акта. Переносы строк сохраняются.</p>
+                                    <textarea id="defaultAttachments" name="defaultAttachments" value={formData.defaultAttachments || ''} onChange={handleChange} className={`${inputClass} text-sm`} rows={6} placeholder="Например: Исполнительные схемы: {certs}" />
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        Вы можете использовать теги (например, {'{materials}'}) в этом поле. При генерации они заменятся на данные из акта. Переносы строк сохраняются.
+                                        <br/><strong>Совет:</strong> Используйте {'{materials_raw}'} чтобы всегда выводить полный список материалов, даже если включен реестр.
+                                    </p>
                                 </div>
                             </SettingToggle>
 
