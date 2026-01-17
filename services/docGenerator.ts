@@ -26,9 +26,10 @@ const shortenName = (fullName: string): string => {
 };
 
 // Normalize newlines to ensure Docxtemplater handles them correctly
+// Updated to handle Carriage Return, Line Feed, Vertical Tab, Form Feed, Line Separator, Paragraph Separator
 const normalizeNewlines = (str: string): string => {
     if (!str) return '';
-    return str.replace(/\r\n|\r|\n/g, '\n');
+    return str.replace(/\r\n|\r|\n|\v|\f|\u2028|\u2029/g, '\n');
 };
 
 // Helper to resolve simple templates inside text strings (e.g. default Attachments)

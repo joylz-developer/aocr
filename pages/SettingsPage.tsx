@@ -164,8 +164,9 @@ const TagGenerator: React.FC = () => {
                         <div className="whitespace-pre-wrap break-all text-blue-700 font-bold bg-blue-50 p-2 rounded border border-blue-100">{generateListCode('clean')}</div>
                     </CopyableCode>
                     
-                    <div className="text-xs text-slate-500 italic mt-3 bg-slate-50 p-2 rounded">
-                        Результат: Word сам создаст красивый список (1., 2., 3...) с правильными отступами.
+                    <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded mt-3">
+                        <strong>Если текст слипается в одну строку</strong> (1. ПерваяВтораяТретья):<br/>
+                        Убедитесь, что между открывающим тегом <code>{`{#...}`}</code>, тегом <code>{`{...}`}</code> и закрывающим <code>{`{/...}`}</code> в Word <strong>нет пробелов</strong>.
                     </div>
                 </div>
 
