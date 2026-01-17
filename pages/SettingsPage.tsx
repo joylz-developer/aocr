@@ -494,7 +494,23 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         <TagTooltip tag="{act_year}" description="Год подписания" />
                                         <TagTooltip tag="{copies_count}" description="Количество экземпляров" />
                                         <TagTooltip tag="{additional_info}" description="Дополнительные сведения" />
-                                        <TagTooltip tag="{attachments}" description="Текст из поля Приложения (с уже подставленными материалами)" />
+                                        <TagTooltip tag="{attachments}" description="Текст из поля Приложения (одной строкой с переносами)" />
+                                    </div>
+
+                                    {/* NEW HELP SECTION FOR ATTACHMENTS LOOP */}
+                                    <div className="bg-green-50 border border-green-100 p-3 rounded my-4">
+                                        <h4 className="font-semibold text-green-800 mb-1 flex items-center gap-2">
+                                            <span>Автоматическая нумерация строк в Word</span>
+                                        </h4>
+                                        <p className="text-xs text-green-800 mb-2">
+                                            Если вам нужно, чтобы каждая строка из поля "Приложения" автоматически нумеровалась функцией списка Word, используйте цикл по <code>attachments_list</code>.
+                                        </p>
+                                        <div className="bg-white p-2 rounded border border-green-200 text-xs font-mono text-slate-600">
+                                            <p className="mb-1 text-slate-400">// В шаблоне создайте нумерованный список и вставьте:</p>
+                                            1. {'{#attachments_list}'}<br/>
+                                            &nbsp;&nbsp;&nbsp;{'{text}'}<br/>
+                                            &nbsp;&nbsp;&nbsp;{'{/attachments_list}'}
+                                        </div>
                                     </div>
 
                                     <h4 className="font-semibold mt-4">Организации</h4>

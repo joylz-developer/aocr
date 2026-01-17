@@ -68,6 +68,11 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
     const [workStartYear, workStartMonth, workStartDay] = act.workStartDate ? act.workStartDate.split('-') : ['', '', ''];
     const [workEndYear, workEndMonth, workEndDay] = act.workEndDate ? act.workEndDate.split('-') : ['', '', ''];
     
+    // Split attachments into an array for looping in Word (supports auto-numbering)
+    const attachmentsList = currentAttachments
+        ? currentAttachments.split('\n').map(line => ({ text: line.trim() })).filter(item => item.text)
+        : [];
+
     const data: { [key: string]: any } = {
         // Header
         object_name: act.objectName,
@@ -102,7 +107,8 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
         // Footer
         additional_info: act.additionalInfo,
         copies_count: act.copiesCount,
-        attachments: currentAttachments, // Use processed attachments
+        attachments: currentAttachments, // Use processed attachments string
+        attachments_list: attachmentsList, // Use array for loops
     };
 
     // Add representatives data
