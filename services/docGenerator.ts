@@ -173,8 +173,11 @@ export const generateDocument = (
 
         // --- Prepare dynamic values ---
         // Determine what {materials} should map to in templates/strings
+        // UPDATED: Removed "см." and parens as requested
+        const registryReferenceString = `Приложение №1: Реестр материалов.`;
+        
         const smartMaterialsValue = shouldUseRegistry 
-            ? `см. Приложение №1 (Реестр материалов)` 
+            ? registryReferenceString
             : act.materials;
 
         // --- Resolve Attachments Field ---
@@ -223,18 +226,20 @@ export const generateDocument = (
             const registryBuffer = renderDoc(registryTemplateBase64, registryData);
 
             // 2. Generate Main Act Doc
-            const referenceText = `см. Приложение №1 (Реестр материалов)`;
             
-            // Append registry reference to attachments text if not already explicitly included by the user's template
+            // Append registry reference to attachments text IF it's not already there.
+            // If the user used {materials} in their attachment template, 'resolvedAttachments' 
+            // already contains 'Приложение №1: Реестр материалов.' because of smartMaterialsValue above.
             let finalAttachments = resolvedAttachments;
             if (!finalAttachments.includes('Реестр материалов')) {
                  finalAttachments = finalAttachments 
-                    ? `${finalAttachments}\nПриложение №1: Реестр материалов.` 
-                    : `Приложение №1: Реестр материалов.`;
+                    ? `${finalAttachments}\n${registryReferenceString}` 
+                    : registryReferenceString;
             }
 
             // Pass referenceText as BOTH overrideMaterials and registryReferenceText
-            const actData = prepareDocData(act, people, finalAttachments, referenceText, referenceText);
+            // This ensures row 3 "Materials" gets exactly "Приложение №1: Реестр материалов."
+            const actData = prepareDocData(act, people, finalAttachments, registryReferenceString, registryReferenceString);
             
             const actBuffer = renderDoc(templateBase64, actData);
 
