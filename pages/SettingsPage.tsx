@@ -76,16 +76,12 @@ const VariableHelpTooltip: React.FC = () => {
 
     const variables = [
         { name: '{number}', desc: 'Номер акта' },
-        { name: '{objectName}', desc: 'Наименование объекта' },
-        { name: '{workName}', desc: 'Наименование работ' },
-        { name: '{projectDocs}', desc: 'Проектная документация' },
-        { name: '{materials}', desc: 'Примененные материалы' },
+        { name: '{materials}', desc: 'Список материалов' },
         { name: '{certs}', desc: 'Исполнительные схемы' },
         { name: '{workStartDate}', desc: 'Дата начала работ' },
         { name: '{workEndDate}', desc: 'Дата окончания работ' },
+        { name: '{projectDocs}', desc: 'Проектная документация' },
         { name: '{regulations}', desc: 'Нормативные документы' },
-        { name: '{nextWork}', desc: 'Следующие работы' },
-        { name: '{copiesCount}', desc: 'Количество экземпляров' },
     ];
 
     return (
@@ -95,12 +91,12 @@ const VariableHelpTooltip: React.FC = () => {
             </button>
             {isVisible && (
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 bg-slate-800 text-white text-sm rounded-lg shadow-lg p-3 z-10">
-                    <h4 className="font-bold mb-2">Доступные переменные:</h4>
+                    <h4 className="font-bold mb-2 text-xs uppercase tracking-wider text-slate-400">Можно использовать теги:</h4>
                     <ul className="space-y-1">
                         {variables.map(v => (
                              <li key={v.name} className="flex justify-between">
                                 <code className="text-cyan-300">{v.name}</code>
-                                <span className="text-slate-300 text-right">{v.desc}</span>
+                                <span className="text-slate-300 text-right text-xs">{v.desc}</span>
                             </li>
                         ))}
                     </ul>
@@ -315,6 +311,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         <VariableHelpTooltip />
                                     </label>
                                     <textarea id="defaultAttachments" name="defaultAttachments" value={formData.defaultAttachments || ''} onChange={handleChange} className={`${inputClass} text-sm`} rows={2} placeholder="Например: Исполнительные схемы: {certs}" />
+                                    <p className="text-xs text-slate-500 mt-1">Вы можете использовать теги (например, {'{materials}'}) в этом поле. При генерации они заменятся на данные из акта.</p>
                                 </div>
                             </SettingToggle>
 
@@ -470,6 +467,21 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 <>
                                     <p>Используйте эти теги в основном шаблоне акта (.docx). При наведении на тег появится подсказка.</p>
                                     
+                                    <div className="bg-blue-50 border border-blue-100 p-3 rounded mb-4 mt-2">
+                                        <h4 className="font-semibold text-blue-800 mb-1">Использование в полях по умолчанию</h4>
+                                        <p className="text-xs text-blue-700">
+                                            Теги можно использовать не только в Word-шаблоне, но и в настройках приложения (например, в полях "Приложения" или "Доп. сведения").
+                                            При генерации документа программа заменит их на данные из текущего акта.
+                                        </p>
+                                        <div className="mt-2 text-xs">
+                                            <strong>Пример для поля "Приложения":</strong>
+                                            <code className="block mt-1 bg-white border border-blue-200 p-1.5 rounded text-slate-600">
+                                                Исполнительная схема; {'{certs}'};{'\n'}
+                                                {'{materials}'}
+                                            </code>
+                                        </div>
+                                    </div>
+
                                     <h4 className="font-semibold mt-4">Основные данные</h4>
                                     <div className="flex flex-wrap gap-2">
                                         <TagTooltip tag="{act_number}" description="Номер акта" />
@@ -479,6 +491,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         <TagTooltip tag="{act_year}" description="Год подписания" />
                                         <TagTooltip tag="{copies_count}" description="Количество экземпляров" />
                                         <TagTooltip tag="{additional_info}" description="Дополнительные сведения" />
+                                        <TagTooltip tag="{attachments}" description="Текст из поля Приложения (с уже подставленными материалами)" />
                                     </div>
 
                                     <h4 className="font-semibold mt-4">Организации</h4>

@@ -16,22 +16,6 @@ function base64ToArrayBuffer(base64: string) {
     return bytes.buffer;
 }
 
-// Helper to resolve simple templates like {materials} inside generator
-const resolveTemplate = (template: string, act: Act): string => {
-    if (!template) return '';
-    return template.replace(/\{(\w+)\}/g, (_, key) => {
-        let value = (act as any)[key];
-        
-        // Format dates for display if needed, matching ActsTable logic roughly
-        if ((key === 'workStartDate' || key === 'workEndDate') && value) {
-             const parts = value.split('-');
-             if (parts.length === 3) value = `${parts[2]}.${parts[1]}.${parts[0]}`;
-        }
-        
-        return value !== undefined && value !== null ? String(value) : '';
-    });
-};
-
 const shortenName = (fullName: string): string => {
     if (!fullName) return '';
     const parts = fullName.trim().split(/\s+/);
@@ -39,6 +23,28 @@ const shortenName = (fullName: string): string => {
     const surname = parts[0];
     const initials = parts.slice(1).map(p => p[0] ? `${p[0].toUpperCase()}.` : '').join('');
     return `${surname} ${initials}`;
+};
+
+// Helper to resolve simple templates inside text strings (e.g. default Attachments)
+const resolveStringTemplate = (templateStr: string, act: Act, overrides: Record<string, string> = {}): string => {
+    if (!templateStr) return '';
+    return templateStr.replace(/\{(\w+)\}/g, (_, key) => {
+        // 1. Check overrides first (e.g. for smart materials logic)
+        if (overrides[key] !== undefined) {
+            return overrides[key];
+        }
+        
+        // 2. Check direct Act properties
+        const value = (act as any)[key];
+        
+        // Format dates for display if needed
+        if ((key === 'workStartDate' || key === 'workEndDate' || key === 'date') && value) {
+             const parts = value.split('-');
+             if (parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0]}`;
+        }
+        
+        return value !== undefined && value !== null ? String(value) : '';
+    });
 };
 
 // Function to generate data object for templates
@@ -150,23 +156,30 @@ export const generateDocument = (
         const threshold = settings.registryThreshold || 5;
         const shouldUseRegistry = materialsList.length > threshold && registryTemplateBase64;
 
-        // --- Logic to resolve Attachments on the fly ---
-        // 1. Determine the source template string
+        // --- Prepare dynamic values ---
+        // Determine what {materials} should map to in templates/strings
+        const smartMaterialsValue = shouldUseRegistry 
+            ? `см. Приложение №1 (Реестр материалов)` 
+            : act.materials;
+
+        // --- Resolve Attachments Field ---
+        // 1. Get the template string (either from Act or Default Settings)
         let attachmentsTemplate = act.attachments;
-        
-        // If the act's field is empty, fallback to the project settings default
         if (!attachmentsTemplate && settings.showAttachments && settings.defaultAttachments) {
             attachmentsTemplate = settings.defaultAttachments;
         }
 
-        // 2. Resolve variables (like {materials}, {certs}) within the string
-        let resolvedAttachments = resolveTemplate(attachmentsTemplate || '', act);
+        // 2. Resolve tags inside the attachments string
+        // We pass 'materials' override so {materials} inside attachments respects the registry logic
+        let resolvedAttachments = resolveStringTemplate(attachmentsTemplate || '', act, {
+            materials: smartMaterialsValue
+        });
 
         if (shouldUseRegistry) {
             // --- Generate Two Documents (Act + Registry) zipped ---
             
             // 1. Generate Registry Doc
-            // Note: For registry, 'registryReferenceText' is typically not needed inside the registry itself, so we pass empty or simple logic.
+            // Note: For registry, 'registryReferenceText' is typically not needed inside the registry itself.
             const baseRegistryData = prepareDocData(act, people, resolvedAttachments);
             
             const registryData = {
@@ -197,10 +210,13 @@ export const generateDocument = (
             // 2. Generate Main Act Doc
             const referenceText = `см. Приложение №1 (Реестр материалов)`;
             
-            // Append registry reference to attachments text if not already empty
-            const finalAttachments = resolvedAttachments 
-                ? `${resolvedAttachments}\nПриложение №1: Реестр материалов.` 
-                : `Приложение №1: Реестр материалов.`;
+            // Append registry reference to attachments text if not already explicitly included by the user's template
+            let finalAttachments = resolvedAttachments;
+            if (!finalAttachments.includes('Реестр материалов')) {
+                 finalAttachments = finalAttachments 
+                    ? `${finalAttachments}\nПриложение №1: Реестр материалов.` 
+                    : `Приложение №1: Реестр материалов.`;
+            }
 
             // Pass referenceText as BOTH overrideMaterials and registryReferenceText
             const actData = prepareDocData(act, people, finalAttachments, referenceText, referenceText);
