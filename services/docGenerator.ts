@@ -129,29 +129,31 @@ export const generateDocument = (
         const threshold = settings.registryThreshold || 5;
         const shouldUseRegistry = materialsList.length > threshold && registryTemplateBase64;
 
-        // --- Logic to resolve Attachments on the fly if empty ---
-        let resolvedAttachments = act.attachments;
-        // If attachments field is empty in the Act, but settings has a default template enabled, resolve it now.
-        if (!resolvedAttachments && settings.showAttachments && settings.defaultAttachments) {
-            resolvedAttachments = resolveTemplate(settings.defaultAttachments, act);
+        // --- Logic to resolve Attachments on the fly ---
+        // 1. Determine the source template string
+        let attachmentsTemplate = act.attachments;
+        
+        // If the act's field is empty, fallback to the project settings default
+        if (!attachmentsTemplate && settings.showAttachments && settings.defaultAttachments) {
+            attachmentsTemplate = settings.defaultAttachments;
         }
-        // Fallback to empty string
-        resolvedAttachments = resolvedAttachments || '';
+
+        // 2. Resolve variables (like {materials}, {certs}) within the string
+        // This handles both cases:
+        // - The user saved "{materials}" in the act field previously.
+        // - We just pulled "{materials}" from the default settings.
+        // - Or simply raw text if no tags are present.
+        let resolvedAttachments = resolveTemplate(attachmentsTemplate || '', act);
 
         if (shouldUseRegistry) {
             // --- Generate Two Documents (Act + Registry) zipped ---
             
             // 1. Generate Registry Doc
-            // We use the same base data (reps, dates, etc) for the registry header/footer
-            // Note: For registry header, we usually don't need the 'See Appendix' override in the header section, 
-            // but the registry template usually doesn't use the {materials} tag in the header anyway.
             const baseRegistryData = prepareDocData(act, people, resolvedAttachments);
             
             const registryData = {
-                ...baseRegistryData, // Include all standard act fields (representatives, dates, object name)
+                ...baseRegistryData, 
                 materials_list: materialsList.map((m, i) => {
-                    // Try to parse "Material Name (Certificate Info)"
-                    // Pattern: Everything before the last open parenthesis is Name, everything inside is Cert.
                     let name = m;
                     let cert = '';
                     
@@ -163,11 +165,11 @@ export const generateDocument = (
 
                     return { 
                         index: i + 1, 
-                        name: m, // Full original string
-                        material_name: name, // Just the material name part
-                        cert_doc: cert, // Just the certificate part (if found in brackets)
-                        date: '', // Placeholder for manual entry in Word if needed
-                        amount: '' // Placeholder for quantity/sheets
+                        name: m, 
+                        material_name: name, 
+                        cert_doc: cert,
+                        date: '', 
+                        amount: '' 
                     };
                 })
             };
@@ -175,10 +177,10 @@ export const generateDocument = (
             const registryBuffer = renderDoc(registryTemplateBase64, registryData);
 
             // 2. Generate Main Act Doc
-            // Replace materials text in the body with reference
             const referenceText = `см. Приложение №1 (Реестр материалов)`;
             
-            // Append registry reference to attachments text
+            // Append registry reference to attachments text if not already empty
+            // We use 'resolvedAttachments' here which now contains the actual values
             const finalAttachments = resolvedAttachments 
                 ? `${resolvedAttachments}\nПриложение №1: Реестр материалов.` 
                 : `Приложение №1: Реестр материалов.`;
@@ -197,7 +199,6 @@ export const generateDocument = (
 
         } else {
             // --- Generate Single Document ---
-            // Use the resolved attachments directly
             const data = prepareDocData(act, people, resolvedAttachments);
             const buffer = renderDoc(templateBase64, data);
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
