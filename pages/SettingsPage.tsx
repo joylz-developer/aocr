@@ -489,11 +489,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         <TagTooltip tag="{work_performer}" description="Реквизиты Лица, выполнившего работы" />
                                     </div>
 
-                                    <h4 className="font-semibold mt-4">Работы и Даты</h4>
+                                    <h4 className="font-semibold mt-4">Работы, Материалы, Даты</h4>
                                     <div className="flex flex-wrap gap-2">
                                         <TagTooltip tag="{work_name}" description="Наименование выполненных работ" />
                                         <TagTooltip tag="{project_docs}" description="Проектная документация" />
-                                        <TagTooltip tag="{materials}" description="Примененные материалы (или ссылка на реестр)" />
+                                        <TagTooltip tag="{materials}" description="Автоматически: 'Текст материалов' ИЛИ 'ссылка на реестр' (если материалов > порога)" />
+                                        <TagTooltip tag="{materials_raw}" description="Всегда полный список материалов текстом" />
+                                        <TagTooltip tag="{registry_text}" description="Текст 'см. Приложение №1...' (если создан реестр), иначе пусто" />
                                         <TagTooltip tag="{certs}" description="Документы о качестве/схемы" />
                                         <TagTooltip tag="{regulations}" description="Нормативные документы" />
                                         <TagTooltip tag="{next_work}" description="Разрешенные следующие работы" />
@@ -507,9 +509,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         {Object.entries(ROLES).map(([key, label]) => (
                                             <div key={key} className="border p-2 rounded">
                                                 <div className="font-medium mb-1">{label} ({key})</div>
-                                                <TagTooltip tag={`{${key}_details}`} description={`Полная строка (Должность, ФИО, Приказ)`} />
                                                 <div className="mt-1 flex flex-wrap gap-1">
-                                                    <TagTooltip tag={`{${key}_name}`} description="ФИО" />
+                                                    <TagTooltip tag={`{${key}_details}`} description={`Должность, ФИО, Документ`} />
+                                                    <TagTooltip tag={`{${key}_details_short}`} description={`Должность, Фамилия И.О., Документ`} />
+                                                    <TagTooltip tag={`{${key}_name}`} description="Полное ФИО" />
+                                                    <TagTooltip tag={`{${key}_name_short}`} description="Фамилия И.О." />
                                                     <TagTooltip tag={`{${key}_position}`} description="Должность" />
                                                     <TagTooltip tag={`{${key}_org}`} description="Организация" />
                                                     <TagTooltip tag={`{${key}_auth_doc}`} description="Документ о полномочиях" />
@@ -557,11 +561,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         {Object.entries(ROLES).map(([key, label]) => (
                                             <div key={key} className="border p-2 rounded">
                                                 <div className="font-medium mb-1">{label} ({key})</div>
-                                                <TagTooltip tag={`{${key}_details}`} description={`Полная строка (Должность, ФИО, Приказ)`} />
                                                 <div className="mt-1 flex flex-wrap gap-1">
-                                                    <TagTooltip tag={`{${key}_name}`} description="ФИО" />
+                                                    <TagTooltip tag={`{${key}_details_short}`} description={`Должность, Фамилия И.О., Документ`} />
+                                                    <TagTooltip tag={`{${key}_name_short}`} description="Фамилия И.О." />
                                                     <TagTooltip tag={`{${key}_position}`} description="Должность" />
-                                                    <TagTooltip tag={`{${key}_org}`} description="Организация" />
                                                 </div>
                                             </div>
                                         ))}

@@ -32,8 +32,17 @@ const resolveTemplate = (template: string, act: Act): string => {
     });
 };
 
+const shortenName = (fullName: string): string => {
+    if (!fullName) return '';
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length <= 1) return fullName;
+    const surname = parts[0];
+    const initials = parts.slice(1).map(p => p[0] ? `${p[0].toUpperCase()}.` : '').join('');
+    return `${surname} ${initials}`;
+};
+
 // Function to generate data object for templates
-const prepareDocData = (act: Act, people: Person[], currentAttachments: string, overrideMaterials?: string) => {
+const prepareDocData = (act: Act, people: Person[], currentAttachments: string, overrideMaterials?: string, registryReferenceText: string = '') => {
     const [actYear, actMonth, actDay] = act.date ? act.date.split('-') : ['', '', ''];
     const [workStartYear, workStartMonth, workStartDay] = act.workStartDate ? act.workStartDate.split('-') : ['', '', ''];
     const [workEndYear, workEndMonth, workEndDay] = act.workEndDate ? act.workEndDate.split('-') : ['', '', ''];
@@ -53,7 +62,12 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
         // Work details
         work_name: act.workName,
         project_docs: act.projectDocs,
-        materials: overrideMaterials !== undefined ? overrideMaterials : act.materials, // Use override if provided
+        
+        // Materials Logic
+        materials: overrideMaterials !== undefined ? overrideMaterials : act.materials, // Smart switch
+        materials_raw: act.materials, // Always the full text
+        registry_text: registryReferenceText, // "See attachment..." if registry exists, else empty
+        
         certs: act.certs,
         // Sections
         work_start_day: workStartDay,
@@ -76,27 +90,34 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
         const person = people.find(p => p.id === personId);
 
         if (person) {
+            const shortName = shortenName(person.name || '');
             const personData = {
                 name: person.name || '',
+                name_short: shortName,
                 position: person.position || '',
                 org: person.organization || '',
                 auth_doc: person.authDoc || '',
-                details: `${person.position}, ${person.name}, ${person.authDoc || '(нет данных о документе)'}`
+                details: `${person.position}, ${person.name}, ${person.authDoc || '(нет данных о документе)'}`,
+                details_short: `${person.position}, ${shortName}, ${person.authDoc || '(нет данных о документе)'}`
             };
             
             data[roleKey] = personData;
             data[`${roleKey}_name`] = personData.name;
+            data[`${roleKey}_name_short`] = personData.name_short;
             data[`${roleKey}_position`] = personData.position;
             data[`${roleKey}_org`] = personData.org;
             data[`${roleKey}_auth_doc`] = personData.auth_doc;
             data[`${roleKey}_details`] = personData.details;
+            data[`${roleKey}_details_short`] = personData.details_short;
         } else {
             data[roleKey] = null;
             data[`${roleKey}_name`] = null;
+            data[`${roleKey}_name_short`] = null;
             data[`${roleKey}_position`] = null;
             data[`${roleKey}_org`] = null;
             data[`${roleKey}_auth_doc`] = null;
             data[`${roleKey}_details`] = null;
+            data[`${roleKey}_details_short`] = null;
         }
     });
 
@@ -139,16 +160,13 @@ export const generateDocument = (
         }
 
         // 2. Resolve variables (like {materials}, {certs}) within the string
-        // This handles both cases:
-        // - The user saved "{materials}" in the act field previously.
-        // - We just pulled "{materials}" from the default settings.
-        // - Or simply raw text if no tags are present.
         let resolvedAttachments = resolveTemplate(attachmentsTemplate || '', act);
 
         if (shouldUseRegistry) {
             // --- Generate Two Documents (Act + Registry) zipped ---
             
             // 1. Generate Registry Doc
+            // Note: For registry, 'registryReferenceText' is typically not needed inside the registry itself, so we pass empty or simple logic.
             const baseRegistryData = prepareDocData(act, people, resolvedAttachments);
             
             const registryData = {
@@ -180,12 +198,12 @@ export const generateDocument = (
             const referenceText = `см. Приложение №1 (Реестр материалов)`;
             
             // Append registry reference to attachments text if not already empty
-            // We use 'resolvedAttachments' here which now contains the actual values
             const finalAttachments = resolvedAttachments 
                 ? `${resolvedAttachments}\nПриложение №1: Реестр материалов.` 
                 : `Приложение №1: Реестр материалов.`;
 
-            const actData = prepareDocData(act, people, finalAttachments, referenceText);
+            // Pass referenceText as BOTH overrideMaterials and registryReferenceText
+            const actData = prepareDocData(act, people, finalAttachments, referenceText, referenceText);
             
             const actBuffer = renderDoc(templateBase64, actData);
 
@@ -199,7 +217,9 @@ export const generateDocument = (
 
         } else {
             // --- Generate Single Document ---
-            const data = prepareDocData(act, people, resolvedAttachments);
+            // overrideMaterials = undefined (use act.materials)
+            // registryReferenceText = '' (empty)
+            const data = prepareDocData(act, people, resolvedAttachments, undefined, '');
             const buffer = renderDoc(templateBase64, data);
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
             saveAs(blob, `Акт_скрытых_работ_${act.number || 'б-н'}.docx`);
