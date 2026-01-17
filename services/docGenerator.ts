@@ -163,13 +163,13 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
                     const isLast = index === lines.length - 1;
                     
                     // 1. Text with forced newline (Default)
-                    // We append '\n' to all except the last one to ensure breaks are respected.
+                    // We append '\n' to all except the last one to ensure breaks are respected in inline cells.
                     const textWithBreak = isLast ? line : line + '\n';
                     
                     // 2. Clean text
-                    // To prevent merging (e.g. "Text1Text2"), we MUST include the newline if it was present.
-                    // This ensures "As Written" structure is preserved even in inline loops.
-                    const textClean = textWithBreak; 
+                    // Used for numbered lists. Should NOT contain newlines, otherwise it breaks the list numbering.
+                    // We assume the template uses a Block Loop (paragraph loop) for lists.
+                    const textClean = line; 
                     
                     const item: any = { 
                         text: textWithBreak, 
@@ -178,7 +178,7 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
                     
                     // Support using the key name itself
                     item[key] = textWithBreak;          // {attachments}
-                    item[`${key}_clean`] = textClean;   // {attachments_clean} -> now includes breaks to fix merging
+                    item[`${key}_clean`] = textClean;   // {attachments_clean}
                     
                     return item;
                 });
@@ -260,21 +260,9 @@ export const generateDocument = (
             };
             const registryBuffer = renderDoc(registryTemplateBase64, registryData);
 
-            let finalAttachments = resolvedAttachments;
-            
-            // Append registry reference ONLY if setting enabled explicitly
-            // Important: Explicit check for true, defaulting to false if undefined/missing
-            const autoAppendRegistry = settings.autoAppendRegistryReference === true; 
-            
-            if (autoAppendRegistry) {
-                // Check if already present to avoid duplication
-                if (!finalAttachments.includes('Реестр материалов')) {
-                     // Join cleanly to ensure separate lines
-                     finalAttachments = [finalAttachments, registryReferenceString].filter(Boolean).join('\n');
-                }
-            }
-
-            const actData = prepareDocData(act, people, finalAttachments, registryReferenceString, registryReferenceString);
+            // We do NOT append registry reference automatically anymore.
+            // User must include {registry_text} or {materials} which resolves to reference if they want it.
+            const actData = prepareDocData(act, people, resolvedAttachments, registryReferenceString, registryReferenceString);
             const actBuffer = renderDoc(templateBase64, actData);
 
             const packageZip = new PizZip();

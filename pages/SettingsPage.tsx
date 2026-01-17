@@ -106,7 +106,7 @@ const TagGenerator: React.FC = () => {
     const generateList = () => {
         const cleanName = fieldInput.trim().replace(/[{}]/g, '');
         if (!cleanName) return '';
-        return `{#${cleanName}_list}{${cleanName}}{/${cleanName}_list}`;
+        return `{#${cleanName}_list}{${cleanName}_clean}{/${cleanName}_list}`;
     };
 
     const listCode = generateList();
@@ -141,8 +141,8 @@ const TagGenerator: React.FC = () => {
                         <p className="text-[10px] text-slate-500 mb-2 leading-snug">
                             Используйте этот код, чтобы текст выводился в одну ячейку таблицы с переносами строк (как в поле ввода).
                         </p>
-                        <CopyableCode textToCopy={listCode}>
-                            <div className="whitespace-pre-wrap">{listCode}</div>
+                        <CopyableCode textToCopy={`{#${fieldInput}_list}{${fieldInput}}{/${fieldInput}_list}`}>
+                            <div className="whitespace-pre-wrap">{`{#${fieldInput}_list}{${fieldInput}}{/${fieldInput}_list}`}</div>
                         </CopyableCode>
                     </div>
 
