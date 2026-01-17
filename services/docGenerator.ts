@@ -147,8 +147,8 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
         const val = data[key];
         if (typeof val === 'string') {
             const listKey = `${key}_list`;
-            // Split by newline, trim whitespace, remove empty lines
-            const lines = val.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            // Fixed: Do NOT trim or filter empty lines. Split strictly by newline to preserve user intent.
+            const lines = val.split('\n');
             
             if (lines.length === 0) {
                 data[listKey] = [];
@@ -251,10 +251,12 @@ export const generateDocument = (
             const registryBuffer = renderDoc(registryTemplateBase64, registryData);
 
             let finalAttachments = resolvedAttachments;
+            // Ensure proper line break if appending logic is triggered
             if (!finalAttachments.includes('Реестр материалов')) {
-                 finalAttachments = finalAttachments 
-                    ? `${finalAttachments}\n${registryReferenceString}` 
-                    : registryReferenceString;
+                 if (finalAttachments && !finalAttachments.endsWith('\n')) {
+                     finalAttachments += '\n';
+                 }
+                 finalAttachments += registryReferenceString;
             }
 
             const actData = prepareDocData(act, people, finalAttachments, registryReferenceString, registryReferenceString);
