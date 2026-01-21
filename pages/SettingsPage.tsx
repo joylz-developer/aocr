@@ -691,22 +691,54 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         <TagTooltip tag="{act_year}" description="Год подписания" />
                                     </div>
 
-                                    <h4 className="font-semibold mt-4">Таблица материалов</h4>
+                                    <h4 className="font-semibold mt-4">Таблица материалов (Цикл строки)</h4>
                                     <p className="text-xs text-slate-500 mb-2">
-                                        Вставьте эти теги внутри строки таблицы. При генерации строка будет размножена для каждого материала.
+                                        Чтобы строка таблицы повторялась для каждого материала, нужно использовать "обнимающие" теги:
                                     </p>
-                                    <div className="border p-3 rounded bg-slate-50 mb-4">
-                                        <p className="font-mono text-sm mb-2 text-slate-700">
-                                            {'{#materials_list} ... {/materials_list}'}
+                                    
+                                    {/* Visual Representation of Table Row Loop */}
+                                    <div className="bg-slate-50 border border-slate-200 rounded p-4 mb-4 overflow-x-auto">
+                                        <p className="text-xs text-slate-600 mb-2 font-semibold">Схема таблицы в Word:</p>
+                                        <table className="w-full text-xs text-left border-collapse bg-white">
+                                            <thead>
+                                                <tr className="bg-slate-100">
+                                                    <th className="border p-2 w-16">№</th>
+                                                    <th className="border p-2">Наименование</th>
+                                                    <th className="border p-2">Документ</th>
+                                                    <th className="border p-2 w-24">Кол-во</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td className="border p-2 align-top bg-blue-50 text-blue-700 font-mono">
+                                                        {'{#materials_list}'} <br/>
+                                                        {'{index}'}
+                                                    </td>
+                                                    <td className="border p-2 align-top text-slate-700 font-mono">
+                                                        {'{material_name}'}
+                                                    </td>
+                                                    <td className="border p-2 align-top text-slate-700 font-mono">
+                                                        {'{cert_doc}'}
+                                                    </td>
+                                                    <td className="border p-2 align-top bg-blue-50 text-blue-700 font-mono">
+                                                        {'{amount}'} <br/>
+                                                        {'{/materials_list}'}
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                        <p className="text-[10px] text-slate-500 mt-2 italic">
+                                            * Тег <code>{`{#materials_list}`}</code> ставится в первую ячейку, а <code>{`{/materials_list}`}</code> в последнюю.
                                         </p>
-                                        <div className="flex flex-wrap gap-2 ml-4">
-                                            <TagTooltip tag="{index}" description="Порядковый номер (1, 2, 3...)" />
-                                            <TagTooltip tag="{name}" description="Полная строка материала (как в акте)" />
-                                            <TagTooltip tag="{material_name}" description="Только наименование материала (до скобок)" />
-                                            <TagTooltip tag="{cert_doc}" description="Документ о качестве (текст внутри скобок)" />
-                                            <TagTooltip tag="{date}" description="Дата (пустая ячейка для ручного заполнения)" />
-                                            <TagTooltip tag="{amount}" description="Кол-во листов (пустая ячейка)" />
-                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2 ml-4">
+                                        <TagTooltip tag="{index}" description="Порядковый номер (1, 2, 3...)" />
+                                        <TagTooltip tag="{name}" description="Полная строка материала (как в акте)" />
+                                        <TagTooltip tag="{material_name}" description="Только наименование материала (до скобок)" />
+                                        <TagTooltip tag="{cert_doc}" description="Документ о качестве (текст внутри скобок)" />
+                                        <TagTooltip tag="{date}" description="Дата (пустая ячейка для ручного заполнения)" />
+                                        <TagTooltip tag="{amount}" description="Кол-во листов (пустая ячейка)" />
                                     </div>
 
                                     <h4 className="font-semibold mt-4">Комиссия (Представители)</h4>

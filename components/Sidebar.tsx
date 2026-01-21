@@ -99,7 +99,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentPage, setCu
                         label={item.label}
                         isOpen={isOpen}
                         isActive={currentPage === item.page}
-                        disabled={!isTemplateLoaded}
                         onClick={() => setCurrentPage(item.page as Page)}
                     />
                 ))}
@@ -111,7 +110,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentPage, setCu
                     label="Корзина"
                     isOpen={isOpen}
                     isActive={currentPage === 'trash'}
-                    disabled={!isTemplateLoaded}
                     onClick={() => setCurrentPage('trash')}
                     badge={trashCount}
                  />

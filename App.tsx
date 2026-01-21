@@ -142,14 +142,10 @@ const App: React.FC = () => {
 
     const handleTemplateUpload = async (file: File) => {
         try {
-            const isFirstTime = acts.length === 0 && people.length === 0 && organizations.length === 0;
             const base64 = await fileToBase64(file);
             setTemplate(base64);
-            if (isFirstTime) {
-                setCurrentPage('settings');
-            } else {
-                setCurrentPage('acts');
-            }
+            // Don't force redirect if they are just updating it
+            // if (isFirstTime) setCurrentPage('settings'); 
         } catch (error) {
             console.error("Error converting file to base64:", error);
             alert("Не удалось загрузить шаблон.");
@@ -918,13 +914,7 @@ const App: React.FC = () => {
             />
             <div className="flex-1 flex flex-col overflow-hidden">
                  <main className="flex-1 overflow-y-auto">
-                    {!template ? (
-                        <div className="h-full flex items-center justify-center">
-                            <TemplateUploader onUpload={handleTemplateUpload} />
-                        </div>
-                    ) : (
-                        renderPage()
-                    )}
+                    {renderPage()}
                 </main>
             </div>
             
