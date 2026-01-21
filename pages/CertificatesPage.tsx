@@ -63,6 +63,24 @@ const levenshteinDistance = (a: string, b: string): number => {
     return matrix[b.length][a.length];
 };
 
+const countPdfPages = (base64Data: string): number => {
+    try {
+        const header = base64Data.split(',')[0];
+        if (!header.includes('pdf')) return 1; // Not a PDF, count as 1 file/sheet
+
+        const base64 = base64Data.split(',')[1];
+        const binaryString = window.atob(base64);
+        
+        // Count /Type /Page occurrences. 
+        // This is a heuristic that works for most standard generated PDFs (Word, Scanners).
+        const matches = binaryString.match(/\/Type\s*\/Page\b/g);
+        return matches ? matches.length : 1;
+    } catch (e) {
+        console.warn("Could not count PDF pages", e);
+        return 1;
+    }
+};
+
 const HighlightMatch: React.FC<{ text: string; query: string }> = ({ text, query }) => {
     if (!query || !text) return <>{text}</>;
 
@@ -409,27 +427,65 @@ const CertificateForm: React.FC<{
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    const processFiles = (files: FileList) => {
-        Array.from(files).forEach(file => {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                if (typeof event.target?.result === 'string') {
-                    const newFile: CertificateFile = {
-                        id: crypto.randomUUID(),
-                        name: file.name,
-                        type: file.type.includes('pdf') ? 'pdf' : 'image',
-                        data: event.target.result as string
-                    };
-                    
-                    setFormData(prev => ({
-                        ...prev,
-                        files: [...prev.files, newFile]
-                    }));
-                    setActiveFileId(newFile.id);
-                    setAiError(null);
+    const processFiles = (fileList: FileList) => {
+        const filesArray = Array.from(fileList);
+        
+        // Process all files to get their data and page counts
+        const processingPromises = filesArray.map(file => 
+            new Promise<{ fileObj: CertificateFile, pages: number }>((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    if (typeof event.target?.result === 'string') {
+                        const data = event.target.result;
+                        const isPdf = file.type.includes('pdf');
+                        const pages = isPdf ? countPdfPages(data) : 1; // 1 sheet per image
+                        
+                        resolve({
+                            fileObj: {
+                                id: crypto.randomUUID(),
+                                name: file.name,
+                                type: isPdf ? 'pdf' : 'image',
+                                data: data
+                            },
+                            pages: pages
+                        });
+                    } else {
+                        resolve({ 
+                            fileObj: { id: crypto.randomUUID(), name: file.name, type: 'image', data: '' }, 
+                            pages: 0 
+                        });
+                    }
+                };
+                reader.readAsDataURL(file);
+            })
+        );
+
+        Promise.all(processingPromises).then(results => {
+            const newFiles = results.map(r => r.fileObj);
+            const totalNewPages = results.reduce((sum, r) => sum + r.pages, 0);
+
+            setFormData(prev => {
+                // Logic: If currently 1 (default) and no files, replace. Otherwise add.
+                const currentAmount = parseInt(prev.amount || '0', 10);
+                const isDefaultState = prev.files.length === 0 && (prev.amount === '1' || prev.amount === '');
+                
+                const newAmount = isDefaultState 
+                    ? totalNewPages 
+                    : currentAmount + totalNewPages;
+
+                // Update active file to the first new one if none selected
+                if (!activeFileId && newFiles.length > 0) {
+                    setActiveFileId(newFiles[0].id);
                 }
-            };
-            reader.readAsDataURL(file);
+
+                return {
+                    ...prev,
+                    files: [...prev.files, ...newFiles],
+                    amount: String(newAmount)
+                };
+            });
+            
+            setAiError(null);
         });
     };
 
