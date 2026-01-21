@@ -46,6 +46,7 @@ export interface Certificate {
     id: string;
     number: string;
     validUntil: string; // YYYY-MM-DD
+    amount?: string; // Number of pages/sheets
     
     // Multi-file support
     files: CertificateFile[];

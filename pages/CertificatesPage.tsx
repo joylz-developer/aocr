@@ -356,12 +356,13 @@ const CertificateForm: React.FC<{
                     data: certificate.fileData
                 });
             }
-            return { ...certificate, files: existingFiles };
+            return { ...certificate, files: existingFiles, amount: certificate.amount || '1' };
         } else {
             return {
                 id: crypto.randomUUID(),
                 number: '',
                 validUntil: '',
+                amount: '1',
                 materials: [],
                 files: []
             };
@@ -911,34 +912,48 @@ const CertificateForm: React.FC<{
                                 )}
                             </div>
 
-                            {/* Date Field */}
-                            <div>
-                                <label className={labelClass}>Дата документа</label>
-                                <input type="date" name="validUntil" value={formData.validUntil} onChange={handleChange} className={inputClass} required disabled={isPreviewMode} />
-                                {aiSuggestions?.dates && aiSuggestions.dates.length > 0 && !isPreviewMode && (
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                        <span className="text-xs text-violet-600 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
-                                        {aiSuggestions.dates.map((dateStr, idx) => {
-                                            const formatted = new Date(dateStr).toLocaleDateString();
-                                            return (
-                                                <button
-                                                    key={idx}
-                                                    type="button"
-                                                    onClick={() => applyAiSuggestion('validUntil', dateStr)}
-                                                    className={`text-xs px-2 py-1 rounded border transition-colors
-                                                        ${formData.validUntil === dateStr 
-                                                            ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' 
-                                                            : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300'
-                                                        }
-                                                    `}
-                                                    title={`Нажмите, чтобы выбрать: ${formatted}`}
-                                                >
-                                                    {formatted}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                )}
+                            {/* Date Field & Amount Field Row */}
+                            <div className="flex gap-4">
+                                <div className="flex-1">
+                                    <label className={labelClass}>Дата документа</label>
+                                    <input type="date" name="validUntil" value={formData.validUntil} onChange={handleChange} className={inputClass} required disabled={isPreviewMode} />
+                                    {aiSuggestions?.dates && aiSuggestions.dates.length > 0 && !isPreviewMode && (
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            <span className="text-xs text-violet-600 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
+                                            {aiSuggestions.dates.map((dateStr, idx) => {
+                                                const formatted = new Date(dateStr).toLocaleDateString();
+                                                return (
+                                                    <button
+                                                        key={idx}
+                                                        type="button"
+                                                        onClick={() => applyAiSuggestion('validUntil', dateStr)}
+                                                        className={`text-xs px-2 py-1 rounded border transition-colors
+                                                            ${formData.validUntil === dateStr 
+                                                                ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' 
+                                                                : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300'
+                                                            }
+                                                        `}
+                                                        title={`Нажмите, чтобы выбрать: ${formatted}`}
+                                                    >
+                                                        {formatted}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="w-32">
+                                    <label className={labelClass}>Кол-во листов</label>
+                                    <input 
+                                        type="number" 
+                                        name="amount" 
+                                        value={formData.amount} 
+                                        onChange={handleChange} 
+                                        className={inputClass} 
+                                        min="1"
+                                        disabled={isPreviewMode}
+                                    />
+                                </div>
                             </div>
 
                             {/* Materials Section */}

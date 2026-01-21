@@ -1077,7 +1077,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         actToGenerate.nextWork = '';
                     }
                 }
-                generateDocument(template, registryTemplate, actToGenerate, people, settings);
+                generateDocument(template, registryTemplate, actToGenerate, people, settings, certificates); // Pass certificates
             }
         });
     };

@@ -1,5 +1,5 @@
 
-import { Act, Person, ProjectSettings } from '../types';
+import { Act, Person, ProjectSettings, Certificate } from '../types';
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { saveAs } from 'file-saver';
@@ -26,45 +26,35 @@ const shortenName = (fullName: string): string => {
 };
 
 // Normalize newlines to ensure Docxtemplater handles them correctly
-// Updated to handle Carriage Return, Line Feed, Vertical Tab, Form Feed, Line Separator, Paragraph Separator
 const normalizeNewlines = (str: string): string => {
     if (!str) return '';
     return str.replace(/\r\n|\r|\n|\v|\f|\u2028|\u2029/g, '\n');
 };
 
-// Helper to resolve simple templates inside text strings (e.g. default Attachments)
+// Helper to resolve simple templates inside text strings
 const resolveStringTemplate = (templateStr: string, act: Act, overrides: Record<string, string> = {}): string => {
     if (!templateStr) return '';
 
-    // Mapping from Word Template tags to internal Act properties
     const keyMap: Record<string, keyof Act> = {
         'act_number': 'number',
         'object_name': 'objectName',
         'work_name': 'workName',
         'project_docs': 'projectDocs',
-        'work_start_date': 'workStartDate', // Allow snake_case
-        'work_end_date': 'workEndDate',     // Allow snake_case
-        'act_date': 'date',                 // Allow snake_case
+        'work_start_date': 'workStartDate',
+        'work_end_date': 'workEndDate',
+        'act_date': 'date',
     };
 
     return templateStr.replace(/\{(\w+)\}/g, (_, key) => {
-        // 1. Check overrides first (e.g. for smart materials logic)
         if (overrides[key] !== undefined) {
             return overrides[key];
         }
-        
-        // 2. Map alias to actual key (e.g. act_number -> number), or use key as is
         const mappedKey = keyMap[key] || key;
-        
-        // 3. Check direct Act properties
         const value = (act as any)[mappedKey];
-        
-        // Format dates for display if needed
         if ((mappedKey === 'workStartDate' || mappedKey === 'workEndDate' || mappedKey === 'date') && value) {
              const parts = value.split('-');
              if (parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0]}`;
         }
-        
         return value !== undefined && value !== null ? String(value) : '';
     });
 };
@@ -76,28 +66,21 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
     const [workEndYear, workEndMonth, workEndDay] = act.workEndDate ? act.workEndDate.split('-') : ['', '', ''];
     
     const data: { [key: string]: any } = {
-        // Header
         object_name: act.objectName,
         builder_details: act.builderDetails,
         contractor_details: act.contractorDetails,
         designer_details: act.designerDetails,
-        // Act info
         act_number: act.number,
         act_day: actDay,
         act_month: actMonth,
         act_year: actYear,
         work_performer: act.workPerformer,
-        // Work details
         work_name: act.workName,
         project_docs: act.projectDocs,
-        
-        // Materials Logic
-        materials: overrideMaterials !== undefined ? overrideMaterials : act.materials, // Smart switch
-        materials_raw: act.materials, // Always the full text
-        registry_text: registryReferenceText, // "See attachment..." if registry exists, else empty
-        
+        materials: overrideMaterials !== undefined ? overrideMaterials : act.materials,
+        materials_raw: act.materials,
+        registry_text: registryReferenceText,
         certs: act.certs,
-        // Sections
         work_start_day: workStartDay,
         work_start_month: workStartMonth,
         work_start_year: workStartYear,
@@ -106,13 +89,11 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
         work_end_year: workEndYear,
         regulations: act.regulations,
         next_work: act.nextWork,
-        // Footer
         additional_info: act.additionalInfo,
         copies_count: act.copiesCount,
-        attachments: currentAttachments, // Use processed attachments string
+        attachments: currentAttachments,
     };
 
-    // Add representatives data
     ROLES_KEYS.forEach(roleKey => {
         const personId = act.representatives[roleKey];
         const person = people.find(p => p.id === personId);
@@ -149,38 +130,25 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
         }
     });
 
-    // UNIVERSAL LIST GENERATOR
     Object.keys(data).forEach(key => {
         const val = data[key];
         if (typeof val === 'string') {
             const listKey = `${key}_list`;
-            // Ensure we split strictly by normalized newline
-            const lines = normalizeNewlines(val).split('\n').filter(line => line.trim() !== ''); // Filter empty lines for lists
+            const lines = normalizeNewlines(val).split('\n').filter(line => line.trim() !== '');
             
             if (lines.length === 0) {
                 data[listKey] = [];
             } else {
                 data[listKey] = lines.map((line, index) => {
                     const isLast = index === lines.length - 1;
-                    
-                    // 1. Text with forced newline (Default)
-                    // We append '\n' to all except the last one to ensure breaks are respected in inline cells.
                     const textWithBreak = isLast ? line : line + '\n';
-                    
-                    // 2. Clean text
-                    // Used for numbered lists. Should NOT contain newlines, otherwise it breaks the list numbering.
-                    // We assume the template uses a Block Loop (paragraph loop) for lists.
                     const textClean = line; 
-                    
                     const item: any = { 
                         text: textWithBreak, 
                         text_clean: textClean 
                     };
-                    
-                    // Support using the key name itself
-                    item[key] = textWithBreak;          // {attachments} -> "Text\n"
-                    item[`${key}_clean`] = textClean;   // {attachments_clean} -> "Text"
-                    
+                    item[key] = textWithBreak;
+                    item[`${key}_clean`] = textClean;
                     return item;
                 });
             }
@@ -209,34 +177,31 @@ export const generateDocument = (
     registryTemplateBase64: string | null,
     act: Act, 
     people: Person[], 
-    settings: ProjectSettings
+    settings: ProjectSettings,
+    certificates: Certificate[] = [] // New parameter
 ) => {
     try {
         const materialsList = act.materials.split(';').map(s => s.trim()).filter(Boolean);
         const threshold = settings.registryThreshold || 5;
         const shouldUseRegistry = materialsList.length > threshold && registryTemplateBase64;
 
-        // --- Prepare dynamic values ---
         const registryReferenceString = `Приложение №1: Реестр материалов.`;
         
         const smartMaterialsValue = shouldUseRegistry 
             ? registryReferenceString
             : act.materials;
 
-        // --- Resolve Attachments Field ---
         let attachmentsTemplate = act.attachments;
         if (!attachmentsTemplate && settings.showAttachments && settings.defaultAttachments) {
             attachmentsTemplate = settings.defaultAttachments;
         }
 
-        // 1. Resolve template tags
         let resolvedAttachments = resolveStringTemplate(attachmentsTemplate || '', act, {
             materials: smartMaterialsValue,
-            materials_raw: act.materials, // EXPLICITLY allow raw materials in attachments even if registry is active
+            materials_raw: act.materials,
             certs: act.certs
         });
         
-        // 2. Normalize newlines to plain \n
         resolvedAttachments = normalizeNewlines(resolvedAttachments);
 
         if (shouldUseRegistry) {
@@ -245,26 +210,53 @@ export const generateDocument = (
                 ...baseRegistryData, 
                 materials_list: materialsList.map((m, i) => {
                     let name = m;
-                    let cert = '';
-                    const match = m.match(/^(.*)\s\((.*)\)[^)]*$/);
+                    let certDoc = '';
+                    let date = '';
+                    let amount = '1';
+
+                    // Parse Material Format: "Name (CertInfo)"
+                    const match = m.match(/^(.*)\s\((.*)\)\s*$/);
+                    
                     if (match) {
                         name = match[1].trim();
-                        cert = match[2].trim();
+                        const certInfo = match[2].trim();
+                        
+                        // 1. Extract Date from Cert Info (dd.mm.yyyy)
+                        const dateMatch = certInfo.match(/(\d{2}\.\d{2}\.\d{4})/);
+                        if (dateMatch) {
+                            date = dateMatch[1];
+                        }
+
+                        // 2. Clean Cert Doc text: Remove date and "valid until" phrases to leave just doc number/name
+                        // Removes: ", до dd.mm.yyyy", " действительно до..."
+                        certDoc = certInfo.replace(/,?\s*(действителен|действ\.|до)\s*(\d{2}\.\d{2}\.\d{4})?.*/i, '').trim();
+                        // Also remove just the date if it was at the end without keywords
+                        certDoc = certDoc.replace(new RegExp(`,?\\s*${date}$`), '').trim();
+
+                        // 3. Find Amount from Certificate Object
+                        // Extract number part to find match
+                        const numberMatch = certInfo.match(/№\s*([^\s,]+)/);
+                        if (numberMatch) {
+                            const certNum = numberMatch[1];
+                            const foundCert = certificates.find(c => c.number.includes(certNum));
+                            if (foundCert && foundCert.amount) {
+                                amount = foundCert.amount;
+                            }
+                        }
                     }
+
                     return { 
                         index: i + 1, 
                         name: m, 
                         material_name: name, 
-                        cert_doc: cert,
-                        date: '', 
-                        amount: '' 
+                        cert_doc: certDoc,
+                        date: date, 
+                        amount: amount 
                     };
                 })
             };
             const registryBuffer = renderDoc(registryTemplateBase64, registryData);
 
-            // We do NOT append registry reference automatically anymore.
-            // User must include {registry_text} or {materials} which resolves to reference if they want it.
             const actData = prepareDocData(act, people, resolvedAttachments, registryReferenceString, registryReferenceString);
             const actBuffer = renderDoc(templateBase64, actData);
 
