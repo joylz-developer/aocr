@@ -242,6 +242,65 @@ const calculateDiff = (oldList: string[], newList: string[]): DiffItem[] => {
 
 // --- Helper Components ---
 
+const FilterPicker: React.FC<{
+    value: UsageFilter;
+    onChange: (val: UsageFilter) => void;
+}> = ({ value, onChange }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const pickerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isOpen]);
+
+    const options: { val: UsageFilter; label: string }[] = [
+        { val: 'all', label: 'Все сертификаты' },
+        { val: 'linked', label: 'Только со связями' },
+        { val: 'unlinked', label: 'Без связей' },
+    ];
+
+    const currentLabel = value === 'all' ? 'Связи' : options.find(o => o.val === value)?.label;
+
+    return (
+        <div className="relative flex-shrink-0" ref={pickerRef}>
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className={`flex items-center gap-2 bg-white text-slate-700 px-4 py-2 rounded-md hover:bg-slate-100 border border-slate-300 transition-colors whitespace-nowrap ${value !== 'all' ? 'ring-2 ring-blue-100 border-blue-300 text-blue-700' : ''}`}
+                title="Фильтр по использованию"
+            >
+                <LinkIcon className="w-5 h-5" />
+                <span>{currentLabel}</span>
+                <ChevronDownIcon className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {isOpen && (
+                <div className="absolute left-0 mt-2 w-64 bg-white border border-slate-200 rounded-md shadow-lg z-50 p-2 animate-fade-in-up">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 mb-1">
+                        Фильтрация
+                    </div>
+                    {options.map((opt) => (
+                        <button
+                            key={opt.val}
+                            onClick={() => { onChange(opt.val); setIsOpen(false); }}
+                            className={`w-full text-left px-3 py-2 text-sm rounded-md flex items-center justify-between group transition-colors
+                                ${value === opt.val ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700 hover:bg-slate-50'}
+                            `}
+                        >
+                            <span>{opt.label}</span>
+                            {value === opt.val && <CheckIcon className="w-4 h-4 text-blue-600" />}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const AutoResizeTextarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement>> = (props) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1548,15 +1607,10 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                         className="w-full lg:max-w-md px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     
-                    <select
-                        value={filterUsage}
-                        onChange={(e) => setFilterUsage(e.target.value as UsageFilter)}
-                        className="border border-slate-300 rounded-md px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                        <option value="all">Все сертификаты</option>
-                        <option value="linked">Только со связями</option>
-                        <option value="unlinked">Без связей</option>
-                    </select>
+                    <FilterPicker 
+                        value={filterUsage} 
+                        onChange={setFilterUsage} 
+                    />
                 </div>
                 
                 <div className="flex items-center gap-4 text-slate-500 flex-shrink-0">
