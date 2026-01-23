@@ -38,6 +38,7 @@ interface DiffItem {
 
 type ViewMode = 'card' | 'list';
 type ColumnCount = 1 | 2 | 3;
+type UsageFilter = 'all' | 'linked' | 'unlinked';
 
 // --- Helper Functions ---
 
@@ -823,16 +824,7 @@ const CertificateForm: React.FC<{
                                     <span className="font-semibold text-slate-700 truncate pr-2" title={activeFile ? activeFile.name : ''}>
                                         {activeFile ? activeFile.name : 'Нет файла'}
                                     </span>
-                                    {activeFile && (
-                                        <button
-                                            type="button"
-                                            onClick={(e) => handleDeleteFileClick(e, activeFile.id)}
-                                            className="text-slate-400 hover:text-red-600 p-1 hover:bg-red-50 rounded transition-colors"
-                                            title="Удалить текущий файл"
-                                        >
-                                            <DeleteIcon className="w-5 h-5" />
-                                        </button>
-                                    )}
+                                    {/* DELETE BUTTON REMOVED AS REQUESTED */}
                                 </div>
 
                                 <div 
@@ -936,6 +928,8 @@ const CertificateForm: React.FC<{
                     </div>
 
                     {/* RIGHT COLUMN: Form Fields */}
+                    {/* ... rest of the form ... */}
+                    {/* (This part remains largely the same, just closing the block for context) */}
                     <div className={`flex flex-col h-full min-h-0 transition-all duration-300 ${isGalleryCollapsed ? 'w-full pl-2' : 'w-full md:w-2/5'}`}>
                         <div className="overflow-y-auto pr-2 flex-grow space-y-5 pb-4">
                             
@@ -1041,7 +1035,7 @@ const CertificateForm: React.FC<{
                                     )}
                                 </div>
                                 
-                                {/* AI Materials Suggestions with Hide/Show - Hide completely during Diff review */}
+                                {/* AI Materials Suggestions with Hide/Show */}
                                 {aiSuggestions?.materials && aiSuggestions.materials.length > 0 && !isPreviewMode && (
                                     <div className="mb-4 bg-violet-50 border border-violet-100 rounded-md p-3">
                                         <div className="flex justify-between items-center mb-2 cursor-pointer select-none" onClick={() => setShowAiMaterials(!showAiMaterials)}>
@@ -1108,7 +1102,7 @@ const CertificateForm: React.FC<{
                                     </div>
                                 )}
 
-                                {/* Manual Add Input - HIDDEN during Diff Review */}
+                                {/* Manual Add Input */}
                                 {!isPreviewMode && (
                                     <div className="flex gap-2 mt-1 mb-3">
                                         <input 
@@ -1328,9 +1322,26 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
     const [columnCount, setColumnCount] = useLocalStorage<ColumnCount>('cert_column_count', 3);
     const [expandedMaterialCards, setExpandedMaterialCards] = useState<Set<string>>(new Set());
     
+    const [filterUsage, setFilterUsage] = useState<UsageFilter>('all');
+    
     // Delete Confirmation State
     const [deleteWarning, setDeleteWarning] = useState<{ cert: Certificate, usedInActs: string[] } | null>(null);
     const [manageLinksCert, setManageLinksCert] = useState<{ cert: Certificate, usedInActs: {id: string, number: string}[] } | null>(null);
+
+    // Calculate usage once per render for all certs (optimization)
+    const usageMap = useMemo(() => {
+        const map = new Map<string, number>();
+        
+        certificates.forEach(cert => {
+            let count = 0;
+            const searchStr = `(сертификат № ${cert.number}`;
+            for (const act of acts) {
+                if (act.materials.includes(searchStr)) count++;
+            }
+            map.set(cert.id, count);
+        });
+        return map;
+    }, [acts, certificates]);
 
     // Effect to handle initial opening from external navigation
     useEffect(() => {
@@ -1346,10 +1357,24 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
     }, [initialOpenId, certificates, onClearInitialOpenId]);
 
     const filteredCertificates = useMemo(() => {
-        if (!searchQuery.trim()) return certificates;
+        let results = certificates;
+
+        // 1. Filter by Usage
+        if (filterUsage !== 'all') {
+            results = results.filter(c => {
+                const linkCount = usageMap.get(c.id) || 0;
+                if (filterUsage === 'linked') return linkCount > 0;
+                if (filterUsage === 'unlinked') return linkCount === 0;
+                return true;
+            });
+        }
+
+        // 2. Filter by Search Query
+        if (!searchQuery.trim()) return results;
+        
         const tokens = searchQuery.toLowerCase().split(/\s+/).filter(t => t.length > 0);
         
-        return certificates.filter(c => {
+        return results.filter(c => {
             const certNumLower = c.number.toLowerCase();
             let bestScoreForCert = 10000;
             let totalScore = 0;
@@ -1398,7 +1423,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
             
             return allTokensMatch;
         });
-    }, [certificates, searchQuery]);
+    }, [certificates, searchQuery, filterUsage, usageMap]);
 
     const handleOpenModal = (cert: Certificate | null = null) => {
         setEditingCert(cert);
@@ -1503,32 +1528,6 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
 
     const gridColsClass = columnCount === 1 ? 'grid-cols-1' : columnCount === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
 
-    // Calculate usage once per render for all certs (optimization)
-    const usageMap = useMemo(() => {
-        const map = new Map<string, number>();
-        acts.forEach(act => {
-            // Find all cert refs in this act
-            const matches = act.materials.matchAll(/\(сертификат №\s*([^\s,)]+).*?\)/gi);
-            for (const match of matches) {
-                const certNum = match[1];
-                // Inefficient to fuzzy match here, assumes exact number match logic used elsewhere
-                // Or simply checking if material string contains the cert number pattern
-            }
-            // Better: Loop certs and check acts? No, N*M complexity.
-            // Let's rely on simple string inclusion for now as done in delete check.
-        });
-        
-        certificates.forEach(cert => {
-            let count = 0;
-            const searchStr = `(сертификат № ${cert.number}`;
-            for (const act of acts) {
-                if (act.materials.includes(searchStr)) count++;
-            }
-            map.set(cert.id, count);
-        });
-        return map;
-    }, [acts, certificates]);
-
     return (
         <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0 gap-4">
@@ -1539,16 +1538,28 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
             </div>
 
             {/* Toolbar: Search and View Controls */}
-            <div className="flex flex-col md:flex-row gap-4 mb-4 pb-4 border-b border-slate-100 items-center justify-between">
-                <input
-                    type="text"
-                    placeholder="Поиск по номеру, материалам..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+            <div className="flex flex-col lg:flex-row gap-4 mb-4 pb-4 border-b border-slate-100 items-center justify-between">
+                <div className="flex gap-2 w-full lg:w-auto flex-1">
+                    <input
+                        type="text"
+                        placeholder="Поиск по номеру, материалам..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full lg:max-w-md px-4 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    
+                    <select
+                        value={filterUsage}
+                        onChange={(e) => setFilterUsage(e.target.value as UsageFilter)}
+                        className="border border-slate-300 rounded-md px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="all">Все сертификаты</option>
+                        <option value="linked">Только со связями</option>
+                        <option value="unlinked">Без связей</option>
+                    </select>
+                </div>
                 
-                <div className="flex items-center gap-4 text-slate-500">
+                <div className="flex items-center gap-4 text-slate-500 flex-shrink-0">
                     <div className="flex items-center gap-1 border rounded-md p-0.5">
                          <button 
                             onClick={() => setViewMode('card')} 
@@ -1602,7 +1613,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
 
                         if (viewMode === 'list') {
                             return (
-                                <div key={cert.id} className="border border-slate-200 rounded-lg p-3 hover:shadow-md transition-shadow bg-white flex items-center gap-4 cursor-pointer" onClick={() => handleOpenModal(cert)}>
+                                <div key={cert.id} className="border border-slate-200 rounded-lg p-3 hover:shadow-md transition-shadow bg-white flex items-center gap-4 cursor-pointer group" onClick={() => handleOpenModal(cert)}>
                                     <div className="p-2 bg-slate-100 rounded text-slate-500 cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePreview(cert); }}>
                                         <CertificateIcon className="w-6 h-6" />
                                     </div>
@@ -1621,9 +1632,13 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                         ))}
                                     </div>
                                     {linkCount > 0 && (
-                                        <div className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-full text-xs font-medium" onClick={(e) => handleManageLinks(e, cert)}>
+                                        <button 
+                                            className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-full text-xs font-medium border border-blue-100 hover:bg-blue-600 hover:text-white transition-all duration-200 hover:scale-110 hover:shadow-md" 
+                                            onClick={(e) => handleManageLinks(e, cert)}
+                                            title="Управление связями"
+                                        >
                                             <LinkIcon className="w-3 h-3" /> {linkCount}
-                                        </div>
+                                        </button>
                                     )}
                                     <div className="flex gap-1 flex-shrink-0">
                                         <button onClick={(e) => { e.stopPropagation(); handleOpenModal(cert); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
@@ -1643,7 +1658,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                             {/* Link Badge */}
                             {linkCount > 0 && (
                                 <button 
-                                    className="absolute top-2 left-2 z-20 bg-white/90 text-blue-600 text-xs px-2 py-1 rounded-full flex items-center gap-1 shadow-sm border border-blue-100 hover:bg-blue-600 hover:text-white transition-colors"
+                                    className="absolute top-2 left-2 z-20 bg-white/90 text-blue-600 text-xs px-2 py-1 rounded-full flex items-center gap-1 shadow-sm border border-blue-100 hover:bg-blue-600 hover:text-white transition-all duration-200 hover:scale-110 hover:shadow-md"
                                     onClick={(e) => handleManageLinks(e, cert)}
                                     title={`Используется в ${linkCount} актах. Нажмите для управления.`}
                                 >
@@ -1653,7 +1668,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
 
                             {/* Thumbnail Section */}
                             <div 
-                                className="h-40 bg-slate-100 border-b border-slate-100 flex items-center justify-center cursor-pointer relative overflow-hidden"
+                                className="h-40 bg-slate-200 border-b border-slate-100 flex items-center justify-center cursor-pointer relative overflow-hidden"
                                 onClick={(e) => { e.stopPropagation(); handlePreview(cert); }}
                                 onDoubleClick={(e) => {
                                     e.stopPropagation();
@@ -1663,7 +1678,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                             >
                                 {hasFiles ? (
                                     mainFile.type === 'image' ? (
-                                        <img src={mainFile.data} alt={cert.number} className="w-full h-full object-cover" />
+                                        <img src={mainFile.data} alt={cert.number} className="w-full h-full object-contain bg-slate-200" />
                                     ) : (
                                         <div className="w-full h-full relative pointer-events-none">
                                             {/* Pointer events none to allow clicking the div container */}
@@ -1710,19 +1725,17 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                 </div>
                                 
                                 <div 
-                                    className="flex-grow cursor-pointer" 
+                                    className="flex-grow cursor-pointer group/materials hover:bg-blue-50 hover:shadow-sm rounded-md transition-all duration-200 p-1 -m-1" 
                                     onClick={(e) => toggleMaterialsExpand(e, cert.id)}
                                     title="Нажмите, чтобы развернуть/свернуть список материалов"
                                 >
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex justify-between items-center">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex justify-between items-center group-hover/materials:text-blue-500 transition-colors">
                                         Материалы:
-                                        {cert.materials.length > 3 && (
-                                            <ChevronDownIcon className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                                        )}
+                                        <ChevronDownIcon className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                                     </p>
                                     <ul className="text-xs text-slate-700 space-y-1">
                                         {(isExpanded ? cert.materials : cert.materials.slice(0, 3)).map((m, i) => (
-                                            <li key={i} className="truncate border-l-2 border-blue-100 pl-2">
+                                            <li key={i} className="truncate border-l-2 border-blue-100 pl-2 group-hover/materials:border-blue-300">
                                                 <HighlightMatch text={m} query={searchQuery} />
                                             </li>
                                         ))}
