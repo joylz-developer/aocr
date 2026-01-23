@@ -474,15 +474,23 @@ const App: React.FC = () => {
          setCertificates(prev => prev.filter(c => c.id !== id));
     }, [certificates, setCertificates, setDeletedCertificates]);
 
-    const handleRemoveCertificateLinksFromActs = useCallback((cert: Certificate) => {
+    const handleRemoveCertificateLinksFromActs = useCallback((cert: Certificate, mode: 'remove_entry' | 'remove_reference') => {
         const updatedActs = acts.map(act => {
             let materials = act.materials;
             const regex = new RegExp(`\\(сертификат №\\s*${cert.number}.*?\\)`, 'i');
             
             if (regex.test(materials)) {
-                const parts = materials.split(';').map(s => s.trim());
-                const cleanParts = parts.filter(part => !part.includes(`сертификат № ${cert.number}`));
-                return { ...act, materials: cleanParts.join('; ') };
+                if (mode === 'remove_entry') {
+                    // Remove the entire material line
+                    const parts = materials.split(';').map(s => s.trim());
+                    const cleanParts = parts.filter(part => !part.includes(`сертификат № ${cert.number}`));
+                    return { ...act, materials: cleanParts.join('; ') };
+                } else if (mode === 'remove_reference') {
+                    // Remove only the certificate part, keep material name
+                    // Replace "(сертификат № ...)" with empty string
+                    const cleanMaterials = materials.replace(new RegExp(`\\s*\\(сертификат №\\s*${cert.number}.*?\\)`, 'gi'), '');
+                    return { ...act, materials: cleanMaterials };
+                }
             }
             return act;
         });
@@ -878,7 +886,7 @@ const App: React.FC = () => {
                             settings={settings} 
                             onSave={handleSaveCertificate} 
                             onDelete={(id) => handleMoveCertificateToTrash(id)}
-                            onUnlink={(cert) => handleRemoveCertificateLinksFromActs(cert)}
+                            onUnlink={(cert, mode) => handleRemoveCertificateLinksFromActs(cert, mode)}
                             initialOpenId={targetCertificateId}
                             onClearInitialOpenId={() => setTargetCertificateId(null)}
                         />;

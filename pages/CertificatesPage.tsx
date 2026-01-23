@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 're
 import { Certificate, ProjectSettings, CertificateFile, Act } from '../types';
 import Modal from '../components/Modal';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon, LayoutListIcon, LayoutGridIcon, ColumnsIcon, LinkIcon, ChevronDownIcon, MinimizeIcon, MaximizeIcon, ArrowRightIcon, CheckIcon, XIcon } from '../components/Icons';
+import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon, LayoutListIcon, LayoutGridIcon, ColumnsIcon, LinkIcon, ChevronDownIcon, MinimizeIcon, MaximizeIcon, ArrowRightIcon, CheckIcon, XIcon, ArrowDownCircleIcon } from '../components/Icons';
 import { GoogleGenAI } from '@google/genai';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
@@ -13,7 +13,7 @@ interface CertificatesPageProps {
     settings: ProjectSettings;
     onSave: (cert: Certificate) => void;
     onDelete: (id: string) => void;
-    onUnlink: (cert: Certificate) => void;
+    onUnlink: (cert: Certificate, mode: 'remove_entry' | 'remove_reference') => void;
     initialOpenId?: string | null;
     onClearInitialOpenId?: () => void;
 }
@@ -526,12 +526,21 @@ const CertificateForm: React.FC<{
         if (!fileToDeleteId) return;
         
         setFormData(prev => {
+            const fileToDelete = prev.files.find(f => f.id === fileToDeleteId);
+            const pagesToRemove = fileToDelete ? countPdfPages(fileToDelete.data) : 0;
+            const currentAmount = parseInt(prev.amount || '0', 10);
+            const newAmount = Math.max(0, currentAmount - pagesToRemove);
+
             const newFiles = prev.files.filter(f => f.id !== fileToDeleteId);
             // If we deleted the active file, switch to another
             if (fileToDeleteId === activeFileId) {
                 setActiveFileId(newFiles.length > 0 ? newFiles[newFiles.length - 1].id : null);
             }
-            return { ...prev, files: newFiles };
+            return { 
+                ...prev, 
+                files: newFiles,
+                amount: String(newAmount)
+            };
         });
         
         setFileToDeleteId(null);
@@ -781,8 +790,13 @@ const CertificateForm: React.FC<{
 
     const isPreviewMode = !!diffResult;
 
+    // Prevent click propagation to card when clicking inside the modal
+    const handleModalClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+    }
+
     return (
-        <>
+        <div onClick={handleModalClick} className="h-full">
             <form onSubmit={handleSubmit} className="flex flex-col h-[75vh]">
                 
                 <div className="flex flex-row gap-6 h-full min-h-0 relative">
@@ -1299,7 +1313,7 @@ const CertificateForm: React.FC<{
             >
                 Вы действительно хотите удалить эту страницу/изображение? Это действие нельзя будет отменить.
             </ConfirmationModal>
-        </>
+        </div>
     );
 };
 
@@ -1312,9 +1326,11 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
     const [searchQuery, setSearchQuery] = useLocalStorage<string>('cert_search_query', '');
     const [viewMode, setViewMode] = useLocalStorage<ViewMode>('cert_view_mode', 'card');
     const [columnCount, setColumnCount] = useLocalStorage<ColumnCount>('cert_column_count', 3);
+    const [expandedMaterialCards, setExpandedMaterialCards] = useState<Set<string>>(new Set());
     
     // Delete Confirmation State
     const [deleteWarning, setDeleteWarning] = useState<{ cert: Certificate, usedInActs: string[] } | null>(null);
+    const [manageLinksCert, setManageLinksCert] = useState<{ cert: Certificate, usedInActs: {id: string, number: string}[] } | null>(null);
 
     // Effect to handle initial opening from external navigation
     useEffect(() => {
@@ -1420,7 +1436,8 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
     };
     
     // Smart Delete Logic
-    const handleClickDelete = (cert: Certificate) => {
+    const handleClickDelete = (e: React.MouseEvent, cert: Certificate) => {
+        e.stopPropagation();
         // Check for usage in acts
         const usedInActs: string[] = [];
         
@@ -1437,21 +1454,80 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
         }
     };
     
-    const handleConfirmDelete = () => {
-        if (deleteWarning) {
-            onDelete(deleteWarning.cert.id);
-            setDeleteWarning(null);
+    const handleConfirmDelete = (mode: 'default' | 'clean' | 'remove_materials') => {
+        if (!deleteWarning) return;
+        
+        const cert = deleteWarning.cert;
+        
+        // 1. Just Delete (Default): Cert is gone, Acts keep text "(cert 123)" but it's dead text.
+        // 2. Clean: Delete Cert, remove "(cert 123)" from Acts, keeping material name.
+        // 3. Remove Materials: Delete Cert, remove entire material line from Acts.
+        
+        if (mode === 'clean') {
+            onUnlink(cert, 'remove_reference');
+        } else if (mode === 'remove_materials') {
+            onUnlink(cert, 'remove_entry');
+        }
+        
+        onDelete(cert.id);
+        setDeleteWarning(null);
+    };
+
+    const handleManageLinks = (e: React.MouseEvent, cert: Certificate) => {
+        e.stopPropagation();
+        const usedInActs: {id: string, number: string}[] = [];
+        acts.forEach(act => {
+            if (act.materials.includes(`(сертификат № ${cert.number}`)) {
+                usedInActs.push({ id: act.id, number: act.number || 'б/н' });
+            }
+        });
+        setManageLinksCert({ cert, usedInActs });
+    };
+
+    const handleUnlinkFromManager = (mode: 'remove_entry' | 'remove_reference') => {
+        if (manageLinksCert) {
+            onUnlink(manageLinksCert.cert, mode);
+            setManageLinksCert(null);
         }
     };
 
-    const handleUnlink = () => {
-        if (deleteWarning) {
-            onUnlink(deleteWarning.cert);
-            setDeleteWarning(null);
-        }
+    const toggleMaterialsExpand = (e: React.MouseEvent, certId: string) => {
+        e.stopPropagation();
+        setExpandedMaterialCards(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(certId)) newSet.delete(certId);
+            else newSet.add(certId);
+            return newSet;
+        });
     };
 
     const gridColsClass = columnCount === 1 ? 'grid-cols-1' : columnCount === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+
+    // Calculate usage once per render for all certs (optimization)
+    const usageMap = useMemo(() => {
+        const map = new Map<string, number>();
+        acts.forEach(act => {
+            // Find all cert refs in this act
+            const matches = act.materials.matchAll(/\(сертификат №\s*([^\s,)]+).*?\)/gi);
+            for (const match of matches) {
+                const certNum = match[1];
+                // Inefficient to fuzzy match here, assumes exact number match logic used elsewhere
+                // Or simply checking if material string contains the cert number pattern
+            }
+            // Better: Loop certs and check acts? No, N*M complexity.
+            // Let's rely on simple string inclusion for now as done in delete check.
+        });
+        
+        certificates.forEach(cert => {
+            let count = 0;
+            const searchStr = `(сертификат № ${cert.number}`;
+            for (const act of acts) {
+                if (act.materials.includes(searchStr)) count++;
+            }
+            map.set(cert.id, count);
+        });
+        return map;
+    }, [acts, certificates]);
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
@@ -1521,11 +1597,13 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                         const hasFiles = (cert.files && cert.files.length > 0) || !!cert.fileData;
                         const mainFile = cert.files?.[0] || { type: cert.fileType, data: cert.fileData };
                         const fileCount = cert.files?.length || (cert.fileData ? 1 : 0);
+                        const linkCount = usageMap.get(cert.id) || 0;
+                        const isExpanded = expandedMaterialCards.has(cert.id);
 
                         if (viewMode === 'list') {
                             return (
-                                <div key={cert.id} className="border border-slate-200 rounded-lg p-3 hover:shadow-md transition-shadow bg-white flex items-center gap-4">
-                                    <div className="p-2 bg-slate-100 rounded text-slate-500 cursor-pointer" onClick={() => handlePreview(cert)}>
+                                <div key={cert.id} className="border border-slate-200 rounded-lg p-3 hover:shadow-md transition-shadow bg-white flex items-center gap-4 cursor-pointer" onClick={() => handleOpenModal(cert)}>
+                                    <div className="p-2 bg-slate-100 rounded text-slate-500 cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePreview(cert); }}>
                                         <CertificateIcon className="w-6 h-6" />
                                     </div>
                                     <div className="flex-grow min-w-0">
@@ -1542,9 +1620,14 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                             </span>
                                         ))}
                                     </div>
+                                    {linkCount > 0 && (
+                                        <div className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-full text-xs font-medium" onClick={(e) => handleManageLinks(e, cert)}>
+                                            <LinkIcon className="w-3 h-3" /> {linkCount}
+                                        </div>
+                                    )}
                                     <div className="flex gap-1 flex-shrink-0">
-                                        <button onClick={() => handleOpenModal(cert)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
-                                        <button onClick={() => handleClickDelete(cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
+                                        <button onClick={(e) => { e.stopPropagation(); handleOpenModal(cert); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
+                                        <button onClick={(e) => handleClickDelete(e, cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
                                     </div>
                                 </div>
                             );
@@ -1552,11 +1635,26 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
 
                         // Card View (Default)
                         return (
-                        <div key={cert.id} className="border border-slate-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col h-full">
+                        <div 
+                            key={cert.id} 
+                            className="border border-slate-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col h-full cursor-pointer relative group"
+                            onClick={() => handleOpenModal(cert)}
+                        >
+                            {/* Link Badge */}
+                            {linkCount > 0 && (
+                                <button 
+                                    className="absolute top-2 left-2 z-20 bg-white/90 text-blue-600 text-xs px-2 py-1 rounded-full flex items-center gap-1 shadow-sm border border-blue-100 hover:bg-blue-600 hover:text-white transition-colors"
+                                    onClick={(e) => handleManageLinks(e, cert)}
+                                    title={`Используется в ${linkCount} актах. Нажмите для управления.`}
+                                >
+                                    <LinkIcon className="w-3 h-3" /> {linkCount}
+                                </button>
+                            )}
+
                             {/* Thumbnail Section */}
                             <div 
-                                className="h-40 bg-slate-100 border-b border-slate-100 flex items-center justify-center cursor-pointer relative overflow-hidden group"
-                                onClick={() => handlePreview(cert)}
+                                className="h-40 bg-slate-100 border-b border-slate-100 flex items-center justify-center cursor-pointer relative overflow-hidden"
+                                onClick={(e) => { e.stopPropagation(); handlePreview(cert); }}
                                 onDoubleClick={(e) => {
                                     e.stopPropagation();
                                     if(mainFile.data) openInNewTab(mainFile.data);
@@ -1590,9 +1688,9 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                     </div>
                                 )}
                                 
-                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity flex items-center justify-center">
+                                <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-10 transition-opacity flex items-center justify-center pointer-events-none">
                                     <span className="opacity-0 group-hover:opacity-100 bg-white/90 px-3 py-1 rounded-full text-xs font-medium shadow-sm">
-                                        Просмотр
+                                        Редактировать
                                     </span>
                                 </div>
                             </div>
@@ -1606,20 +1704,29 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                         <p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p>
                                     </div>
                                     <div className="flex gap-1 ml-2">
-                                        <button onClick={() => handleOpenModal(cert)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
-                                        <button onClick={() => handleClickDelete(cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
+                                        <button onClick={(e) => { e.stopPropagation(); handleOpenModal(cert); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
+                                        <button onClick={(e) => handleClickDelete(e, cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
                                     </div>
                                 </div>
                                 
-                                <div className="flex-grow">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Материалы:</p>
+                                <div 
+                                    className="flex-grow cursor-pointer" 
+                                    onClick={(e) => toggleMaterialsExpand(e, cert.id)}
+                                    title="Нажмите, чтобы развернуть/свернуть список материалов"
+                                >
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex justify-between items-center">
+                                        Материалы:
+                                        {cert.materials.length > 3 && (
+                                            <ChevronDownIcon className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                        )}
+                                    </p>
                                     <ul className="text-xs text-slate-700 space-y-1">
-                                        {cert.materials.slice(0, 3).map((m, i) => (
+                                        {(isExpanded ? cert.materials : cert.materials.slice(0, 3)).map((m, i) => (
                                             <li key={i} className="truncate border-l-2 border-blue-100 pl-2">
                                                 <HighlightMatch text={m} query={searchQuery} />
                                             </li>
                                         ))}
-                                        {cert.materials.length > 3 && (
+                                        {!isExpanded && cert.materials.length > 3 && (
                                             <li className="text-slate-400 pl-2 italic">...и еще {cert.materials.length - 3}</li>
                                         )}
                                         {cert.materials.length === 0 && <li className="text-slate-400 italic pl-2">Список пуст</li>}
@@ -1652,38 +1759,104 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                 <Modal 
                     isOpen={true} 
                     onClose={() => setDeleteWarning(null)} 
-                    title="Сертификат используется"
+                    title="Удаление сертификата"
                 >
                     <div className="space-y-4">
                         <p className="text-slate-700">
-                            Сертификат <strong>{deleteWarning.cert.number}</strong> используется в следующих актах ({deleteWarning.usedInActs.length}):
+                            Сертификат <strong>{deleteWarning.cert.number}</strong> используется в <strong>{deleteWarning.usedInActs.length}</strong> актах.
                         </p>
-                        <div className="bg-slate-50 border border-slate-200 rounded p-2 text-sm max-h-32 overflow-y-auto">
-                            {deleteWarning.usedInActs.join(', ')}
-                        </div>
-                        <p className="text-slate-600 text-sm">
-                            Выберите действие:
+                        <p className="text-sm text-slate-600">
+                            Если вы удалите сертификат, ссылки на него в актах могут стать некорректными. Выберите действие:
                         </p>
-                        <div className="flex flex-col gap-2 pt-2">
+                        <div className="flex flex-col gap-3 pt-2">
                              <button 
-                                onClick={handleConfirmDelete} 
-                                className="w-full flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2.5 rounded-md hover:bg-red-700 transition-colors"
+                                onClick={() => handleConfirmDelete('remove_materials')} 
+                                className="w-full flex items-start gap-3 bg-red-50 text-red-800 border border-red-200 p-3 rounded-md hover:bg-red-100 transition-colors text-left"
                             >
-                                <DeleteIcon /> Удалить сертификат (в корзину)
-                                <span className="text-red-200 text-xs font-normal ml-auto">Ссылка в актах станет неактивной</span>
+                                <DeleteIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                                <div>
+                                    <div className="font-semibold text-sm">Удалить Сертификат и Строки материалов</div>
+                                    <div className="text-xs opacity-75">Строки с упоминанием этого сертификата будут полностью удалены из всех актов.</div>
+                                </div>
                             </button>
+
                              <button 
-                                onClick={handleUnlink} 
-                                className="w-full flex items-center justify-center gap-2 bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-md hover:bg-slate-50 transition-colors"
+                                onClick={() => handleConfirmDelete('clean')} 
+                                className="w-full flex items-start gap-3 bg-white border border-slate-300 p-3 rounded-md hover:bg-slate-50 transition-colors text-left"
                             >
-                                <LinkIcon /> Удалить только связь
-                                <span className="text-slate-400 text-xs font-normal ml-auto">Убрать упоминание из актов</span>
+                                <div className="p-0.5 bg-slate-200 rounded text-slate-600"><CloseIcon className="w-4 h-4" /></div>
+                                <div>
+                                    <div className="font-semibold text-sm text-slate-800">Удалить Сертификат и Ссылки</div>
+                                    <div className="text-xs text-slate-500">Сертификат удаляется. В актах останется название материала, но исчезнет текст "(сертификат №...)".</div>
+                                </div>
                             </button>
+
+                            <button 
+                                onClick={() => handleConfirmDelete('default')} 
+                                className="w-full flex items-start gap-3 bg-white border border-slate-300 p-3 rounded-md hover:bg-slate-50 transition-colors text-left"
+                            >
+                                <div className="p-0.5 bg-slate-200 rounded text-slate-600"><CheckIcon className="w-4 h-4" /></div>
+                                <div>
+                                    <div className="font-semibold text-sm text-slate-800">Удалить Сертификат, Оставить текст</div>
+                                    <div className="text-xs text-slate-500">Сертификат удаляется из базы. Текст в актах не меняется (останется как "мертвый" текст).</div>
+                                </div>
+                            </button>
+
                             <button 
                                 onClick={() => setDeleteWarning(null)} 
-                                className="w-full text-slate-500 hover:text-slate-800 text-sm py-2"
+                                className="w-full text-slate-500 hover:text-slate-800 text-sm py-2 mt-2"
                             >
                                 Отмена
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Manage Links Modal */}
+            {manageLinksCert && (
+                <Modal 
+                    isOpen={true} 
+                    onClose={() => setManageLinksCert(null)} 
+                    title={`Использование сертификата № ${manageLinksCert.cert.number}`}
+                >
+                    <div className="space-y-4">
+                        <div className="bg-slate-50 border border-slate-200 rounded p-3 text-sm max-h-48 overflow-y-auto">
+                            <ul className="list-disc pl-5 space-y-1">
+                                {manageLinksCert.usedInActs.map((act) => (
+                                    <li key={act.id}>Акт № {act.number}</li>
+                                ))}
+                            </ul>
+                        </div>
+                        
+                        <div className="flex flex-col gap-3">
+                            <h4 className="text-sm font-semibold text-slate-700">Действия со связями:</h4>
+                            <button 
+                                onClick={() => handleUnlinkFromManager('remove_reference')} 
+                                className="w-full flex items-center gap-3 bg-white border border-slate-300 p-3 rounded-md hover:bg-slate-50 text-left text-sm"
+                            >
+                                <LinkIcon className="w-5 h-5 text-slate-400" />
+                                <div>
+                                    <div className="font-medium text-slate-800">Отвязать (Убрать упоминание сертификата)</div>
+                                    <div className="text-xs text-slate-500">В актах останутся названия материалов, удалится только "(сертификат №...)"</div>
+                                </div>
+                            </button>
+                            
+                            <button 
+                                onClick={() => handleUnlinkFromManager('remove_entry')} 
+                                className="w-full flex items-center gap-3 bg-white border border-red-200 p-3 rounded-md hover:bg-red-50 text-left text-sm"
+                            >
+                                <DeleteIcon className="w-5 h-5 text-red-400" />
+                                <div>
+                                    <div className="font-medium text-red-800">Удалить материалы из актов</div>
+                                    <div className="text-xs text-red-600">Строки с этими материалами будут полностью удалены из актов</div>
+                                </div>
+                            </button>
+                        </div>
+                        
+                        <div className="flex justify-end pt-2">
+                            <button onClick={() => setManageLinksCert(null)} className="text-slate-500 hover:text-slate-700 text-sm px-4 py-2">
+                                Закрыть
                             </button>
                         </div>
                     </div>
