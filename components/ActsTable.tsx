@@ -45,6 +45,7 @@ interface ActsTableProps {
     onNavigateToCertificate?: (id: string) => void; // Callback for navigating to cert page
 }
 
+// ... [Keep formatDateForDisplay, parseDisplayDate, DateEditorPopover, RegulationPopover, NextWorkPopover unchanged] ...
 const formatDateForDisplay = (dateString: string): string => {
     if (!dateString) return '';
     const dateParts = dateString.split('-');
@@ -269,6 +270,38 @@ const NextWorkPopover: React.FC<{
     );
 };
 
+// Rich Tooltip Component
+const RichHeaderTooltip: React.FC<{ 
+    column: typeof ALL_COLUMNS[0], 
+    position: { top: number, left: number } | null 
+}> = ({ column, position }) => {
+    if (!position || !column.description) return null;
+
+    return (
+        <div 
+            className="fixed z-50 w-80 bg-white rounded-lg shadow-xl border border-slate-200 p-4 text-left pointer-events-none animate-fade-in-up"
+            style={{ 
+                top: position.top + 25, 
+                left: position.left - 10,
+            }}
+        >
+            <div className="absolute -top-1.5 left-4 w-3 h-3 bg-white border-t border-l border-slate-200 transform rotate-45"></div>
+            <h4 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
+                {column.label}
+            </h4>
+            <p className="text-sm text-slate-600 mb-3 leading-relaxed">
+                {column.description}
+            </p>
+            {column.example && (
+                <div className="bg-slate-50 border border-slate-100 rounded p-2.5">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Пример заполнения:</span>
+                    <code className="text-xs text-blue-700 font-mono break-words">{column.example}</code>
+                </div>
+            )}
+        </div>
+    );
+};
+
 
 // Main Table Component
 const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, certificates = [], template, registryTemplate, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, selectedCells, setSelectedCells, onSave, onRequestDelete, onReorderActs, setCurrentPage, createNewAct, onNavigateToCertificate }) => {
@@ -283,6 +316,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     
     const [datePopoverState, setDatePopoverState] = useState<{ act: Act; position: { top: number, left: number, width: number } } | null>(null);
     const [fillHandleCoords, setFillHandleCoords] = useState<{top: number, left: number} | null>(null);
+
+    // Header Tooltip State
+    const [hoveredHeaderKey, setHoveredHeaderKey] = useState<string | null>(null);
+    const [hoveredHeaderPos, setHoveredHeaderPos] = useState<{top: number, left: number} | null>(null);
 
     // Drag Indicator State (for visual feedback)
     const [dragIndicator, setDragIndicator] = useState<{
@@ -391,6 +428,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         };
     };
 
+    // ... [Selection logic, template application, bulk updates, org details helper, group change logic unchanged] ...
     const selectedRows = useMemo(() => {
         const rowsFullySelected = new Set<number>();
         if (selectedCells.size === 0 || columns.length === 0) {
@@ -437,7 +475,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setCurrentPage('groups');
     };
 
-    // Helper to resolve templates and return updated Act object (does NOT save)
     const applyTemplatesToAct = useCallback((act: Act) => {
         const actToSave = { ...act };
         const resolve = (templateStr: string, contextAct: Act) => {
@@ -452,14 +489,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 return value !== undefined && value !== null ? String(value) : '';
             });
         };
-
-        // REMOVED: Auto-overwriting of attachments and additionalInfo with defaults.
-        // This was preventing manual edits. Defaults are now applied only on creation.
-        
         const dateTemplate = settings.defaultActDate !== undefined ? settings.defaultActDate : '{workEndDate}';
         const resolvedDateString = resolve(dateTemplate, actToSave);
         actToSave.date = parseDisplayDate(resolvedDateString) || actToSave.date;
-        
         return actToSave;
     }, [settings]);
 
@@ -468,16 +500,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         onSave(resolvedAct);
     }, [onSave, applyTemplatesToAct]);
     
-    // Bulk Update Helper: Applies changes from a Map to the acts array and calls onReorderActs once
     const performBulkUpdate = useCallback((modifiedActsMap: Map<string, Act>) => {
         if (modifiedActsMap.size === 0) return;
-        
         let hasChanges = false;
-
         const finalActs = acts.map(act => {
             if (modifiedActsMap.has(act.id)) {
                 const updatedAct = applyTemplatesToAct(modifiedActsMap.get(act.id)!);
-                // Check if content actually changed to avoid unnecessary history entries
                 if (JSON.stringify(act) !== JSON.stringify(updatedAct)) {
                     hasChanges = true;
                     return updatedAct;
@@ -485,7 +513,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             }
             return act;
         });
-        
         if (hasChanges) {
             onReorderActs(finalActs);
         }
@@ -498,32 +525,19 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const handleGroupChange = (act: Act, groupId: string) => {
         const selectedGroup = groups.find(g => g.id === groupId);
         const orgMap = new Map(organizations.map(org => [org.id, org]));
-        
         const updatedAct = { ...act };
-        
         updatedAct.commissionGroupId = groupId || undefined;
-
         if (selectedGroup) {
             updatedAct.representatives = { ...selectedGroup.representatives };
             updatedAct.builderOrgId = selectedGroup.builderOrgId;
             updatedAct.contractorOrgId = selectedGroup.contractorOrgId;
             updatedAct.designerOrgId = selectedGroup.designerOrgId;
             updatedAct.workPerformerOrgId = selectedGroup.workPerformerOrgId;
-
-            updatedAct.builderDetails = selectedGroup.builderOrgId && orgMap.has(selectedGroup.builderOrgId) 
-                ? getOrgDetailsString(orgMap.get(selectedGroup.builderOrgId)!) 
-                : '';
-            updatedAct.contractorDetails = selectedGroup.contractorOrgId && orgMap.has(selectedGroup.contractorOrgId) 
-                ? getOrgDetailsString(orgMap.get(selectedGroup.contractorOrgId)!) 
-                : '';
-            updatedAct.designerDetails = selectedGroup.designerOrgId && orgMap.has(selectedGroup.designerOrgId) 
-                ? getOrgDetailsString(orgMap.get(selectedGroup.designerOrgId)!) 
-                : '';
-            updatedAct.workPerformer = selectedGroup.workPerformerOrgId && orgMap.has(selectedGroup.workPerformerOrgId) 
-                ? getOrgDetailsString(orgMap.get(selectedGroup.workPerformerOrgId)!) 
-                : '';
+            updatedAct.builderDetails = selectedGroup.builderOrgId && orgMap.has(selectedGroup.builderOrgId) ? getOrgDetailsString(orgMap.get(selectedGroup.builderOrgId)!) : '';
+            updatedAct.contractorDetails = selectedGroup.contractorOrgId && orgMap.has(selectedGroup.contractorOrgId) ? getOrgDetailsString(orgMap.get(selectedGroup.contractorOrgId)!) : '';
+            updatedAct.designerDetails = selectedGroup.designerOrgId && orgMap.has(selectedGroup.designerOrgId) ? getOrgDetailsString(orgMap.get(selectedGroup.designerOrgId)!) : '';
+            updatedAct.workPerformer = selectedGroup.workPerformerOrgId && orgMap.has(selectedGroup.workPerformerOrgId) ? getOrgDetailsString(orgMap.get(selectedGroup.workPerformerOrgId)!) : '';
         }
-
         handleSaveWithTemplateResolution(updatedAct);
     };
 
@@ -532,40 +546,27 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setDateError(null);
     }, []);
     
+    // ... [handleEditorSave, editor effects, handleEditorChange, handleEditorKeyDown same as before] ...
     const handleEditorSave = useCallback(() => {
         if (!editingCell) return true;
-
         const { rowIndex, colIndex } = editingCell;
         const act = acts[rowIndex];
         const col = columns[colIndex];
-        
         const updatedAct = { ...act };
-        
         if (col.key === 'workDates') {
             const parts = editorValue.split('-').map(s => s.trim());
             const startStr = parts[0];
             const endStr = parts.length > 1 ? parts[1] : startStr;
-
-            if (!startStr && !endStr) { // Allow clearing the cell
+            if (!startStr && !endStr) { 
                 setDateError(null);
                 updatedAct.workStartDate = '';
                 updatedAct.workEndDate = '';
             } else {
                 const start = parseDisplayDate(startStr);
                 const end = parseDisplayDate(endStr);
-        
-                if (!start) {
-                    setDateError(`Неверный формат даты начала. Используйте ДД.ММ.ГГГГ.`);
-                    return false;
-                }
-                if (!end) {
-                    setDateError(`Неверный формат даты окончания. Используйте ДД.ММ.ГГГГ.`);
-                    return false;
-                }
-                if (new Date(end) < new Date(start)) {
-                    setDateError('Дата окончания не может быть раньше даты начала.');
-                    return false;
-                }
+                if (!start) { setDateError(`Неверный формат даты начала. Используйте ДД.ММ.ГГГГ.`); return false; }
+                if (!end) { setDateError(`Неверный формат даты окончания. Используйте ДД.ММ.ГГГГ.`); return false; }
+                if (new Date(end) < new Date(start)) { setDateError('Дата окончания не может быть раньше даты начала.'); return false; }
                 setDateError(null);
                 updatedAct.workStartDate = start;
                 updatedAct.workEndDate = end;
@@ -575,58 +576,40 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             (updatedAct as any)[columnKey] = editorValue;
             if (col.key === 'nextWork') {
                 updatedAct.nextWork = editorValue;
-                // Only clear the link if the user manually types something different than what 'AUTO_NEXT' would produce, or explicitly edits it.
-                // For simplicity, manual edit breaks the link unless it was already AUTO_NEXT and we are just closing.
-                // However, handleEditorSave is called on close. If value is same, don't change.
-                if (act.nextWorkActId === AUTO_NEXT_ID) {
-                     // Keep AUTO_NEXT if the text matches what's expected, OR if the user is just closing without changes?
-                     // Actually, if user types manually, we usually want to overwrite 'AUTO_NEXT'.
-                     updatedAct.nextWorkActId = undefined;
-                } else {
-                     updatedAct.nextWorkActId = undefined;
-                }
+                if (act.nextWorkActId === AUTO_NEXT_ID) { updatedAct.nextWorkActId = undefined; } else { updatedAct.nextWorkActId = undefined; }
             }
         }
-
         if (JSON.stringify(updatedAct) !== JSON.stringify(act)) {
             handleSaveWithTemplateResolution(updatedAct);
         }
-        
-        return true; // Success
+        return true; 
     }, [acts, columns, editingCell, editorValue, handleSaveWithTemplateResolution]);
-    
 
     useEffect(() => {
         if (!editingCell) return;
-    
         const handleClickOutside = (event: MouseEvent) => {
             if (datePopoverState || regulationsModalOpen || regulationPopoverState || materialPopoverState) return;
             if (editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
                 const isModalClick = (event.target as HTMLElement).closest('.fixed.inset-0.z-50');
                 if (isModalClick) return;
-
                 handleEditorSave();
                 closeEditor();
             }
         };
-    
         const timerId = setTimeout(() => {
             document.addEventListener('mousedown', handleClickOutside);
         }, 0);
-    
         return () => {
             clearTimeout(timerId);
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, [editingCell, datePopoverState, handleEditorSave, closeEditor, regulationsModalOpen, regulationPopoverState, materialPopoverState]);
 
-
     useEffect(() => {
         if (editingCell) {
             const { rowIndex, colIndex } = editingCell;
             const act = acts[rowIndex];
             const col = columns[colIndex];
-            
             let initialValue;
             if (col.key === 'workDates') {
                 const start = formatDateForDisplay(act.workStartDate);
@@ -640,25 +623,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             } else if (col.key === 'materials') {
                 initialValue = act.materials || '';
             } else if (col.key === 'nextWork' && act.nextWorkActId === AUTO_NEXT_ID) {
-                // When editing an auto-next cell, show the resolved text so user can edit it if they want (breaking the link)
                 const nextAct = acts[rowIndex + 1];
-                if (nextAct) {
-                    initialValue = `Работы по акту №${nextAct.number || 'б/н'} (${nextAct.workName || '...'})`;
-                } else {
-                    initialValue = '';
-                }
+                initialValue = nextAct ? `Работы по акту №${nextAct.number || 'б/н'} (${nextAct.workName || '...'})` : '';
             } else {
                 const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                 initialValue = act[columnKey] || '';
             }
-            
             setEditorValue(String(initialValue));
-            
             setTimeout(() => {
-                if (col.key !== 'regulations' && col.key !== 'materials') { 
-                     if (editorRef.current) editorRef.current.focus();
-                }
-        
+                if (col.key !== 'regulations' && col.key !== 'materials') { if (editorRef.current) editorRef.current.focus(); }
                 if (editorRef.current instanceof HTMLTextAreaElement) {
                     const el = editorRef.current;
                     el.style.height = 'auto';
@@ -682,31 +655,24 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     
     const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         e.stopPropagation();
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            closeEditor();
-        }
+        if (e.key === 'Escape') { e.preventDefault(); closeEditor(); }
         if (e.key === 'Enter' && !e.shiftKey) {
             if (e.currentTarget instanceof HTMLInputElement || (e.currentTarget instanceof HTMLTextAreaElement && (e.ctrlKey || e.metaKey))) {
                 e.preventDefault();
-                if(handleEditorSave()) {
-                    closeEditor();
-                }
+                if(handleEditorSave()) { closeEditor(); }
             }
         }
     };
     
+    // ... [handleRegulationsSelect, handleShowRegulationInfo, findCertByText, handleShowMaterialInfo, selection logic...] ...
     const handleRegulationsSelect = (selectedRegs: Regulation[]) => {
         if (!editingCell) return;
-        
         const newText = selectedRegs.map(reg => reg.designation).join('; ');
-        
         setEditorValue(prev => {
             if (!prev) return newText;
             const sep = prev.trim().endsWith(';') ? ' ' : '; ';
             return prev + sep + newText;
         });
-        
         if (editorRef.current instanceof HTMLTextAreaElement) {
              setTimeout(() => {
                  if (editorRef.current) {
@@ -725,7 +691,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     };
 
-    // Helper for material lookup
     const findCertByText = (text: string) => {
         const match = text.match(/№\s*([^\s,]+)/);
         if (match) {
@@ -767,22 +732,17 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const handleCellMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
         tableContainerRef.current?.focus({ preventScroll: true });
-        
-        setContextMenu(null); // Ensure context menu is closed on left click
-
+        setContextMenu(null); 
         if (e.detail > 1) e.preventDefault();
         setCopiedCells(null);
-        
         setDatePopoverState(null);
         setRegulationPopoverState(null);
         setMaterialPopoverState(null);
         setNextWorkPopoverState(null);
-
         if (e.button === 2) {
              const cellId = getCellId(rowIndex, colIndex);
              if (selectedCells.has(cellId)) return;
         }
-    
         const cellId = getCellId(rowIndex, colIndex);
         if (e.shiftKey && activeCell) {
             const { minRow, maxRow, minCol, maxCol } = normalizeSelection(activeCell, { rowIndex, colIndex });
@@ -795,11 +755,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             setSelectedCells(selection);
         } else if (e.ctrlKey || e.metaKey) {
             const newSelectedCells = new Set(selectedCells);
-            if (newSelectedCells.has(cellId)) {
-                newSelectedCells.delete(cellId);
-            } else {
-                newSelectedCells.add(cellId);
-            }
+            if (newSelectedCells.has(cellId)) { newSelectedCells.delete(cellId); } else { newSelectedCells.add(cellId); }
             setSelectedCells(newSelectedCells);
             setActiveCell({ rowIndex, colIndex });
         } else {
@@ -813,16 +769,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         dragHandlePressedRef.current = true;
         tableContainerRef.current?.focus({ preventScroll: true });
         const isRowSelected = selectedRows.has(rowIndex);
-        if (e.button === 2) {
-             if (isRowSelected) return;
-        }
-        if (e.button === 0 && isRowSelected && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-             return;
-        }
+        if (e.button === 2) { if (isRowSelected) return; }
+        if (e.button === 0 && isRowSelected && !e.ctrlKey && !e.metaKey && !e.shiftKey) { return; }
         const newSelectedCells = new Set<string>();
-        for (let c = 0; c < columns.length; c++) {
-            newSelectedCells.add(getCellId(rowIndex, c));
-        }
+        for (let c = 0; c < columns.length; c++) { newSelectedCells.add(getCellId(rowIndex, c)); }
         if (e.shiftKey && activeCell) {
             const startRow = activeCell.rowIndex;
             const endRow = rowIndex;
@@ -830,9 +780,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             const maxR = Math.max(startRow, endRow);
             const expandedSelection = new Set<string>();
              for (let r = minR; r <= maxR; r++) {
-                for (let c = 0; c < columns.length; c++) {
-                    expandedSelection.add(getCellId(r, c));
-                }
+                for (let c = 0; c < columns.length; c++) { expandedSelection.add(getCellId(r, c)); }
             }
             setSelectedCells(expandedSelection);
         } else if (e.ctrlKey || e.metaKey) {
@@ -865,41 +813,26 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
 
     const handleCellDoubleClick = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
-        if (window.getSelection) {
-            window.getSelection()?.removeAllRanges();
-        }
+        if (window.getSelection) { window.getSelection()?.removeAllRanges(); }
         const col = columns[colIndex];
-        
         if (editingCell) {
-            if (handleEditorSave()) {
-                 closeEditor();
-            } else {
-                 return;
-            }
+            if (handleEditorSave()) { closeEditor(); } else { return; }
         }
-        
         setDatePopoverState(null);
         setRegulationPopoverState(null);
         setMaterialPopoverState(null);
         setNextWorkPopoverState(null);
-        
         setSelectedCells(new Set());
-        
         if (col?.key === 'nextWork') {
             const coords = getRelativeCoords(e.currentTarget);
             setNextWorkPopoverState({ rowIndex, colIndex, position: coords });
             return; 
         }
-    
-        if (col?.key === 'id') {
-            return;
-        }
-        
+        if (col?.key === 'id') { return; }
         setEditingCell({ rowIndex, colIndex });
     };
 
-    // ... [Copy, Paste, Drag logic remains same] ...
-
+    // ... [handleCopy, handlePaste, handleClearCells, handleBulkDownload, handleKeyDown, effects, drag/drop, fill handle... unchanged] ...
     const handleCopy = useCallback(async () => {
         if (selectedCells.size === 0) return;
         try {
@@ -928,29 +861,19 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                             } else if (col.type === 'date') {
                                 rowData.push(formatDateForDisplay(act[col.key as keyof Act] as string));
                             } else if (col.key === 'nextWork') {
-                                if (act.nextWorkActId === AUTO_NEXT_ID) {
-                                    rowData.push(AUTO_NEXT_LABEL);
-                                } else {
-                                    rowData.push(act.nextWork || '');
-                                }
+                                if (act.nextWorkActId === AUTO_NEXT_ID) { rowData.push(AUTO_NEXT_LABEL); } else { rowData.push(act.nextWork || ''); }
                             } else {
                                  const key = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                                 rowData.push(act[key] || '');
                             }
-                        } else {
-                             rowData.push('');
-                        }
-                    } else {
-                        rowData.push('');
-                    }
+                        } else { rowData.push(''); }
+                    } else { rowData.push(''); }
                 }
                 copyData.push(rowData.join('\t'));
             }
             await navigator.clipboard.writeText(copyData.join('\n'));
             setCopiedCells(new Set(selectedCells));
-        } catch (err) {
-            console.error("Failed to copy: ", err);
-        }
+        } catch (err) { console.error("Failed to copy: ", err); }
     }, [selectedCells, acts, columns, groups]);
 
     const handlePaste = useCallback(async () => {
@@ -999,9 +922,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     updatedAct.workEndDate = end;
                 } else if (col.key === 'commissionGroup') {
                     const group = groups.find(g => g.name.toLowerCase() === cellData.toLowerCase().trim());
-                    if(group) {
-                        updatedAct.commissionGroupId = group.id;
-                    }
+                    if(group) { updatedAct.commissionGroupId = group.id; }
                 } else if (col.type === 'date') {
                     const columnKey = col.key as keyof Act;
                     (updatedAct as any)[columnKey] = parseDisplayDate(cellData) || '';
@@ -1011,7 +932,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         updatedAct.nextWork = ''; 
                     } else {
                         updatedAct.nextWork = cellData;
-                        updatedAct.nextWorkActId = undefined; // Explicitly clear binding for manual text
+                        updatedAct.nextWorkActId = undefined;
                     }
                 }
                 else {
@@ -1021,9 +942,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             }
             performBulkUpdate(modifiedActsMap);
             setCopiedCells(null);
-        } catch (err) {
-             console.error("Failed to paste: ", err);
-        }
+        } catch (err) { console.error("Failed to paste: ", err); }
     }, [selectedCells, acts, columns, groups, performBulkUpdate]);
     
     const handleClearCells = useCallback(() => {
@@ -1032,24 +951,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             const [r, c] = cellId.split(':').map(Number);
             const originalAct = acts[r];
             if (!originalAct) return;
-            
             let updatedAct = modifiedActsMap.get(originalAct.id);
-            if (!updatedAct) {
-                updatedAct = { ...originalAct };
-                modifiedActsMap.set(originalAct.id, updatedAct);
-            }
-            
+            if (!updatedAct) { updatedAct = { ...originalAct }; modifiedActsMap.set(originalAct.id, updatedAct); }
             const col = columns[c];
             if (!col || col.key === 'id') return;
-            if (col.key === 'workDates') {
-                updatedAct.workStartDate = '';
-                updatedAct.workEndDate = '';
-                updatedAct.date = ''; 
-            } else if (col.key === 'commissionGroup') {
-                updatedAct.commissionGroupId = undefined;
-            } else if (col.key === 'nextWork') {
-                updatedAct.nextWork = '';
-                updatedAct.nextWorkActId = undefined;
+            if (col.key === 'workDates') { updatedAct.workStartDate = ''; updatedAct.workEndDate = ''; updatedAct.date = ''; 
+            } else if (col.key === 'commissionGroup') { updatedAct.commissionGroupId = undefined;
+            } else if (col.key === 'nextWork') { updatedAct.nextWork = ''; updatedAct.nextWorkActId = undefined;
             } else {
                 const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                 (updatedAct as any)[columnKey] = '';
@@ -1059,33 +967,22 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     }, [selectedCells, acts, columns, performBulkUpdate]);
 
     const handleBulkDownload = () => {
-        if (!template) {
-            alert('Сначала загрузите шаблон.');
-            return;
-        }
-        
+        if (!template) { alert('Сначала загрузите шаблон.'); return; }
         Array.from(selectedRows).forEach(rowIndex => {
             const act = acts[rowIndex];
             if (act) {
-                // If the act has auto-next, resolve it before generation
                 const actToGenerate = { ...act };
                 if (act.nextWorkActId === AUTO_NEXT_ID) {
                     const nextAct = acts[rowIndex + 1];
-                    if (nextAct) {
-                        actToGenerate.nextWork = `Работы по акту №${nextAct.number || 'б/н'} (${nextAct.workName || '...'})`;
-                    } else {
-                        actToGenerate.nextWork = '';
-                    }
+                    if (nextAct) { actToGenerate.nextWork = `Работы по акту №${nextAct.number || 'б/н'} (${nextAct.workName || '...'})`; } else { actToGenerate.nextWork = ''; }
                 }
-                generateDocument(template, registryTemplate, actToGenerate, people, settings, certificates); // Pass certificates
+                generateDocument(template, registryTemplate, actToGenerate, people, settings, certificates); 
             }
         });
     };
     
     const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-        if (editingCell) {
-            return;
-        }
+        if (editingCell) { return; }
         if (e.key === 'Escape') {
             e.preventDefault();
             setSelectedCells(new Set());
@@ -1098,99 +995,53 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             setNextWorkPopoverState(null);
             return;
         }
-
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
         const isCtrlKey = isMac ? e.metaKey : e.ctrlKey;
-
-        if (e.code === 'KeyC' && isCtrlKey) {
-            e.preventDefault();
-            handleCopy();
-            return;
-        }
-
-        if (e.code === 'KeyV' && isCtrlKey) {
-            e.preventDefault();
-            handlePaste();
-            return;
-        }
-
+        if (e.code === 'KeyC' && isCtrlKey) { e.preventDefault(); handleCopy(); return; }
+        if (e.code === 'KeyV' && isCtrlKey) { e.preventDefault(); handlePaste(); return; }
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
             e.preventDefault();
-            
             if (!activeCell) {
-                if (acts.length > 0 && columns.length > 0) {
-                     setActiveCell({ rowIndex: 0, colIndex: 0 });
-                     setSelectedCells(new Set([getCellId(0, 0)]));
-                }
+                if (acts.length > 0 && columns.length > 0) { setActiveCell({ rowIndex: 0, colIndex: 0 }); setSelectedCells(new Set([getCellId(0, 0)])); }
                 return;
             }
-
             let { rowIndex, colIndex } = activeCell;
-
             if (e.key === 'ArrowUp') rowIndex = Math.max(0, rowIndex - 1);
             if (e.key === 'ArrowDown') rowIndex = Math.min(acts.length - 1, rowIndex + 1);
             if (e.key === 'ArrowLeft') colIndex = Math.max(0, colIndex - 1);
             if (e.key === 'ArrowRight') colIndex = Math.min(columns.length - 1, colIndex + 1);
-
             const newCellId = getCellId(rowIndex, colIndex);
-            
             setActiveCell({ rowIndex, colIndex });
             setSelectedCells(new Set([newCellId]));
-            
             const cellEl = document.querySelector(`td[data-row-index="${rowIndex}"][data-col-index="${colIndex}"]`);
             cellEl?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
             return;
         }
-
         if ((e.key === 'Delete' || e.key === 'Backspace') && selectedCells.size > 0) {
             e.preventDefault();
             handleClearCells();
         }
     }, [editingCell, selectedCells, handleClearCells, handleCopy, handlePaste, activeCell, setActiveCell, acts.length, columns.length, setSelectedCells]);
 
-    // [Auto-scroll and Drag-select effects omitted for brevity but presumed kept or updated to use props]
-    // Since I'm providing full content, I'll include them to be safe.
-    
+    // ... [Auto scroll, mouse move, filling effects unchanged] ...
     useEffect(() => {
         const scrollContainer = scrollContainerRef.current;
         if (!isDraggingSelection || !scrollContainer) return;
         let lastTime = 0;
         const autoScroll = (timestamp: number) => {
-            if (!mousePosRef.current) {
-                autoScrollRaf.current = requestAnimationFrame(autoScroll);
-                return;
-            }
+            if (!mousePosRef.current) { autoScrollRaf.current = requestAnimationFrame(autoScroll); return; }
             if (!lastTime) lastTime = timestamp;
-            const deltaTime = timestamp - lastTime;
             lastTime = timestamp;
             const { x, y } = mousePosRef.current;
             const { left, right, top, bottom } = scrollContainer.getBoundingClientRect();
-            const edgeThreshold = 50; 
-            const maxSpeed = 30; 
-            let scrollX = 0;
-            let scrollY = 0;
-            if (x < left + edgeThreshold) {
-                scrollX = -maxSpeed * ((left + edgeThreshold - x) / edgeThreshold);
-            } else if (x > right - edgeThreshold) {
-                scrollX = maxSpeed * ((x - (right - edgeThreshold)) / edgeThreshold);
-            }
-            if (y < top + edgeThreshold) {
-                scrollY = -maxSpeed * ((top + edgeThreshold - y) / edgeThreshold);
-            } else if (y > bottom - edgeThreshold) {
-                scrollY = maxSpeed * ((y - (bottom - edgeThreshold)) / edgeThreshold);
-            }
-            if (scrollX !== 0 || scrollY !== 0) {
-                scrollContainer.scrollLeft += scrollX;
-                scrollContainer.scrollTop += scrollY;
-            }
+            const edgeThreshold = 50; const maxSpeed = 30; let scrollX = 0; let scrollY = 0;
+            if (x < left + edgeThreshold) { scrollX = -maxSpeed * ((left + edgeThreshold - x) / edgeThreshold); } else if (x > right - edgeThreshold) { scrollX = maxSpeed * ((x - (right - edgeThreshold)) / edgeThreshold); }
+            if (y < top + edgeThreshold) { scrollY = -maxSpeed * ((top + edgeThreshold - y) / edgeThreshold); } else if (y > bottom - edgeThreshold) { scrollY = maxSpeed * ((y - (bottom - edgeThreshold)) / edgeThreshold); }
+            if (scrollX !== 0 || scrollY !== 0) { scrollContainer.scrollLeft += scrollX; scrollContainer.scrollTop += scrollY; }
             autoScrollRaf.current = requestAnimationFrame(autoScroll);
         };
         autoScrollRaf.current = requestAnimationFrame(autoScroll);
-        return () => {
-            if (autoScrollRaf.current) {
-                cancelAnimationFrame(autoScrollRaf.current);
-            }
-        };
+        return () => { if (autoScrollRaf.current) { cancelAnimationFrame(autoScrollRaf.current); } };
     }, [isDraggingSelection]);
 
     useEffect(() => {
@@ -1201,42 +1052,20 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             if (coords) {
                 const { minRow, maxRow, minCol, maxCol } = normalizeSelection(activeCell, coords);
                 const newSelection = new Set<string>();
-                for (let r = minRow; r <= maxRow; r++) {
-                    for (let c = minCol; c <= maxCol; c++) {
-                        newSelection.add(getCellId(r,c));
-                    }
-                }
+                for (let r = minRow; r <= maxRow; r++) { for (let c = minCol; c <= maxCol; c++) { newSelection.add(getCellId(r,c)); } }
                 setSelectedCells(newSelection);
             }
         };
-        const handleMouseUp = () => {
-            setIsDraggingSelection(false);
-            mousePosRef.current = null;
-        };
-        if (isDraggingSelection) {
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp, { once: true });
-        }
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        };
+        const handleMouseUp = () => { setIsDraggingSelection(false); mousePosRef.current = null; };
+        if (isDraggingSelection) { window.addEventListener('mousemove', handleMouseMove); window.addEventListener('mouseup', handleMouseUp, { once: true }); }
+        return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
     }, [isDraggingSelection, activeCell, setSelectedCells]);
 
-    // Filling effect
      useEffect(() => {
         const getSelectionBounds = (cells: Set<string>): { minRow: number; maxRow: number; minCol: number; maxCol: number } | null => {
-            const coordsList = Array.from(cells).map(id => {
-                const [rowIndex, colIndex] = id.split(':').map(Number);
-                return { rowIndex, colIndex };
-            });
+            const coordsList = Array.from(cells).map(id => { const [rowIndex, colIndex] = id.split(':').map(Number); return { rowIndex, colIndex }; });
             if (coordsList.length === 0) return null;
-            return {
-                minRow: Math.min(...coordsList.map(c => c.rowIndex)),
-                maxRow: Math.max(...coordsList.map(c => c.rowIndex)),
-                minCol: Math.min(...coordsList.map(c => c.colIndex)),
-                maxCol: Math.max(...coordsList.map(c => c.colIndex)),
-            };
+            return { minRow: Math.min(...coordsList.map(c => c.rowIndex)), maxRow: Math.max(...coordsList.map(c => c.rowIndex)), minCol: Math.min(...coordsList.map(c => c.colIndex)), maxCol: Math.max(...coordsList.map(c => c.colIndex)), };
         };
         const handleMouseMove = (e: MouseEvent) => {
             if (!isFilling || selectedCells.size === 0) return;
@@ -1246,20 +1075,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 if (!selectionBounds) return;
                 const { minRow, maxRow, minCol, maxCol } = selectionBounds;
                 let fillArea: { start: Coords, end: Coords } | null = null;
-                if (coords.rowIndex > maxRow) {
-                     fillArea = { start: {rowIndex: maxRow + 1, colIndex: minCol}, end: {rowIndex: coords.rowIndex, colIndex: maxCol} };
-                } else if (coords.rowIndex < minRow) {
-                     fillArea = { start: {rowIndex: coords.rowIndex, colIndex: minCol}, end: {rowIndex: minRow - 1, colIndex: maxCol} };
-                }
+                if (coords.rowIndex > maxRow) { fillArea = { start: {rowIndex: maxRow + 1, colIndex: minCol}, end: {rowIndex: coords.rowIndex, colIndex: maxCol} }; } else if (coords.rowIndex < minRow) { fillArea = { start: {rowIndex: coords.rowIndex, colIndex: minCol}, end: {rowIndex: minRow - 1, colIndex: maxCol} }; }
                 setFillTargetArea(fillArea);
             }
         };
         const handleMouseUp = () => {
-            if (!isFilling || selectedCells.size === 0 || !fillTargetArea) {
-                setIsFilling(false);
-                setFillTargetArea(null);
-                return;
-            }
+            if (!isFilling || selectedCells.size === 0 || !fillTargetArea) { setIsFilling(false); setFillTargetArea(null); return; }
             const selectionBounds = getSelectionBounds(selectedCells);
             if (!selectionBounds) return;
             const { minRow: selMinRow, maxRow: selMaxRow } = selectionBounds;
@@ -1267,62 +1088,27 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             const selectedCols = Array.from(new Set(Array.from(selectedCells, id => parseInt(id.split(':')[1], 10)))).sort((a, b) => a - b);
             const { minRow: fillMinRow, maxRow: fillMaxRow } = normalizeSelection(fillTargetArea.start, fillTargetArea.end);
             const isFillingUpwards = fillMaxRow < selMinRow;
-            
             const actsToUpdate = new Map<string, Act>();
-            
             for (let r = fillMinRow; r <= fillMaxRow; r++) {
                 const targetAct = acts[r];
                 if (!targetAct) continue;
-                
                 let updatedAct = actsToUpdate.get(targetAct.id) || { ...targetAct };
-                
-                const patternRowIndex = isFillingUpwards
-                    ? selMaxRow - ((selMinRow - 1 - r) % patternHeight)
-                    : selMinRow + ((r - (selMaxRow + 1)) % patternHeight);
+                const patternRowIndex = isFillingUpwards ? selMaxRow - ((selMinRow - 1 - r) % patternHeight) : selMinRow + ((r - (selMaxRow + 1)) % patternHeight);
                 const sourceAct = acts[patternRowIndex];
                 if (!sourceAct) continue;
-                
                 for (const c of selectedCols) {
                     const sourceCellId = getCellId(patternRowIndex, c);
                     if (!selectedCells.has(sourceCellId)) continue;
                     const colKey = columns[c]?.key;
                     if (!colKey) continue;
-                    
-                    if (colKey === 'workDates') {
-                        updatedAct.workStartDate = sourceAct.workStartDate;
-                        updatedAct.workEndDate = sourceAct.workEndDate;
-                        updatedAct.date = sourceAct.workEndDate; 
+                    if (colKey === 'workDates') { updatedAct.workStartDate = sourceAct.workStartDate; updatedAct.workEndDate = sourceAct.workEndDate; updatedAct.date = sourceAct.workEndDate; 
                     } else if (colKey === 'commissionGroup') {
-                         // Note: We're not using handleGroupChange here to avoid immediate save recursion.
-                         // Instead we copy logic manually or rely on template resolution later.
                          const group = groups.find(g => g.id === sourceAct.commissionGroupId);
                          if (group) {
-                            updatedAct.commissionGroupId = group.id;
-                            updatedAct.representatives = { ...group.representatives };
-                            updatedAct.builderOrgId = group.builderOrgId;
-                            updatedAct.contractorOrgId = group.contractorOrgId;
-                            updatedAct.designerOrgId = group.designerOrgId;
-                            updatedAct.workPerformerOrgId = group.workPerformerOrgId;
-                            
-                            // Re-apply org details strings logic if needed, but applyTemplatesToAct handles fields.
-                            // However, builderDetails string generation logic is inside handleGroupChange. 
-                            // We should really reuse that logic but purely functional.
-                            // For simplicity in filling, let's assume performBulkUpdate handles templates, 
-                            // but org details strings (builderDetails etc) are static strings on the object.
-                            // We should copy them from sourceAct or re-generate.
-                            // Copying from sourceAct is safer if they belong to the same group.
-                            updatedAct.builderDetails = sourceAct.builderDetails;
-                            updatedAct.contractorDetails = sourceAct.contractorDetails;
-                            updatedAct.designerDetails = sourceAct.designerDetails;
-                            updatedAct.workPerformer = sourceAct.workPerformer;
-                         } else {
-                            updatedAct.commissionGroupId = undefined;
-                         }
-                    } else {
-                        const typedColKey = colKey as keyof Act;
-                        const sourceValue = sourceAct[typedColKey];
-                        (updatedAct as any)[typedColKey] = sourceValue;
-                    }
+                            updatedAct.commissionGroupId = group.id; updatedAct.representatives = { ...group.representatives }; updatedAct.builderOrgId = group.builderOrgId; updatedAct.contractorOrgId = group.contractorOrgId; updatedAct.designerOrgId = group.designerOrgId; updatedAct.workPerformerOrgId = group.workPerformerOrgId;
+                            updatedAct.builderDetails = sourceAct.builderDetails; updatedAct.contractorDetails = sourceAct.contractorDetails; updatedAct.designerDetails = sourceAct.designerDetails; updatedAct.workPerformer = sourceAct.workPerformer;
+                         } else { updatedAct.commissionGroupId = undefined; }
+                    } else { const typedColKey = colKey as keyof Act; const sourceValue = sourceAct[typedColKey]; (updatedAct as any)[typedColKey] = sourceValue; }
                 }
                 actsToUpdate.set(updatedAct.id, updatedAct);
             }
@@ -1330,18 +1116,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             setIsFilling(false);
             setFillTargetArea(null);
         };
-        if (isFilling) {
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp, { once: true });
-        }
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        };
+        if (isFilling) { window.addEventListener('mousemove', handleMouseMove); window.addEventListener('mouseup', handleMouseUp, { once: true }); }
+        return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
     }, [isFilling, selectedCells, fillTargetArea, acts, columns, groups, performBulkUpdate]);
 
-
-    // [Drag handlers...]
+    // ... [Drag handlers, fill handle update, etc. unchanged] ...
     const handleRowDragStart = (e: React.DragEvent<HTMLTableRowElement>, rowIndex: number) => {
         if (editingCell) { e.preventDefault(); return; }
         if (!dragHandlePressedRef.current) { e.preventDefault(); return; }
@@ -1498,28 +1277,25 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const handleAddRows = (count: number) => {
         if (count <= 0) return;
-        
         const newActsToAdd = [];
-        for (let i = 0; i < count; i++) {
-            newActsToAdd.push(createNewAct());
-        }
-        
-        // Use applyTemplatesToAct on each to resolve defaults if needed (though createNewAct usually handles raw defaults)
+        for (let i = 0; i < count; i++) { newActsToAdd.push(createNewAct()); }
         const finalizedNewActs = newActsToAdd.map(act => applyTemplatesToAct(act));
-        
-        // Append to current acts and save via bulk update
         const updatedActs = [...acts, ...finalizedNewActs];
         onReorderActs(updatedActs);
-        
-        // Reset counter
         setNumRowsToAdd(1);
-        
-        // Scroll to bottom after state update
-        setTimeout(() => {
-            if (scrollContainerRef.current) {
-                scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-            }
-        }, 100);
+        setTimeout(() => { if (scrollContainerRef.current) { scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight; } }, 100);
+    };
+
+    // Tooltip Handlers
+    const handleHeaderMouseEnter = (e: React.MouseEvent, key: string) => {
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        // Since headers can be scrolled, we need fixed coords relative to viewport
+        setHoveredHeaderPos({ top: rect.bottom, left: rect.left });
+        setHoveredHeaderKey(key);
+    };
+
+    const handleHeaderMouseLeave = () => {
+        setHoveredHeaderKey(null);
     };
 
     return (
@@ -1542,6 +1318,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         pointerEvents: 'none',
                         boxShadow: '0 0 4px rgba(37, 99, 235, 0.5)'
                     }} 
+                />
+            )}
+
+            {/* Rich Header Tooltip */}
+            {hoveredHeaderKey && hoveredHeaderPos && (
+                <RichHeaderTooltip 
+                    column={ALL_COLUMNS.find(c => c.key === hoveredHeaderKey)!} 
+                    position={hoveredHeaderPos} 
                 />
             )}
 
@@ -1572,10 +1356,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                 >
                                     <div className="flex items-center justify-between">
                                         <span>{col.label}</span>
-                                        {col.helpText && (
+                                        {(col.description) && (
                                             <span 
-                                                title={col.helpText} 
                                                 className="text-slate-400 hover:text-blue-600 cursor-help ml-2 opacity-50 group-hover/th:opacity-100 transition-opacity"
+                                                onMouseEnter={(e) => handleHeaderMouseEnter(e, col.key)}
+                                                onMouseLeave={handleHeaderMouseLeave}
                                             >
                                                 <QuestionMarkCircleIcon className="w-4 h-4" />
                                             </span>
@@ -1625,16 +1410,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         const isSelected = selectedCells.has(cellId);
                                         const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colIndex === colIndex;
                                         const isCopied = copiedCells?.has(cellId);
-                                        
-                                        // Dynamic display logic for 'nextWork' column
                                         let displayContent: React.ReactNode = String(act[col.key as keyof Act] || '');
                                         
                                         if (col.key === 'workDates') {
                                             displayContent = (
                                                 <span className={!act.workStartDate || !act.workEndDate ? 'text-slate-400' : ''}>
-                                                    {act.workStartDate && act.workEndDate 
-                                                        ? `${formatDateForDisplay(act.workStartDate)} - ${formatDateForDisplay(act.workEndDate)}`
-                                                        : 'Укажите даты'}
+                                                    {act.workStartDate && act.workEndDate ? `${formatDateForDisplay(act.workStartDate)} - ${formatDateForDisplay(act.workEndDate)}` : 'Укажите даты'}
                                                 </span>
                                             );
                                         } else if (col.key === 'commissionGroup') {
@@ -1654,15 +1435,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                         }
                                                         return (
                                                             <span 
-                                                                                key={idx} 
-                                                                                className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs border ${chipClass} cursor-pointer hover:underline`}
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    handleShowRegulationInfo(item, e.currentTarget);
-                                                                                }}
-                                                                            >
-                                                                                {item}
-                                                                            </span>
+                                                                key={idx} 
+                                                                className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs border ${chipClass} cursor-pointer hover:underline`}
+                                                                onClick={(e) => { e.stopPropagation(); handleShowRegulationInfo(item, e.currentTarget); }}
+                                                            >
+                                                                {item}
+                                                            </span>
                                                         );
                                                     })}
                                                 </div>
@@ -1672,28 +1450,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 <div className="flex flex-wrap gap-1">
                                                     {(act.materials || '').split(';').map(s => s.trim()).filter(Boolean).map((item, idx) => {
                                                         const cert = findCertByText(item);
-                                                        // Green if found in DB, Red if manual text (not found)
-                                                        const chipClass = cert 
-                                                            ? "bg-green-100 text-green-800 border-green-200" 
-                                                            : "bg-red-100 text-red-800 border-red-200";
-                                                        
+                                                        const chipClass = cert ? "bg-green-100 text-green-800 border-green-200" : "bg-red-100 text-red-800 border-red-200";
                                                         return (
                                                             <span 
                                                                 key={idx} 
                                                                 className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs border ${chipClass} cursor-pointer hover:underline max-w-full`}
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    if (cert) {
-                                                                        handleShowMaterialInfo(item, e.currentTarget);
-                                                                    } else {
-                                                                        setLinkMaterialModalState({
-                                                                            isOpen: true,
-                                                                            actId: act.id,
-                                                                            itemIndex: idx,
-                                                                            initialSearch: item,
-                                                                            editingMaterialTitle: item
-                                                                        });
-                                                                    }
+                                                                    if (cert) { handleShowMaterialInfo(item, e.currentTarget); } else { setLinkMaterialModalState({ isOpen: true, actId: act.id, itemIndex: idx, initialSearch: item, editingMaterialTitle: item }); }
                                                                 }}
                                                                 title={cert ? item : "Нажмите, чтобы выбрать сертификат из базы"}
                                                             >
@@ -1709,14 +1473,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 displayContent = (
                                                     <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1.5 inline-flex max-w-full">
                                                         <ArrowDownCircleIcon className="w-3 h-3 flex-shrink-0" />
-                                                        <span className="truncate">
-                                                            Акт №{nextAct.number || 'б/н'} ({nextAct.workName || '...'})
-                                                        </span>
+                                                        <span className="truncate">Акт №{nextAct.number || 'б/н'} ({nextAct.workName || '...'})</span>
                                                     </span>
                                                 );
-                                            } else {
-                                                displayContent = <span className="text-slate-300 italic text-xs">Конец списка</span>;
-                                            }
+                                            } else { displayContent = <span className="text-slate-300 italic text-xs">Конец списка</span>; }
                                         }
 
                                         return (
@@ -1743,43 +1503,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 {isEditing ? (
                                                     <div ref={editorContainerRef} className="h-full w-full min-h-[1.5em] bg-transparent">
                                                        {col.key === 'commissionGroup' ? (
-                                                            <CustomSelect
-                                                                options={groupOptions}
-                                                                value={editorValue}
-                                                                onChange={(val) => {
-                                                                    handleGroupChange(act, val);
-                                                                    closeEditor();
-                                                                }}
-                                                                startOpen={true}
-                                                                onCreateNew={handleCreateNewGroup}
-                                                                allowClear
-                                                                className="w-full"
-                                                            />
+                                                            <CustomSelect options={groupOptions} value={editorValue} onChange={(val) => { handleGroupChange(act, val); closeEditor(); }} startOpen={true} onCreateNew={handleCreateNewGroup} allowClear className="w-full" />
                                                         ) : col.key === 'regulations' ? (
-                                                            <RegulationsInput 
-                                                                value={editorValue}
-                                                                onChange={setEditorValue}
-                                                                regulations={regulations}
-                                                                onOpenDictionary={() => setRegulationsModalOpen(true)}
-                                                                onInfoClick={(des, target) => handleShowRegulationInfo(des, target)}
-                                                            />
+                                                            <RegulationsInput value={editorValue} onChange={setEditorValue} regulations={regulations} onOpenDictionary={() => setRegulationsModalOpen(true)} onInfoClick={(des, target) => handleShowRegulationInfo(des, target)} />
                                                         ) : col.key === 'materials' ? (
-                                                            <MaterialsInput
-                                                                value={editorValue}
-                                                                onChange={setEditorValue}
-                                                                certificates={certificates}
-                                                                onNavigateToCertificate={onNavigateToCertificate}
-                                                            />
+                                                            <MaterialsInput value={editorValue} onChange={setEditorValue} certificates={certificates} onNavigateToCertificate={onNavigateToCertificate} />
                                                         ) : (
-                                                            <textarea
-                                                                ref={editorRef as React.RefObject<HTMLTextAreaElement>}
-                                                                value={editorValue}
-                                                                onChange={handleEditorChange}
-                                                                onKeyDown={handleEditorKeyDown}
-                                                                className="w-full h-full resize-none bg-transparent outline-none overflow-hidden"
-                                                                rows={1}
-                                                                placeholder={col.key === 'workDates' ? 'ДД.ММ.ГГГГ - ДД.ММ.ГГГГ' : ''}
-                                                            />
+                                                            <textarea ref={editorRef as React.RefObject<HTMLTextAreaElement>} value={editorValue} onChange={handleEditorChange} onKeyDown={handleEditorKeyDown} className="w-full h-full resize-none bg-transparent outline-none overflow-hidden" rows={1} placeholder={col.key === 'workDates' ? 'ДД.ММ.ГГГГ - ДД.ММ.ГГГГ' : ''} />
                                                         )}
                                                         {dateError && col.key === 'workDates' && (
                                                             <div className="absolute top-full left-0 z-50 bg-red-100 text-red-700 text-xs px-2 py-1 rounded shadow-md mt-1 border border-red-200">
@@ -1789,26 +1519,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                     </div>
                                                 ) : (
                                                     <div className="w-full h-full min-h-[1.5em] whitespace-pre-wrap flex items-center justify-between group/cell">
-                                                        <span className="flex-grow">
-                                                            {displayContent}
-                                                        </span>
-                                                        
+                                                        <span className="flex-grow">{displayContent}</span>
                                                         {col.key === 'workDates' && (
-                                                            <button
-                                                                className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-blue-600 ml-2 transition-opacity"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleDateClick(act, e.currentTarget);
-                                                                }}
-                                                            >
+                                                            <button className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-blue-600 ml-2 transition-opacity" onClick={(e) => { e.stopPropagation(); handleDateClick(act, e.currentTarget); }}>
                                                                 <CalendarIcon className="w-4 h-4" />
                                                             </button>
                                                         )}
-                                                        
                                                          {col.key === 'nextWork' && act.nextWorkActId && act.nextWorkActId !== AUTO_NEXT_ID && (
-                                                            <div className="ml-2 text-blue-600" title="Связано с другим актом">
-                                                                <LinkIcon className="w-4 h-4" />
-                                                            </div>
+                                                            <div className="ml-2 text-blue-600" title="Связано с другим актом"><LinkIcon className="w-4 h-4" /></div>
                                                          )}
                                                     </div>
                                                 )}
@@ -1818,266 +1536,45 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                 </tr>
                             );
                         })}
-                        {/* New Act Row Indicator */}
-                        <tr 
-                            className="h-10 group cursor-pointer"
-                            onClick={() => handleAddRows(1)}
-                        >
-                            <td 
-                                colSpan={columns.length + 1} 
-                                className="p-0 border border-t-0 border-slate-300 border-dashed bg-slate-50 hover:bg-blue-50 transition-colors"
-                            >
+                        <tr className="h-10 group cursor-pointer" onClick={() => handleAddRows(1)}>
+                            <td colSpan={columns.length + 1} className="p-0 border border-t-0 border-slate-300 border-dashed bg-slate-50 hover:bg-blue-50 transition-colors">
                                 <div className="flex items-center justify-between px-4 py-2 text-slate-500 group-hover:text-blue-600 select-none">
                                     <div className="flex items-center gap-2 font-medium">
                                         <PlusIcon className="w-5 h-5"/>
                                         <span>Добавить новый акт</span>
                                     </div>
-                                    <div 
-                                        className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity"
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
+                                    <div className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                                         <span className="text-xs">Добавить сразу:</span>
-                                        <input 
-                                            type="number" 
-                                            min="1" 
-                                            max="50" 
-                                            value={numRowsToAdd}
-                                            onChange={(e) => setNumRowsToAdd(Math.max(1, parseInt(e.target.value) || 1))}
-                                            className="w-12 h-7 px-1 text-center border border-slate-300 rounded text-sm focus:outline-none focus:border-blue-500"
-                                        />
-                                        <button 
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleAddRows(numRowsToAdd);
-                                            }}
-                                            className="bg-white border border-slate-300 px-3 py-1 rounded text-xs hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors"
-                                        >
-                                            Добавить
-                                        </button>
+                                        <input type="number" min="1" max="50" value={numRowsToAdd} onChange={(e) => setNumRowsToAdd(Math.max(1, parseInt(e.target.value) || 1))} className="w-12 h-7 px-1 text-center border border-slate-300 rounded text-sm focus:outline-none focus:border-blue-500" />
+                                        <button onClick={(e) => { e.stopPropagation(); handleAddRows(numRowsToAdd); }} className="bg-white border border-slate-300 px-3 py-1 rounded text-xs hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors">Добавить</button>
                                     </div>
                                 </div>
                             </td>
                         </tr>
                     </tbody>
                 </table>
-                
                 {fillHandleCoords && !editingCell && (
-                    <div
-                        className="absolute w-2.5 h-2.5 bg-blue-600 border border-white cursor-crosshair z-20"
-                        style={{
-                            top: fillHandleCoords.top,
-                            left: fillHandleCoords.left,
-                        }}
-                        onMouseDown={(e) => {
-                            e.preventDefault();
-                            setIsFilling(true);
-                        }}
-                    />
+                    <div className="absolute w-2.5 h-2.5 bg-blue-600 border border-white cursor-crosshair z-20" style={{ top: fillHandleCoords.top, left: fillHandleCoords.left }} onMouseDown={(e) => { e.preventDefault(); setIsFilling(true); }} />
                 )}
             </div>
 
-             {/* Floating Action Bar for Selected Rows */}
              {selectedRows.size > 0 && (
                 <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-white shadow-xl border border-slate-200 rounded-full px-6 py-2 flex items-center gap-4 z-50 animate-fade-in-up">
-                    <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">
-                        Выбрано: {selectedRows.size}
-                    </span>
+                    <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">Выбрано: {selectedRows.size}</span>
                     <div className="h-4 w-px bg-slate-300"></div>
-                    <button
-                        onClick={handleBulkDownload}
-                        className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
-                        title="Скачать выделенные акты"
-                    >
-                        <DownloadIcon className="w-4 h-4" /> Скачать
-                    </button>
-                    <button
-                        onClick={() => {
-                             const idsToDelete = Array.from(selectedRows).map(idx => acts[idx].id);
-                             onRequestDelete(idsToDelete);
-                        }}
-                        className="flex items-center gap-2 text-sm text-red-600 hover:text-red-800 font-medium transition-colors"
-                        title="Удалить выделенные акты"
-                    >
-                        <DeleteIcon className="w-4 h-4" /> Удалить
-                    </button>
+                    <button onClick={handleBulkDownload} className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors" title="Скачать выделенные акты"><DownloadIcon className="w-4 h-4" /> Скачать</button>
+                    <button onClick={() => { const idsToDelete = Array.from(selectedRows).map(idx => acts[idx].id); onRequestDelete(idsToDelete); }} className="flex items-center gap-2 text-sm text-red-600 hover:text-red-800 font-medium transition-colors" title="Удалить выделенные акты"><DeleteIcon className="w-4 h-4" /> Удалить</button>
                 </div>
             )}
 
-            {datePopoverState && (
-                <DateEditorPopover
-                    act={datePopoverState.act}
-                    onActChange={(updatedAct) => {
-                        handleSaveWithTemplateResolution(updatedAct);
-                        setDatePopoverState(prev => prev ? { ...prev, act: updatedAct } : null);
-                    }}
-                    onClose={() => setDatePopoverState(null)}
-                    position={datePopoverState.position}
-                />
-            )}
-            
-            {regulationPopoverState && (
-                <RegulationPopover
-                    regulation={regulationPopoverState.regulation}
-                    position={regulationPopoverState.position}
-                    onClose={() => setRegulationPopoverState(null)}
-                    onOpenDetails={() => {
-                        setFullRegulationDetails(regulationPopoverState.regulation);
-                        setRegulationPopoverState(null);
-                    }}
-                />
-            )}
-            
-            {materialPopoverState && (
-                <MaterialPopover 
-                    certificate={materialPopoverState.certificate}
-                    materialName={materialPopoverState.materialName}
-                    position={materialPopoverState.position}
-                    onClose={() => setMaterialPopoverState(null)}
-                    onNavigate={(certId) => {
-                        onNavigateToCertificate?.(certId);
-                        setMaterialPopoverState(null);
-                    }}
-                />
-            )}
-            
-            {linkMaterialModalState && (
-                <MaterialsModal
-                    isOpen={linkMaterialModalState.isOpen}
-                    onClose={() => setLinkMaterialModalState(null)}
-                    certificates={certificates}
-                    initialSearch={linkMaterialModalState.initialSearch}
-                    editingMaterialTitle={linkMaterialModalState.editingMaterialTitle}
-                    onSelect={(text) => {
-                        const act = acts.find(a => a.id === linkMaterialModalState.actId);
-                        if (act) {
-                            const items = act.materials.split(';').map(s => s.trim());
-                            // Replace item at the stored index if it exists, otherwise append?
-                            // Since we clicked a specific chip, we should replace that index.
-                            // But data might have shifted if concurrent edits happened (unlikely here).
-                            if (items[linkMaterialModalState.itemIndex] !== undefined) {
-                                items[linkMaterialModalState.itemIndex] = text;
-                                const updatedAct = { ...act, materials: items.join('; ') };
-                                handleSaveWithTemplateResolution(updatedAct);
-                            }
-                        }
-                        setLinkMaterialModalState(null);
-                    }}
-                />
-            )}
-            
-            {nextWorkPopoverState && (
-                <NextWorkPopover
-                    acts={acts}
-                    currentActId={acts[nextWorkPopoverState.rowIndex].id}
-                    position={nextWorkPopoverState.position}
-                    onClose={() => setNextWorkPopoverState(null)}
-                    onSelect={(selectedActOrId) => {
-                         const sourceAct = acts[nextWorkPopoverState.rowIndex];
-                         if (sourceAct) {
-                            const updatedAct = { ...sourceAct };
-                            
-                            if (selectedActOrId === AUTO_NEXT_ID) {
-                                updatedAct.nextWorkActId = AUTO_NEXT_ID;
-                                updatedAct.nextWork = ''; // Will be dynamic
-                            } else if (selectedActOrId && typeof selectedActOrId === 'object') {
-                                const selectedAct = selectedActOrId as Act;
-                                updatedAct.nextWork = `Работы по акту №${selectedAct.number || 'б/н'} (${selectedAct.workName || '...'})`;
-                                updatedAct.nextWorkActId = selectedAct.id;
-                            } else if (typeof selectedActOrId === 'string') {
-                                // Manual text entry
-                                updatedAct.nextWork = selectedActOrId;
-                                updatedAct.nextWorkActId = undefined; // Clear binding
-                            } else {
-                                updatedAct.nextWork = '';
-                                updatedAct.nextWorkActId = undefined;
-                            }
-                            handleSaveWithTemplateResolution(updatedAct);
-                         }
-                         setNextWorkPopoverState(null);
-                    }}
-                />
-            )}
-
-            {contextMenu && (
-                <ContextMenu
-                    x={contextMenu.x}
-                    y={contextMenu.y}
-                    onClose={() => setContextMenu(null)}
-                >
-                    <MenuItem 
-                        label="Копировать" 
-                        shortcut="Ctrl+C" 
-                        icon={<CopyIcon className="w-4 h-4" />}
-                        onClick={() => { handleCopy(); setContextMenu(null); }} 
-                        disabled={selectedCells.size === 0}
-                    />
-                    <MenuItem 
-                        label="Вставить" 
-                        shortcut="Ctrl+V" 
-                        icon={<PasteIcon className="w-4 h-4" />}
-                        onClick={() => { handlePaste(); setContextMenu(null); }} 
-                    />
-                    <MenuSeparator />
-                     <MenuItem 
-                        label="Очистить ячейки" 
-                        shortcut="Del" 
-                        onClick={() => { handleClearCells(); setContextMenu(null); }}
-                         disabled={selectedCells.size === 0}
-                    />
-                    <MenuSeparator />
-                     <MenuItem 
-                        label="Вставить строку выше" 
-                        icon={<RowAboveIcon className="w-4 h-4" />}
-                        onClick={() => { 
-                             const newAct = createNewAct();
-                             onSave(newAct, contextMenu.rowIndex);
-                             setContextMenu(null);
-                        }} 
-                    />
-                     <MenuItem 
-                        label="Вставить строку ниже" 
-                        icon={<RowBelowIcon className="w-4 h-4" />}
-                        onClick={() => { 
-                             const newAct = createNewAct();
-                             onSave(newAct, contextMenu.rowIndex + 1);
-                             setContextMenu(null);
-                        }} 
-                    />
-                    <MenuSeparator />
-                    <MenuItem 
-                        label="Удалить акт(ы)" 
-                        icon={<DeleteIcon className="w-4 h-4 text-red-600" />}
-                        className="text-red-600 hover:bg-red-50"
-                        onClick={() => {
-                            const rowIndices = Array.from(affectedRowsFromSelection);
-                            const indicesToDelete = rowIndices.includes(contextMenu.rowIndex) ? rowIndices : [contextMenu.rowIndex];
-                            const idsToDelete = indicesToDelete.map(idx => acts[idx].id);
-                            onRequestDelete(idsToDelete);
-                            setContextMenu(null);
-                        }}
-                    />
-                </ContextMenu>
-            )}
-
-            {regulationsModalOpen && (
-                <RegulationsModal
-                    isOpen={regulationsModalOpen}
-                    onClose={() => setRegulationsModalOpen(false)}
-                    regulations={regulations}
-                    onSelect={handleRegulationsSelect}
-                />
-            )}
-            
-            {fullRegulationDetails && (
-                <Modal 
-                    isOpen={!!fullRegulationDetails} 
-                    onClose={() => setFullRegulationDetails(null)} 
-                    title=""
-                    hideHeader={true} // Hide redundant header
-                >
-                    <RegulationDetails regulation={fullRegulationDetails} onClose={() => setFullRegulationDetails(null)} />
-                </Modal>
-            )}
+            {datePopoverState && <DateEditorPopover act={datePopoverState.act} onActChange={(updatedAct) => { handleSaveWithTemplateResolution(updatedAct); setDatePopoverState(prev => prev ? { ...prev, act: updatedAct } : null); }} onClose={() => setDatePopoverState(null)} position={datePopoverState.position} />}
+            {regulationPopoverState && <RegulationPopover regulation={regulationPopoverState.regulation} position={regulationPopoverState.position} onClose={() => setRegulationPopoverState(null)} onOpenDetails={() => { setFullRegulationDetails(regulationPopoverState.regulation); setRegulationPopoverState(null); }} />}
+            {materialPopoverState && <MaterialPopover certificate={materialPopoverState.certificate} materialName={materialPopoverState.materialName} position={materialPopoverState.position} onClose={() => setMaterialPopoverState(null)} onNavigate={(certId) => { onNavigateToCertificate?.(certId); setMaterialPopoverState(null); }} />}
+            {linkMaterialModalState && <MaterialsModal isOpen={linkMaterialModalState.isOpen} onClose={() => setLinkMaterialModalState(null)} certificates={certificates} initialSearch={linkMaterialModalState.initialSearch} editingMaterialTitle={linkMaterialModalState.editingMaterialTitle} onSelect={(text) => { const act = acts.find(a => a.id === linkMaterialModalState.actId); if (act) { const items = act.materials.split(';').map(s => s.trim()); if (items[linkMaterialModalState.itemIndex] !== undefined) { items[linkMaterialModalState.itemIndex] = text; const updatedAct = { ...act, materials: items.join('; ') }; handleSaveWithTemplateResolution(updatedAct); } } setLinkMaterialModalState(null); }} />}
+            {nextWorkPopoverState && <NextWorkPopover acts={acts} currentActId={acts[nextWorkPopoverState.rowIndex].id} position={nextWorkPopoverState.position} onClose={() => setNextWorkPopoverState(null)} onSelect={(selectedActOrId) => { const sourceAct = acts[nextWorkPopoverState.rowIndex]; if (sourceAct) { const updatedAct = { ...sourceAct }; if (selectedActOrId === AUTO_NEXT_ID) { updatedAct.nextWorkActId = AUTO_NEXT_ID; updatedAct.nextWork = ''; } else if (selectedActOrId && typeof selectedActOrId === 'object') { const selectedAct = selectedActOrId as Act; updatedAct.nextWork = `Работы по акту №${selectedAct.number || 'б/н'} (${selectedAct.workName || '...'})`; updatedAct.nextWorkActId = selectedAct.id; } else if (typeof selectedActOrId === 'string') { updatedAct.nextWork = selectedActOrId; updatedAct.nextWorkActId = undefined; } else { updatedAct.nextWork = ''; updatedAct.nextWorkActId = undefined; } handleSaveWithTemplateResolution(updatedAct); } setNextWorkPopoverState(null); }} />}
+            {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}> <MenuItem label="Копировать" shortcut="Ctrl+C" icon={<CopyIcon className="w-4 h-4" />} onClick={() => { handleCopy(); setContextMenu(null); }} disabled={selectedCells.size === 0} /> <MenuItem label="Вставить" shortcut="Ctrl+V" icon={<PasteIcon className="w-4 h-4" />} onClick={() => { handlePaste(); setContextMenu(null); }} /> <MenuSeparator /> <MenuItem label="Очистить ячейки" shortcut="Del" onClick={() => { handleClearCells(); setContextMenu(null); }} disabled={selectedCells.size === 0} /> <MenuSeparator /> <MenuItem label="Вставить строку выше" icon={<RowAboveIcon className="w-4 h-4" />} onClick={() => { const newAct = createNewAct(); onSave(newAct, contextMenu.rowIndex); setContextMenu(null); }} /> <MenuItem label="Вставить строку ниже" icon={<RowBelowIcon className="w-4 h-4" />} onClick={() => { const newAct = createNewAct(); onSave(newAct, contextMenu.rowIndex + 1); setContextMenu(null); }} /> <MenuSeparator /> <MenuItem label="Удалить акт(ы)" icon={<DeleteIcon className="w-4 h-4 text-red-600" />} className="text-red-600 hover:bg-red-50" onClick={() => { const rowIndices = Array.from(affectedRowsFromSelection); const indicesToDelete = rowIndices.includes(contextMenu.rowIndex) ? rowIndices : [contextMenu.rowIndex]; const idsToDelete = indicesToDelete.map(idx => acts[idx].id); onRequestDelete(idsToDelete); setContextMenu(null); }} /> </ContextMenu>}
+            {regulationsModalOpen && <RegulationsModal isOpen={regulationsModalOpen} onClose={() => setRegulationsModalOpen(false)} regulations={regulations} onSelect={handleRegulationsSelect} />}
+            {fullRegulationDetails && <Modal isOpen={!!fullRegulationDetails} onClose={() => setFullRegulationDetails(null)} title="" hideHeader={true}> <RegulationDetails regulation={fullRegulationDetails} onClose={() => setFullRegulationDetails(null)} /> </Modal>}
         </div>
     );
 };

@@ -53,7 +53,7 @@ const SidebarButton: React.FC<{
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, currentPage, setCurrentPage, isTemplateLoaded, trashCount, theme, onToggleTheme }) => {
     const navItems = [
-        { page: 'acts', label: 'Акты', icon: <ActsIcon className="w-5 h-5" /> },
+        { page: 'acts', label: 'АОСР', icon: <ActsIcon className="w-5 h-5" /> },
         { page: 'people', label: 'Участники', icon: <PeopleIcon className="w-5 h-5" /> },
         { page: 'organizations', label: 'Организации', icon: <OrganizationsIcon className="w-5 h-5" /> },
         { page: 'groups', label: 'Группы комиссий', icon: <GroupsIcon className="w-5 h-5" /> },

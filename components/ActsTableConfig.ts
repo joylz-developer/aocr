@@ -1,19 +1,122 @@
 
 import { ActTableColumnKey } from '../types';
 
-export const ALL_COLUMNS: { key: ActTableColumnKey; label: string; type: 'text' | 'date' | 'textarea' | 'custom_date' | 'materials', widthClass: string; helpText?: string }[] = [
-    { key: 'id', label: 'ID', type: 'text', widthClass: 'w-48' },
-    { key: 'number', label: '№', type: 'text', widthClass: 'w-24', helpText: 'Номер акта (например, 1, 14-А, 3/1).' },
-    { key: 'commissionGroup', label: 'Группа', type: 'text', widthClass: 'w-64', helpText: 'Группа, определяющая состав комиссии и реквизиты организаций. Выберите из списка.' },
-    { key: 'date', label: 'Дата акта', type: 'date', widthClass: 'w-40', helpText: 'Дата подписания акта. Обычно совпадает с датой окончания работ.' },
-    { key: 'workName', label: '1. Наименование работ', type: 'textarea', widthClass: 'w-96 min-w-[24rem]', helpText: 'Точное название выполненных работ согласно смете/проекту. Пример: "Устройство бетонной подготовки под фундаменты".' },
-    { key: 'projectDocs', label: '2. Проектная документация', type: 'textarea', widthClass: 'w-80', helpText: 'Шифр проекта, номера чертежей и листов. Пример: "КР-1 лист 5, 6".' },
-    { key: 'materials', label: '3. Материалы', type: 'materials', widthClass: 'w-80', helpText: 'Список материалов и документов о качестве. Используйте иконку сертификата для быстрой вставки.' },
-    { key: 'certs', label: '4. Исполнительные схемы', type: 'textarea', widthClass: 'w-80', helpText: 'Перечень исполнительных схем и чертежей с датами. Пример: "Исполнительная схема №3 от 10.10.2024".' },
-    { key: 'workDates', label: '5. Даты работ', type: 'custom_date', widthClass: 'w-64', helpText: 'Период выполнения работ (начало - окончание). Используйте календарь для выбора.' },
-    { key: 'regulations', label: '6. Нормативы', type: 'textarea', widthClass: 'w-80', helpText: 'СП, ГОСТ и другие нормативные документы, соблюдение которых подтверждается. Можно выбрать из справочника.' },
-    { key: 'nextWork', label: '7. Следующие работы', type: 'textarea', widthClass: 'w-80', helpText: 'Наименование работ, которые разрешается производить после подписания этого акта. Можно выбрать "Автоматически" для связи со следующим актом в списке.' },
-    { key: 'additionalInfo', label: 'Доп. сведения', type: 'textarea', widthClass: 'w-80', helpText: 'Любая дополнительная информация для акта.' },
-    { key: 'attachments', label: 'Приложения', type: 'textarea', widthClass: 'w-80', helpText: 'Список приложений к акту (указывается в конце документа).' },
-    { key: 'copiesCount', label: 'Кол-во экз.', type: 'text', widthClass: 'w-32', helpText: 'Количество экземпляров акта.' },
+export const ALL_COLUMNS: { 
+    key: ActTableColumnKey; 
+    label: string; 
+    type: 'text' | 'date' | 'textarea' | 'custom_date' | 'materials'; 
+    widthClass: string; 
+    description?: string;
+    example?: string;
+}[] = [
+    { 
+        key: 'id', 
+        label: 'ID', 
+        type: 'text', 
+        widthClass: 'w-48' 
+    },
+    { 
+        key: 'number', 
+        label: '№', 
+        type: 'text', 
+        widthClass: 'w-24', 
+        description: 'Уникальный номер акта в рамках объекта строительства. Нумерация может быть сквозной (1, 2, 3...) или содержать шифры разделов проекта.',
+        example: '14-КЖ'
+    },
+    { 
+        key: 'commissionGroup', 
+        label: 'Группа', 
+        type: 'text', 
+        widthClass: 'w-64', 
+        description: 'Группа определяет состав подписантов (представителей) и реквизиты организаций (Застройщик, Подрядчик и т.д.). Создайте группы в разделе "Группы комиссий".',
+        example: 'Комиссия по общестрою (Застройщик + Генподрядчик)'
+    },
+    { 
+        key: 'date', 
+        label: 'Дата акта', 
+        type: 'date', 
+        widthClass: 'w-40', 
+        description: 'Дата подписания акта комиссией. Обычно совпадает с датой окончания работ, но не может быть раньше даты окончания работ или позже даты следующего этапа.',
+        example: '25.10.2024'
+    },
+    { 
+        key: 'workName', 
+        label: '1. Наименование работ', 
+        type: 'textarea', 
+        widthClass: 'w-96 min-w-[24rem]', 
+        description: 'Точное название выполненных работ в соответствии с проектной документацией или сметой. Должно совпадать с записью в Общем журнале работ (Раздел 3).',
+        example: 'Устройство бетонной подготовки под фундаменты Фм-1 в осях 1-4/А-В'
+    },
+    { 
+        key: 'projectDocs', 
+        label: '2. Проектная документация', 
+        type: 'textarea', 
+        widthClass: 'w-80', 
+        description: 'Шифр рабочей документации, номера чертежей (листов), по которым выполнены работы.',
+        example: 'Шифр 2023-05-КЖ, листы 5, 6, 8'
+    },
+    { 
+        key: 'materials', 
+        label: '3. Материалы', 
+        type: 'materials', 
+        widthClass: 'w-80', 
+        description: 'Перечень примененных материалов с указанием документов о качестве (паспорта, сертификаты).',
+        example: 'Бетон В15 W6 F75 (Паспорт №45 от 10.10.2024); Арматура А500С d12 (Сертификат №...)'
+    },
+    { 
+        key: 'certs', 
+        label: '4. Исполнительные схемы', 
+        type: 'textarea', 
+        widthClass: 'w-80', 
+        description: 'Перечень исполнительной геодезической документации, схем, результатов лабораторных испытаний.',
+        example: 'Исполнительная схема планово-высотного положения №3 от 12.10.2024; Протокол испытания бетона №5.'
+    },
+    { 
+        key: 'workDates', 
+        label: '5. Даты работ', 
+        type: 'custom_date', 
+        widthClass: 'w-64', 
+        description: 'Фактический период выполнения работ (начало и окончание). Должен соответствовать записям в Общем журнале работ.',
+        example: '10.10.2024 - 15.10.2024'
+    },
+    { 
+        key: 'regulations', 
+        label: '6. Нормативы', 
+        type: 'textarea', 
+        widthClass: 'w-80', 
+        description: 'Наименование нормативных документов (СП, ГОСТ, СНиП), согласно которым выполнены работы и проведена проверка.',
+        example: 'СП 70.13330.2012 п. 5.18; СП 48.13330.2019'
+    },
+    { 
+        key: 'nextWork', 
+        label: '7. Следующие работы', 
+        type: 'textarea', 
+        widthClass: 'w-80', 
+        description: 'Наименование последующих работ, которые разрешается выполнять после освидетельствования текущих.',
+        example: 'Устройство гидроизоляции фундаментов; Монтаж опалубки стен.'
+    },
+    { 
+        key: 'additionalInfo', 
+        label: 'Доп. сведения', 
+        type: 'textarea', 
+        widthClass: 'w-80', 
+        description: 'Любая дополнительная информация, которую необходимо отразить в акте (пункт 5 в старых формах или дополнения).',
+        example: 'Работы выполнены в соответствии с ППР №...'
+    },
+    { 
+        key: 'attachments', 
+        label: 'Приложения', 
+        type: 'textarea', 
+        widthClass: 'w-80', 
+        description: 'Перечень документов, прилагаемых к акту (реестры, схемы, результаты экспертиз). Указывается в конце бланка.',
+        example: '1. Исполнительная схема. 2. Результаты испытаний. 3. Реестр документов о качестве.'
+    },
+    { 
+        key: 'copiesCount', 
+        label: 'Кол-во экз.', 
+        type: 'text', 
+        widthClass: 'w-32', 
+        description: 'Количество экземпляров акта для подписания.',
+        example: '4'
+    },
 ];

@@ -342,7 +342,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         <div className="bg-white p-4 sm:p-6 h-full flex flex-col">
             <div className="flex justify-between items-center mb-6 flex-shrink-0">
                 <div className="flex items-center gap-4">
-                    <h1 className="text-2xl font-bold text-slate-800">Акты скрытых работ</h1>
+                    <h1 className="text-2xl font-bold text-slate-800">АОСР</h1>
                 </div>
                 <div className="flex items-center gap-3">
                      <button 
