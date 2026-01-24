@@ -1685,18 +1685,19 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                             </span>
                                         ))}
                                     </div>
-                                    {linkCount > 0 && (
-                                        <button 
-                                            className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-full text-xs font-medium border border-blue-100 hover:bg-blue-600 hover:text-white transition-all duration-200 hover:scale-110 hover:shadow-md" 
-                                            onClick={(e) => handleManageLinks(e, cert)}
-                                            title="Управление связями"
-                                        >
-                                            <LinkIcon className="w-3 h-3" /> {linkCount}
-                                        </button>
-                                    )}
-                                    <div className="flex gap-1 flex-shrink-0">
-                                        <button onClick={(e) => { e.stopPropagation(); handleOpenModal(cert); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
-                                        <button onClick={(e) => handleClickDelete(e, cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
+                                    
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                        {linkCount > 0 && (
+                                            <button 
+                                                className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-full text-xs font-medium border border-blue-100 hover:bg-blue-100 transition-all mr-1" 
+                                                onClick={(e) => handleManageLinks(e, cert)}
+                                                title="Управление связями"
+                                            >
+                                                <LinkIcon className="w-3 h-3" /> {linkCount}
+                                            </button>
+                                        )}
+                                        <button onClick={(e) => { e.stopPropagation(); handleOpenModal(cert); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
+                                        <button onClick={(e) => handleClickDelete(e, cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
                                     </div>
                                 </div>
                             );
@@ -1709,17 +1710,6 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                             className="border border-slate-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col h-full cursor-pointer relative group"
                             onClick={() => handleOpenModal(cert)}
                         >
-                            {/* Link Badge */}
-                            {linkCount > 0 && (
-                                <button 
-                                    className="absolute top-2 left-2 z-20 bg-white/90 text-blue-600 text-xs px-2 py-1 rounded-full flex items-center gap-1 shadow-sm border border-blue-100 hover:bg-blue-600 hover:text-white transition-all duration-200 hover:scale-110 hover:shadow-md"
-                                    onClick={(e) => handleManageLinks(e, cert)}
-                                    title={`Используется в ${linkCount} актах. Нажмите для управления.`}
-                                >
-                                    <LinkIcon className="w-3 h-3" /> {linkCount}
-                                </button>
-                            )}
-
                             {/* Thumbnail Section */}
                             <div 
                                 className="h-40 bg-slate-200 border-b border-slate-100 flex items-center justify-center cursor-pointer relative overflow-hidden"
@@ -1772,9 +1762,18 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                         </h3>
                                         <p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p>
                                     </div>
-                                    <div className="flex gap-1 ml-2">
-                                        <button onClick={(e) => { e.stopPropagation(); handleOpenModal(cert); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
-                                        <button onClick={(e) => handleClickDelete(e, cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
+                                    <div className="flex items-center gap-1 ml-2">
+                                        {linkCount > 0 && (
+                                            <button 
+                                                className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-full text-xs font-medium border border-blue-100 hover:bg-blue-100 transition-all mr-1"
+                                                onClick={(e) => handleManageLinks(e, cert)}
+                                                title={`Используется в ${linkCount} актах`}
+                                            >
+                                                <LinkIcon className="w-3 h-3" /> {linkCount}
+                                            </button>
+                                        )}
+                                        <button onClick={(e) => { e.stopPropagation(); handleOpenModal(cert); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
+                                        <button onClick={(e) => handleClickDelete(e, cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
                                     </div>
                                 </div>
                                 
