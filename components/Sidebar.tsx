@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Page, Theme, ConstructionObject } from '../types';
 import { ChevronLeftIcon, ActsIcon, PeopleIcon, OrganizationsIcon, SettingsIcon, GroupsIcon, TrashIcon, BookIcon, CertificateIcon, SunIcon, MoonIcon, EyeIcon, PlusIcon, EditIcon, CheckIcon, CloseIcon } from './Icons';
 import Modal from './Modal';
+import CustomSelect from './CustomSelect';
 
 interface SidebarProps {
     isOpen: boolean;
@@ -39,7 +40,7 @@ const SidebarButton: React.FC<{
         ? "text-slate-400 cursor-not-allowed"
         : isActive
             ? "bg-blue-600 text-white"
-            : "text-slate-600 hover:bg-slate-200 hover:text-slate-800";
+            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900";
 
     return (
         <button
@@ -82,6 +83,9 @@ const Sidebar: React.FC<SidebarProps> = ({
     const [editName, setEditName] = useState('');
     
     const currentObject = constructionObjects.find(o => o.id === currentObjectId);
+    
+    // Options for CustomSelect
+    const objectOptions = constructionObjects.map(obj => ({ value: obj.id, label: obj.name }));
 
     // Order: Acts -> People -> Organizations -> Groups ...
     const navItems = [
@@ -142,7 +146,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
     return (
         <aside className={`bg-white shadow-lg flex flex-col transition-all duration-300 ease-in-out ${isOpen ? 'w-64' : 'w-20'} z-20`}>
-            <div className={`flex items-center border-b h-16 flex-shrink-0 ${isOpen ? 'justify-between px-4' : 'justify-center'}`}>
+            <div className={`flex items-center border-b border-slate-100 h-16 flex-shrink-0 ${isOpen ? 'justify-between px-4' : 'justify-center'}`}>
                 {isOpen && <h1 className="text-xl font-bold text-blue-700">DocGen AI</h1>}
                 <button
                     onClick={() => setIsOpen(!isOpen)}
@@ -174,18 +178,18 @@ const Sidebar: React.FC<SidebarProps> = ({
                             </div>
                         ) : (
                             <div className="flex items-center gap-1">
-                                <select 
-                                    value={currentObjectId || ''} 
-                                    onChange={(e) => onObjectChange(e.target.value)}
-                                    className="w-full text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white focus:ring-1 focus:ring-blue-500 outline-none"
-                                >
-                                    {constructionObjects.map(obj => (
-                                        <option key={obj.id} value={obj.id}>{obj.name}</option>
-                                    ))}
-                                </select>
+                                <div className="flex-grow min-w-0">
+                                    <CustomSelect 
+                                        options={objectOptions}
+                                        value={currentObjectId || ''} 
+                                        onChange={(val) => onObjectChange(val)}
+                                        buttonClassName="w-full text-sm border border-slate-300 rounded-md px-2 py-1.5 bg-white focus:ring-1 focus:ring-blue-500 outline-none flex justify-between items-center text-left"
+                                        placeholder="Выберите объект"
+                                    />
+                                </div>
                                 <button 
                                     onClick={startEditing}
-                                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-white rounded border border-transparent hover:border-slate-200 transition-colors"
+                                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded border border-transparent hover:border-slate-200 transition-colors"
                                     title="Переименовать объект"
                                 >
                                     <EditIcon className="w-4 h-4" />
@@ -244,7 +248,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             </nav>
 
             {/* Footer with Settings and Theme */}
-            <div className="p-3 border-t space-y-1 mt-auto bg-slate-50/50">
+            <div className="p-3 border-t border-slate-100 space-y-1 mt-auto bg-slate-50/50">
                  <SidebarButton
                     icon={<SettingsIcon className="w-5 h-5" />}
                     label="Настройки"
