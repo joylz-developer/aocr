@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry, ExportSettings, CertificateFile, ConstructionObject } from './types';
@@ -96,7 +97,7 @@ const App: React.FC = () => {
     // --- MIGRATION LOGIC for Construction Objects ---
     useEffect(() => {
         // Check if we have data but no objects (Legacy Mode)
-        const hasData = acts.length > 0 || people.length > 0 || certificates.length > 0;
+        const hasData = acts.length > 0 || people.length > 0 || certificates.length > 0 || organizations.length > 0;
         const hasObjects = constructionObjects.length > 0;
 
         if (hasData && !hasObjects) {
@@ -118,6 +119,7 @@ const App: React.FC = () => {
             setGroups(prev => migrate(prev));
             setRegulations(prev => migrate(prev));
             setCertificates(prev => migrate(prev));
+            setOrganizations(prev => migrate(prev));
             
             // Clean up old settings
             const newSettings = { ...settings };
@@ -137,6 +139,7 @@ const App: React.FC = () => {
     // --- Computed Data for Current Object ---
     const currentActs = useMemo(() => acts.filter(a => a.constructionObjectId === currentObjectId), [acts, currentObjectId]);
     const currentPeople = useMemo(() => people.filter(p => p.constructionObjectId === currentObjectId), [people, currentObjectId]);
+    const currentOrganizations = useMemo(() => organizations.filter(o => o.constructionObjectId === currentObjectId), [organizations, currentObjectId]);
     const currentGroups = useMemo(() => groups.filter(g => g.constructionObjectId === currentObjectId), [groups, currentObjectId]);
     const currentRegulations = useMemo(() => regulations.filter(r => r.constructionObjectId === currentObjectId), [regulations, currentObjectId]);
     const currentCertificates = useMemo(() => certificates.filter(c => c.constructionObjectId === currentObjectId), [certificates, currentObjectId]);
@@ -259,16 +262,18 @@ const App: React.FC = () => {
         setPeople(prev => prev.filter(p => p.id !== id));
     };
 
-    // 3. Organizations (Global)
+    // 3. Organizations (Now Local)
     const handleSaveOrganization = (org: Organization) => {
+        if (!currentObjectId) return;
+        const orgToSave = { ...org, constructionObjectId: currentObjectId };
         setOrganizations(prev => {
-            const index = prev.findIndex(o => o.id === org.id);
+            const index = prev.findIndex(o => o.id === orgToSave.id);
             if (index >= 0) {
                 const newOrgs = [...prev];
-                newOrgs[index] = org;
+                newOrgs[index] = orgToSave;
                 return newOrgs;
             }
-            return [...prev, org];
+            return [...prev, orgToSave];
         });
     };
 
@@ -298,15 +303,7 @@ const App: React.FC = () => {
     // 5. Regulations
     const handleSaveRegulations = (newRegulations: Regulation[]) => {
         if (!currentObjectId) return;
-        // Ensure new/updated regulations have the object ID
         const regsToSave = newRegulations.map(r => ({ ...r, constructionObjectId: currentObjectId }));
-        
-        // We replace the entire list for the current object usually, but since the input is "newRegulations"
-        // representing the whole state of the page, we need to carefully merge or replace.
-        // The RegulationsPage passes the FULL list of regulations back.
-        // But since regulations are filtered by object on the page, we only get the current object's regs back.
-        // So we need to keep regs from other objects.
-        
         setRegulations(prev => {
             const otherRegs = prev.filter(r => r.constructionObjectId !== currentObjectId);
             return [...otherRegs, ...regsToSave];
@@ -340,31 +337,141 @@ const App: React.FC = () => {
         }
     };
     
-    // Unlink logic for Certs
     const handleUnlinkCertificate = (cert: Certificate, mode: 'remove_entry' | 'remove_reference') => {
         const searchStr = `(сертификат № ${cert.number}`;
-        
         setActs(prevActs => prevActs.map(act => {
             if (act.constructionObjectId !== currentObjectId) return act;
-            
             if (!act.materials.includes(searchStr)) return act;
-            
             const materials = act.materials.split(';').map(s => s.trim());
             const newMaterials = materials.map(mat => {
                 if (mat.includes(searchStr)) {
                     if (mode === 'remove_reference') {
-                        // Remove only the parenthetical reference part
                         return mat.split('(')[0].trim();
                     } else {
-                        // Mark for removal
                         return null; 
                     }
                 }
                 return mat;
-            }).filter(Boolean); // Remove nulls if 'remove_entry'
-            
+            }).filter(Boolean); 
             return { ...act, materials: newMaterials.join('; ') };
         }));
+    };
+
+    // --- Complex Copy/Import Logic ---
+    const handleImportFromObject = (items: (Person | Organization | Certificate)[]) => {
+        if (!currentObjectId || items.length === 0) return;
+
+        // Determine type based on first item
+        const isPerson = (i: any): i is Person => 'position' in i;
+        const isOrg = (i: any): i is Organization => 'inn' in i;
+        
+        if (isOrg(items[0])) {
+            const orgsToImport = items as Organization[];
+            const newOrgs: Organization[] = [];
+            
+            orgsToImport.forEach(srcOrg => {
+                // Check dupes in current object by INN
+                const exists = currentOrganizations.some(curr => curr.inn === srcOrg.inn);
+                if (!exists) {
+                    newOrgs.push({
+                        ...srcOrg,
+                        id: crypto.randomUUID(),
+                        constructionObjectId: currentObjectId
+                    });
+                }
+            });
+            
+            if (newOrgs.length > 0) {
+                setOrganizations(prev => [...prev, ...newOrgs]);
+                alert(`Скопировано ${newOrgs.length} организаций.`);
+            } else {
+                alert("Все выбранные организации уже существуют в текущем объекте (проверка по ИНН).");
+            }
+        }
+        else if (isPerson(items[0])) {
+            const peopleToImport = items as Person[];
+            const newPeople: Person[] = [];
+            const newOrgs: Organization[] = []; // Potential dependencies
+            
+            peopleToImport.forEach(srcPerson => {
+                // 1. Resolve Organization Dependency
+                // Find source org details (Global/All lookup)
+                const sourceOrg = organizations.find(o => o.name === srcPerson.organization && o.constructionObjectId === srcPerson.constructionObjectId);
+                
+                // If person has an org, ensure it exists in target
+                if (srcPerson.organization) {
+                    // Check if org with same name/INN exists in target
+                    let targetOrg = currentOrganizations.find(o => o.name === srcPerson.organization);
+                    
+                    // If not found by name, try to find by INN if we know source org
+                    if (!targetOrg && sourceOrg) {
+                        targetOrg = currentOrganizations.find(o => o.inn === sourceOrg.inn);
+                    }
+
+                    // If still not found, we need to create it
+                    if (!targetOrg && sourceOrg) {
+                        // Check if we already queued it for creation in this batch
+                        const alreadyQueued = newOrgs.find(o => o.inn === sourceOrg.inn);
+                        if (!alreadyQueued) {
+                            newOrgs.push({
+                                ...sourceOrg,
+                                id: crypto.randomUUID(),
+                                constructionObjectId: currentObjectId
+                            });
+                        }
+                    } else if (!targetOrg && !sourceOrg) {
+                        // Edge case: Person has org string, but Org entity doesn't exist in source either.
+                        // Just copy the string name, nothing to do.
+                    }
+                }
+
+                // 2. Create Person Copy
+                // Check dupes by Name + Position
+                const exists = currentPeople.some(p => p.name === srcPerson.name && p.position === srcPerson.position);
+                if (!exists) {
+                    newPeople.push({
+                        ...srcPerson,
+                        id: crypto.randomUUID(),
+                        constructionObjectId: currentObjectId
+                        // Organization name string remains the same
+                    });
+                }
+            });
+
+            if (newOrgs.length > 0) {
+                setOrganizations(prev => [...prev, ...newOrgs]);
+            }
+            
+            if (newPeople.length > 0) {
+                setPeople(prev => [...prev, ...newPeople]);
+                alert(`Скопировано ${newPeople.length} человек` + (newOrgs.length > 0 ? ` и ${newOrgs.length} связанных организаций.` : '.'));
+            } else {
+                alert("Все выбранные люди уже существуют в текущем объекте.");
+            }
+        }
+        else {
+            // Certificates
+            const certsToImport = items as Certificate[];
+            const newCerts: Certificate[] = [];
+            
+            certsToImport.forEach(srcCert => {
+                const exists = currentCertificates.some(c => c.number === srcCert.number);
+                if (!exists) {
+                    newCerts.push({
+                        ...srcCert,
+                        id: crypto.randomUUID(),
+                        constructionObjectId: currentObjectId
+                    });
+                }
+            });
+            
+            if (newCerts.length > 0) {
+                setCertificates(prev => [...prev, ...newCerts]);
+                alert(`Скопировано ${newCerts.length} сертификатов.`);
+            } else {
+                alert("Все выбранные сертификаты уже существуют (проверка по номеру).");
+            }
+        }
     };
 
     // --- Trash & Restore Logic ---
@@ -445,7 +552,6 @@ const App: React.FC = () => {
             template: exportSettings.template ? template : undefined,
             registryTemplate: exportSettings.registryTemplate ? registryTemplate : undefined,
             projectSettings: exportSettings.projectSettings ? settings : undefined,
-            organizations: exportSettings.organizations ? organizations : undefined,
             constructionObjects: exportSettings.constructionObjects ? constructionObjects : undefined,
         };
         
@@ -455,6 +561,7 @@ const App: React.FC = () => {
         constructionObjects.forEach(obj => {
             const objActs = exportSettings.acts ? acts.filter(a => a.constructionObjectId === obj.id) : [];
             const objPeople = exportSettings.people ? people.filter(p => p.constructionObjectId === obj.id) : [];
+            const objOrgs = exportSettings.organizations ? organizations.filter(o => o.constructionObjectId === obj.id) : [];
             const objGroups = exportSettings.groups ? groups.filter(g => g.constructionObjectId === obj.id) : [];
             const objRegs = exportSettings.regulations ? regulations.filter(r => r.constructionObjectId === obj.id) : [];
             const objCerts = exportSettings.certificates ? certificates.filter(c => c.constructionObjectId === obj.id) : [];
@@ -462,10 +569,11 @@ const App: React.FC = () => {
             const objDeletedCerts = exportSettings.deletedCertificates ? deletedCertificates.filter(d => d.certificate.constructionObjectId === obj.id) : [];
 
             // If object has any data to export
-            if (objActs.length || objPeople.length || objGroups.length || objRegs.length || objCerts.length || objDeletedActs.length || objDeletedCerts.length) {
+            if (objActs.length || objPeople.length || objGroups.length || objRegs.length || objCerts.length || objDeletedActs.length || objDeletedCerts.length || objOrgs.length) {
                 const objectData: ImportData = {
                     acts: objActs,
                     people: objPeople,
+                    organizations: objOrgs,
                     groups: objGroups,
                     regulations: objRegs,
                     certificates: objCerts,
@@ -516,7 +624,6 @@ const App: React.FC = () => {
                         if (globalJson.template) aggregatedData.template = globalJson.template;
                         if (globalJson.registryTemplate) aggregatedData.registryTemplate = globalJson.registryTemplate;
                         if (globalJson.projectSettings) aggregatedData.projectSettings = globalJson.projectSettings;
-                        if (globalJson.organizations) aggregatedData.organizations = globalJson.organizations;
                         if (globalJson.constructionObjects) aggregatedData.constructionObjects = globalJson.constructionObjects;
                     }
 
@@ -529,6 +636,7 @@ const App: React.FC = () => {
                                  const objData: ImportData = JSON.parse(content);
                                  if (objData.acts) aggregatedData.acts?.push(...objData.acts);
                                  if (objData.people) aggregatedData.people?.push(...objData.people);
+                                 if (objData.organizations) aggregatedData.organizations?.push(...objData.organizations);
                                  if (objData.groups) aggregatedData.groups?.push(...objData.groups);
                                  if (objData.regulations) aggregatedData.regulations?.push(...objData.regulations);
                                  if (objData.certificates) aggregatedData.certificates?.push(...objData.certificates);
@@ -645,7 +753,7 @@ const App: React.FC = () => {
                 return <ActsPage
                     acts={currentActs}
                     people={currentPeople}
-                    organizations={organizations}
+                    organizations={currentOrganizations} // Pass filtered orgs
                     groups={currentGroups}
                     regulations={currentRegulations}
                     certificates={currentCertificates}
@@ -656,8 +764,6 @@ const App: React.FC = () => {
                     onMoveToTrash={handleMoveActsToTrash}
                     onPermanentlyDelete={(ids) => setActs(prev => prev.filter(a => !ids.includes(a.id)))}
                     onReorderActs={(newActs) => {
-                        // When reordering, we receive only the current object's acts reordered.
-                        // We need to merge them back into the main acts array preserving other objects' acts.
                         setActs(prev => {
                             const otherActs = prev.filter(a => a.constructionObjectId !== currentObjectId);
                             return [...otherActs, ...newActs];
@@ -665,43 +771,52 @@ const App: React.FC = () => {
                     }}
                     setCurrentPage={setCurrentPage}
                     onNavigateToCertificate={(id) => {
-                        // Hacky way to navigate: go to certificates page and pre-select/highlight?
-                        // Ideally pass a state param to setCurrentPage
                         setCurrentPage('certificates');
-                        // You might need a global context or prop to handle 'initialOpenId'
                     }}
                 />;
             case 'people':
                 return <PeoplePage
                     people={currentPeople}
-                    organizations={organizations}
+                    allPeople={people} // Pass all for copying
+                    organizations={currentOrganizations} // Pass filtered orgs
+                    constructionObjects={constructionObjects}
+                    currentObjectId={currentObjectId}
                     settings={settings}
                     onSave={handleSavePerson}
                     onDelete={handleDeletePerson}
+                    onImport={handleImportFromObject}
                 />;
             case 'organizations':
                 return <OrganizationsPage
-                    organizations={organizations}
+                    organizations={currentOrganizations}
+                    allOrganizations={organizations} // Pass all for copying
+                    constructionObjects={constructionObjects}
+                    currentObjectId={currentObjectId}
                     settings={settings}
                     onSave={handleSaveOrganization}
                     onDelete={handleDeleteOrganization}
+                    onImport={handleImportFromObject}
                 />;
             case 'groups':
                 return <GroupsPage
                     groups={currentGroups}
                     people={currentPeople}
-                    organizations={organizations}
+                    organizations={currentOrganizations}
                     onSave={handleSaveGroup}
                     onDelete={handleDeleteGroup}
                 />;
             case 'certificates':
                 return <CertificatesPage 
                     certificates={currentCertificates}
+                    allCertificates={certificates} // Pass all for copying
                     acts={currentActs}
+                    constructionObjects={constructionObjects}
+                    currentObjectId={currentObjectId}
                     settings={settings}
                     onSave={handleSaveCertificate}
                     onDelete={handleDeleteCertificate}
                     onUnlink={handleUnlinkCertificate}
+                    onImport={handleImportFromObject}
                 />
             case 'regulations':
                 return <RegulationsPage 
@@ -782,36 +897,6 @@ const App: React.FC = () => {
                 />
             )}
 
-            <RestoreGroupConfirmationModal
-                isOpen={!!restoreGroupConfirmData}
-                onClose={() => setRestoreGroupConfirmData(null)}
-                groupsToRestore={restoreGroupConfirmData?.groups || []}
-                onConfirm={(restoreGroups) => {
-                    if (restoreGroupConfirmData) {
-                        // Logic moved inside component or callback? 
-                        // Actually the page handles it, but since logic is in App, we need a wrapper
-                        // The performRestore function in App is scoped.
-                        // We need to call performRestore here? No, this modal is usually on Page level in previous design.
-                        // But I moved acts/trash state to App.tsx so restore logic is here.
-                        // Ah, the logic `performRestore` relies on state. I need to replicate that logic or call it.
-                        // For simplicity, let's just use the callback pattern established in `handleRestoreActs`
-                        // Actually, wait. RestoreGroupConfirmationModal is purely presentation.
-                        // I need to execute `performRestore` based on the result.
-                        // Since `performRestore` is defined inside `App`, I can call it.
-                        const { entriesToRestore } = restoreGroupConfirmData;
-                        // Define performRestore here (it was defined inside App scope earlier in code block but might be unreachable if I don't move it out or use ref)
-                        // Actually, I defined `performRestore` inside `App` component body, so it is accessible here.
-                        
-                        // Wait, `performRestore` was defined inside `App`. Yes.
-                        // But `setRestoreGroupConfirmData` sets state.
-                        // I need a way to trigger `performRestore` when Modal confirms.
-                        // The Modal takes `onConfirm` prop.
-                        // So:
-                        // performRestore(restoreGroupConfirmData.entriesToRestore, restoreGroups);
-                    }
-                }} 
-            />
-            
             {/* Re-implement Restore Confirmation Modal logic because the above JSX is disconnected from the logic flow */}
             {/* The logic `handleRestoreActs` sets `restoreGroupConfirmData`. */}
             {/* The modal should call `performRestore` on confirm. */}

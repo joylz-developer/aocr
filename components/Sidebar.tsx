@@ -79,8 +79,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         { page: 'groups', label: 'Группы комиссий', icon: <GroupsIcon className="w-5 h-5" /> },
         { page: 'certificates', label: 'Сертификаты', icon: <CertificateIcon className="w-5 h-5" /> },
         { page: 'regulations', label: 'Нормативы', icon: <BookIcon className="w-5 h-5" /> },
-        { page: 'organizations', label: 'Организации (Глоб.)', icon: <OrganizationsIcon className="w-5 h-5" /> },
-        { page: 'settings', label: 'Настройки', icon: <SettingsIcon className="w-5 h-5" /> },
+        { page: 'organizations', label: 'Организации', icon: <OrganizationsIcon className="w-5 h-5" /> },
     ];
 
     const getThemeIcon = () => {
@@ -215,6 +214,14 @@ const Sidebar: React.FC<SidebarProps> = ({
             </nav>
 
             <div className="p-3 border-t space-y-1">
+                 <SidebarButton
+                    icon={<SettingsIcon className="w-5 h-5" />}
+                    label="Настройки"
+                    isOpen={isOpen}
+                    isActive={currentPage === 'settings'}
+                    onClick={() => setCurrentPage('settings')}
+                 />
+                 
                  <SidebarButton
                     icon={<TrashIcon className="w-5 h-5" />}
                     label="Корзина"

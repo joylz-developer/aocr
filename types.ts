@@ -23,7 +23,7 @@ export interface Organization {
     address: string;
     phone?: string;
     sro?: string;
-    // Organizations remain global
+    constructionObjectId?: string; // Now linked to object
 }
 
 export interface Regulation {

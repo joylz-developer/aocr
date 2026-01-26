@@ -1,16 +1,22 @@
+
 import React, { useState, useRef, useMemo } from 'react';
-import { Person, Organization, ProjectSettings } from '../types';
+import { Person, Organization, ProjectSettings, ConstructionObject } from '../types';
 import Modal from '../components/Modal';
 import CustomSelect from '../components/CustomSelect';
-import { PlusIcon, EditIcon, DeleteIcon } from '../components/Icons';
+import { PlusIcon, EditIcon, DeleteIcon, CopyIcon } from '../components/Icons';
 import { GoogleGenAI } from '@google/genai';
+import ObjectResourceImporter from '../components/ObjectResourceImporter';
 
 interface PeoplePageProps {
-    people: Person[];
-    organizations: Organization[];
+    people: Person[]; // Current object's people
+    allPeople: Person[]; // All people for copying
+    organizations: Organization[]; // Current object's orgs
+    constructionObjects: ConstructionObject[];
+    currentObjectId: string | null;
     settings: ProjectSettings;
     onSave: (person: Person) => void;
     onDelete: (id: string) => void;
+    onImport: (items: Person[]) => void;
 }
 
 const CameraIcon: React.FC = () => (
@@ -125,8 +131,12 @@ const PersonForm: React.FC<{
                         if (matchingOrg) {
                             organizationToSet = matchingOrg.name; // Set the exact name from the list
                         } else {
-                            // Not found, show a warning and don't change the selection
-                            setOcrWarning(`Организация "${aiOrgName}" не найдена. Пожалуйста, добавьте ее на странице 'Организации', а затем выберите из списка.`);
+                            // Not found, show a warning but allow setting text (it will be created if handled upstream, or just text)
+                            // Actually Person stores org as string, so we just set it. 
+                            // But usually we want exact match for Group linkage. 
+                            // For now, let's set it as string.
+                            organizationToSet = aiOrgName;
+                            setOcrWarning(`Организация "${aiOrgName}" не найдена в текущем списке. Она будет сохранена текстом.`);
                         }
                     }
                 }
@@ -151,8 +161,9 @@ const PersonForm: React.FC<{
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formData.name || !formData.position || !formData.organization) {
-            alert('Пожалуйста, заполните все обязательные поля: ФИО, Должность и Организация.');
+        // Validation: Name and Position are required. Organization is optional.
+        if (!formData.name.trim() || !formData.position.trim()) {
+            alert('Пожалуйста, заполните обязательные поля: ФИО и Должность.');
             return;
         }
         onSave(formData);
@@ -174,11 +185,11 @@ const PersonForm: React.FC<{
                 </div>
             )}
             <div>
-                <label className="block text-sm font-medium text-slate-700">ФИО</label>
+                <label className="block text-sm font-medium text-slate-700">ФИО <span className="text-red-500">*</span></label>
                 <input type="text" name="name" value={formData.name} onChange={handleChange} className={inputClass} required />
             </div>
             <div>
-                <label className="block text-sm font-medium text-slate-700">Должность</label>
+                <label className="block text-sm font-medium text-slate-700">Должность <span className="text-red-500">*</span></label>
                 <input type="text" name="position" value={formData.position} onChange={handleChange} className={inputClass} required />
             </div>
             <div>
@@ -187,9 +198,11 @@ const PersonForm: React.FC<{
                     options={orgOptions}
                     value={formData.organization}
                     onChange={(value) => setFormData(prev => ({ ...prev, organization: value }))}
-                    placeholder="-- Выберите организацию --"
+                    placeholder="-- Выберите или введите --"
                     className="mt-1"
+                    allowClear
                 />
+                <p className="text-xs text-slate-500 mt-1">Не обязательно</p>
             </div>
             <div>
                 <label className="block text-sm font-medium text-slate-700">Реквизиты документа о полномочиях</label>
@@ -203,8 +216,9 @@ const PersonForm: React.FC<{
     );
 };
 
-const PeoplePage: React.FC<PeoplePageProps> = ({ people, organizations, settings, onSave, onDelete }) => {
+const PeoplePage: React.FC<PeoplePageProps> = ({ people, allPeople, organizations, constructionObjects, currentObjectId, settings, onSave, onDelete, onImport }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [editingPerson, setEditingPerson] = useState<Person | null>(null);
 
     const handleOpenModal = (person: Person | null = null) => {
@@ -222,17 +236,26 @@ const PeoplePage: React.FC<PeoplePageProps> = ({ people, organizations, settings
     };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md">
-            <div className="flex justify-between items-center mb-6">
+        <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0 gap-4">
                 <h1 className="text-2xl font-bold text-slate-800">Участники</h1>
-                <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
-                    <PlusIcon /> Добавить человека
-                </button>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => setIsImportModalOpen(true)}
+                        className="flex items-center bg-slate-100 text-slate-700 border border-slate-300 px-3 py-2 rounded-md hover:bg-slate-200 transition-colors"
+                        title="Копировать из другого объекта"
+                    >
+                        <CopyIcon className="w-5 h-5 mr-1" /> Копировать
+                    </button>
+                    <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                        <PlusIcon /> Добавить человека
+                    </button>
+                </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="flex-grow overflow-auto border rounded-md">
                 <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50">
+                    <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">ФИО</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Должность</th>
@@ -245,7 +268,7 @@ const PeoplePage: React.FC<PeoplePageProps> = ({ people, organizations, settings
                             <tr key={person.id} className="hover:bg-slate-50 allow-text-selection">
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{person.name}</td>
                                 <td className="px-6 py-4 text-sm text-slate-600 max-w-sm whitespace-normal">{person.position}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">{person.organization}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">{person.organization || <span className="text-slate-300 italic">Не указана</span>}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                     <div className="flex justify-end space-x-2">
                                         <button onClick={() => handleOpenModal(person)} className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full" title="Редактировать"><EditIcon /></button>
@@ -273,6 +296,24 @@ const PeoplePage: React.FC<PeoplePageProps> = ({ people, organizations, settings
                     onClose={handleCloseModal}
                 />
             </Modal>
+
+            <ObjectResourceImporter 
+                isOpen={isImportModalOpen}
+                onClose={() => setIsImportModalOpen(false)}
+                title="Копирование участников"
+                constructionObjects={constructionObjects}
+                currentObjectId={currentObjectId}
+                allItems={allPeople}
+                existingItems={people}
+                isDuplicate={(item, existing) => existing.some(e => e.name === item.name && e.position === item.position)}
+                onImport={onImport}
+                renderItem={(item) => (
+                    <div>
+                        <div className="font-semibold text-sm text-slate-800">{item.name}</div>
+                        <div className="text-xs text-slate-500">{item.position} {item.organization && `(${item.organization})`}</div>
+                    </div>
+                )}
+            />
         </div>
     );
 };

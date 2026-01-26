@@ -1,14 +1,20 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Organization, ProjectSettings } from '../types';
+import { Organization, ProjectSettings, ConstructionObject } from '../types';
 import Modal from '../components/Modal';
-import { PlusIcon, EditIcon, DeleteIcon } from '../components/Icons';
+import { PlusIcon, EditIcon, DeleteIcon, CopyIcon } from '../components/Icons';
 import { GoogleGenAI } from '@google/genai';
+import ObjectResourceImporter from '../components/ObjectResourceImporter';
 
 interface OrganizationsPageProps {
-    organizations: Organization[];
+    organizations: Organization[]; // Current object's orgs
+    allOrganizations: Organization[]; // All orgs for copying
+    constructionObjects: ConstructionObject[];
+    currentObjectId: string | null;
     settings: ProjectSettings;
     onSave: (org: Organization) => void;
     onDelete: (id: string) => void;
+    onImport: (items: Organization[]) => void;
 }
 
 const CameraIcon: React.FC = () => (
@@ -129,6 +135,12 @@ const OrganizationForm: React.FC<{
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        // Validation: Name, INN, OGRN, Address are required
+        if (!formData.name.trim() || !formData.inn.trim() || !formData.ogrn.trim() || !formData.address.trim()) {
+            alert("Пожалуйста, заполните обязательные поля: Наименование, ИНН, ОГРН, Адрес.");
+            return;
+        }
+
         onSave({
             id: organization?.id || crypto.randomUUID(),
             ...formData,
@@ -151,16 +163,16 @@ const OrganizationForm: React.FC<{
                 </div>
             )}
             <div>
-                <label className={labelClass}>Наименование организации</label>
+                <label className={labelClass}>Наименование организации <span className="text-red-500">*</span></label>
                 <input type="text" name="name" value={formData.name} onChange={handleChange} className={inputClass} required />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <label className={labelClass}>ИНН</label>
+                    <label className={labelClass}>ИНН <span className="text-red-500">*</span></label>
                     <input type="text" name="inn" value={formData.inn} onChange={handleChange} className={inputClass} required />
                 </div>
                 <div>
-                    <label className={labelClass}>ОГРН</label>
+                    <label className={labelClass}>ОГРН <span className="text-red-500">*</span></label>
                     <input type="text" name="ogrn" value={formData.ogrn} onChange={handleChange} className={inputClass} required />
                 </div>
             </div>
@@ -169,7 +181,7 @@ const OrganizationForm: React.FC<{
                 <input type="text" name="kpp" value={formData.kpp} onChange={handleChange} className={inputClass} />
             </div>
             <div>
-                <label className={labelClass}>Юридический/почтовый адрес</label>
+                <label className={labelClass}>Юридический/почтовый адрес <span className="text-red-500">*</span></label>
                 <input type="text" name="address" value={formData.address} onChange={handleChange} className={inputClass} required />
             </div>
             <div>
@@ -188,8 +200,9 @@ const OrganizationForm: React.FC<{
     );
 };
 
-const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ organizations, settings, onSave, onDelete }) => {
+const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ organizations, allOrganizations, constructionObjects, currentObjectId, settings, onSave, onDelete, onImport }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
 
     const handleOpenModal = (org: Organization | null = null) => {
@@ -207,17 +220,26 @@ const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ organizations, se
     };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md">
-            <div className="flex justify-between items-center mb-6">
+        <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0 gap-4">
                 <h1 className="text-2xl font-bold text-slate-800">Организации</h1>
-                <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
-                    <PlusIcon /> Добавить организацию
-                </button>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => setIsImportModalOpen(true)}
+                        className="flex items-center bg-slate-100 text-slate-700 border border-slate-300 px-3 py-2 rounded-md hover:bg-slate-200 transition-colors"
+                        title="Копировать из другого объекта"
+                    >
+                        <CopyIcon className="w-5 h-5 mr-1" /> Копировать
+                    </button>
+                    <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                        <PlusIcon /> Добавить организацию
+                    </button>
+                </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="flex-grow overflow-auto border rounded-md">
                 <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50">
+                    <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Наименование и реквизиты</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Контактная информация</th>
@@ -259,6 +281,24 @@ const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ organizations, se
             <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingOrg ? 'Редактировать данные' : 'Новая организация'}>
                 <OrganizationForm organization={editingOrg} settings={settings} onSave={onSave} onClose={handleCloseModal} />
             </Modal>
+
+            <ObjectResourceImporter 
+                isOpen={isImportModalOpen}
+                onClose={() => setIsImportModalOpen(false)}
+                title="Копирование организаций"
+                constructionObjects={constructionObjects}
+                currentObjectId={currentObjectId}
+                allItems={allOrganizations}
+                existingItems={organizations}
+                isDuplicate={(item, existing) => existing.some(e => e.inn === item.inn || e.ogrn === item.ogrn)}
+                onImport={onImport}
+                renderItem={(item) => (
+                    <div>
+                        <div className="font-semibold text-sm text-slate-800">{item.name}</div>
+                        <div className="text-xs text-slate-500">ИНН: {item.inn} | ОГРН: {item.ogrn}</div>
+                    </div>
+                )}
+            />
         </div>
     );
 };
