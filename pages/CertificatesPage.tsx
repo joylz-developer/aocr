@@ -1696,7 +1696,6 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                                 <LinkIcon className="w-3 h-3" /> {linkCount}
                                             </button>
                                         )}
-                                        <button onClick={(e) => { e.stopPropagation(); handleOpenModal(cert); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
                                         <button onClick={(e) => handleClickDelete(e, cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
                                     </div>
                                 </div>
@@ -1772,7 +1771,6 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                                 <LinkIcon className="w-3 h-3" /> {linkCount}
                                             </button>
                                         )}
-                                        <button onClick={(e) => { e.stopPropagation(); handleOpenModal(cert); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Редактировать"><EditIcon className="w-4 h-4"/></button>
                                         <button onClick={(e) => handleClickDelete(e, cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
                                     </div>
                                 </div>
@@ -1853,7 +1851,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                 <div className="p-0.5 bg-slate-200 rounded text-slate-600"><CloseIcon className="w-4 h-4" /></div>
                                 <div>
                                     <div className="font-semibold text-sm text-slate-800">Удалить Сертификат и Ссылки</div>
-                                    <div className="text-xs text-slate-500">Сертификат удаляется. В актах останется название материала, но исчезнет текст "(сертификат №...)".</div>
+                                    <div className="text-xs text-slate-500">Сертификат удаляется. В актах останутся названия материалов, но исчезнет текст "(сертификат №...)".</div>
                                 </div>
                             </button>
 
