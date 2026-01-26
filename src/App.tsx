@@ -632,7 +632,7 @@ const App: React.FC = () => {
                         {currentPage === 'settings' && (
                             <SettingsPage
                                 settings={settings}
-                                onSave={(s) => setSettings(s)}
+                                onSave={setSettings}
                                 onImport={() => {
                                     const input = document.createElement('input');
                                     input.type = 'file';
