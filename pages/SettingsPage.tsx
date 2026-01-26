@@ -357,10 +357,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
             <div className="flex-grow overflow-y-auto px-6 pb-20">
                 {activeTab === 'general' && (
                     <div className="space-y-6">
-                        <div className="bg-blue-50 border border-blue-200 p-3 rounded-md text-sm text-blue-800">
-                            <strong>Информация:</strong> Наименование объекта строительства теперь задается в левом меню (вверху). Это позволяет вести несколько объектов параллельно.
-                        </div>
-                        
                         <div>
                             <label htmlFor="geminiApiKey" className={labelClass}>
                                 Gemini API Key
