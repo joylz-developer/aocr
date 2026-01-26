@@ -1824,7 +1824,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                 </div>
             </div>
 
-            <div className="flex-grow overflow-auto pb-16">
+            <div className="flex-grow overflow-auto pb-16 p-2">
                  <div className={`grid ${gridColsClass} gap-4`}>
                     {filteredCertificates.map(cert => {
                         const hasFiles = (cert.files && cert.files.length > 0) || !!cert.fileData;
@@ -1839,7 +1839,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                 <div 
                                     key={cert.id} 
                                     className={`border rounded-lg p-3 hover:shadow-md transition-all bg-white flex items-center gap-4 cursor-pointer group select-none
-                                        ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50' : 'border-slate-200'}
+                                        ${isSelected ? 'border-blue-500 ring-2 ring-blue-500 bg-blue-50 z-10' : 'border-slate-200'}
                                     `}
                                     onClick={(e) => handleCardClick(e, cert)}
                                     onContextMenu={(e) => handleContextMenu(e, cert.id)}
@@ -1893,7 +1893,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                         <div 
                             key={cert.id} 
                             className={`border rounded-lg overflow-hidden hover:shadow-md transition-all bg-white flex flex-col h-full cursor-pointer relative group select-none
-                                ${isSelected ? 'border-blue-500 ring-2 ring-blue-500' : 'border-slate-200'}
+                                ${isSelected ? 'border-blue-500 ring-2 ring-blue-500 z-10' : 'border-slate-200'}
                             `}
                             onClick={(e) => handleCardClick(e, cert)}
                             onContextMenu={(e) => handleContextMenu(e, cert.id)}
