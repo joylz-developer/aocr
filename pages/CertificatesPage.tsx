@@ -3,7 +3,8 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 're
 import { Certificate, ProjectSettings, CertificateFile, Act } from '../types';
 import Modal from '../components/Modal';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { PlusIcon, DeleteIcon, EditIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon, LayoutListIcon, LayoutGridIcon, ColumnsIcon, LinkIcon, ChevronDownIcon, MinimizeIcon, MaximizeIcon, ArrowRightIcon, CheckIcon, XIcon, ArrowDownCircleIcon } from '../components/Icons';
+import { PlusIcon, DeleteIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon, LayoutListIcon, LayoutGridIcon, LinkIcon, ChevronDownIcon, MinimizeIcon, MaximizeIcon, ArrowRightIcon, CheckIcon } from '../components/Icons';
+import { ContextMenu, MenuItem } from '../components/ContextMenu';
 import { GoogleGenAI } from '@google/genai';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
@@ -1387,6 +1388,15 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
     const [deleteWarning, setDeleteWarning] = useState<{ cert: Certificate, usedInActs: string[] } | null>(null);
     const [manageLinksCert, setManageLinksCert] = useState<{ cert: Certificate, usedInActs: {id: string, number: string}[] } | null>(null);
 
+    // Selection Mode States
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
+    const [selectedCertIds, setSelectedCertIds] = useState<Set<string>>(new Set());
+    const [lastSelectedCertId, setLastSelectedCertId] = useState<string | null>(null);
+    const [contextMenu, setContextMenu] = useState<{x: number, y: number, certId?: string} | null>(null);
+    
+    // Bulk Delete State
+    const [bulkDeleteWarning, setBulkDeleteWarning] = useState<{ linkedCount: number, totalCount: number, certsWithLinks: {cert: Certificate, actNumbers: string[]}[] } | null>(null);
+
     // Calculate usage once per render for all certs (optimization)
     const usageMap = useMemo(() => {
         const map = new Map<string, number>();
@@ -1519,7 +1529,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
             });
     };
     
-    // Smart Delete Logic
+    // Smart Delete Logic (Single)
     const handleClickDelete = (e: React.MouseEvent, cert: Certificate) => {
         e.stopPropagation();
         // Check for usage in acts
@@ -1540,12 +1550,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
     
     const handleConfirmDelete = (mode: 'default' | 'clean' | 'remove_materials') => {
         if (!deleteWarning) return;
-        
         const cert = deleteWarning.cert;
-        
-        // 1. Just Delete (Default): Cert is gone, Acts keep text "(cert 123)" but it's dead text.
-        // 2. Clean: Delete Cert, remove "(cert 123)" from Acts, keeping material name.
-        // 3. Remove Materials: Delete Cert, remove entire material line from Acts.
         
         if (mode === 'clean') {
             onUnlink(cert, 'remove_reference');
@@ -1555,6 +1560,68 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
         
         onDelete(cert.id);
         setDeleteWarning(null);
+    };
+
+    // Bulk Delete Logic
+    const handleBulkDelete = () => {
+        const idsToDelete = Array.from(selectedCertIds);
+        if (idsToDelete.length === 0) return;
+
+        // Check for links
+        const certsWithLinks: {cert: Certificate, actNumbers: string[]}[] = [];
+        
+        idsToDelete.forEach(certId => {
+            const cert = certificates.find(c => c.id === certId);
+            if (!cert) return;
+            
+            const linkedActs: string[] = [];
+            const searchStr = `(сертификат № ${cert.number}`;
+            
+            acts.forEach(act => {
+                if (act.materials.includes(searchStr)) {
+                    linkedActs.push(act.number || 'б/н');
+                }
+            });
+            
+            if (linkedActs.length > 0) {
+                certsWithLinks.push({ cert, actNumbers: linkedActs });
+            }
+        });
+
+        if (certsWithLinks.length > 0) {
+            setBulkDeleteWarning({
+                linkedCount: certsWithLinks.length,
+                totalCount: idsToDelete.length,
+                certsWithLinks
+            });
+        } else {
+            // No links, just delete
+            if (confirm(`Вы уверены, что хотите удалить ${idsToDelete.length} сертификатов?`)) {
+                idsToDelete.forEach(id => onDelete(id));
+                setSelectedCertIds(new Set());
+                setIsSelectionMode(false);
+            }
+        }
+    };
+
+    const handleConfirmBulkDelete = (mode: 'default' | 'clean' | 'remove_materials') => {
+        if (!bulkDeleteWarning) return;
+        
+        const idsToDelete = Array.from(selectedCertIds);
+        
+        // Handle linked ones specially if needed
+        if (mode !== 'default') {
+            bulkDeleteWarning.certsWithLinks.forEach(({ cert }) => {
+                if (mode === 'clean') onUnlink(cert, 'remove_reference');
+                else if (mode === 'remove_materials') onUnlink(cert, 'remove_entry');
+            });
+        }
+        
+        // Perform delete for all
+        idsToDelete.forEach(id => onDelete(id));
+        setBulkDeleteWarning(null);
+        setSelectedCertIds(new Set());
+        setIsSelectionMode(false);
     };
 
     const handleManageLinks = (e: React.MouseEvent, cert: Certificate) => {
@@ -1585,10 +1652,65 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
         });
     };
 
+    // --- Selection Mode Logic ---
+    const handleContextMenu = (e: React.MouseEvent, certId: string) => {
+        e.preventDefault();
+        setContextMenu({ x: e.clientX, y: e.clientY, certId });
+    };
+
+    const toggleSelection = (e: React.MouseEvent, certId: string) => {
+        e.stopPropagation();
+        
+        if (e.shiftKey && lastSelectedCertId) {
+            // Range Selection logic
+            const currentIndex = filteredCertificates.findIndex(c => c.id === certId);
+            const lastIndex = filteredCertificates.findIndex(c => c.id === lastSelectedCertId);
+            
+            if (currentIndex !== -1 && lastIndex !== -1) {
+                const start = Math.min(currentIndex, lastIndex);
+                const end = Math.max(currentIndex, lastIndex);
+                
+                setSelectedCertIds(prev => {
+                    const newSet = new Set(prev);
+                    // Add everything in range
+                    for (let i = start; i <= end; i++) {
+                        newSet.add(filteredCertificates[i].id);
+                    }
+                    return newSet;
+                });
+            }
+        } else {
+            // Normal toggle
+            setSelectedCertIds(prev => {
+                const newSet = new Set(prev);
+                if (newSet.has(certId)) newSet.delete(certId);
+                else newSet.add(certId);
+                
+                // If exiting selection mode by unchecking last item? No, usually keep mode until explicit exit.
+                return newSet;
+            });
+            setLastSelectedCertId(certId);
+        }
+    };
+
+    const handleCardClick = (e: React.MouseEvent, cert: Certificate) => {
+        if (isSelectionMode) {
+            toggleSelection(e, cert.id);
+        } else {
+            handleOpenModal(cert);
+        }
+    };
+
+    const exitSelectionMode = () => {
+        setIsSelectionMode(false);
+        setSelectedCertIds(new Set());
+        setLastSelectedCertId(null);
+    };
+
     const gridColsClass = columnCount === 1 ? 'grid-cols-1' : columnCount === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
+        <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col relative" onClick={() => setContextMenu(null)}>
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0 gap-4">
                 <h1 className="text-2xl font-bold text-slate-800">Сертификаты и Паспорта</h1>
                 <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 whitespace-nowrap">
@@ -1656,7 +1778,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                 </div>
             </div>
 
-            <div className="flex-grow overflow-auto">
+            <div className="flex-grow overflow-auto pb-16">
                  <div className={`grid ${gridColsClass} gap-4`}>
                     {filteredCertificates.map(cert => {
                         const hasFiles = (cert.files && cert.files.length > 0) || !!cert.fileData;
@@ -1664,10 +1786,28 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                         const fileCount = cert.files?.length || (cert.fileData ? 1 : 0);
                         const linkCount = usageMap.get(cert.id) || 0;
                         const isExpanded = expandedMaterialCards.has(cert.id);
+                        const isSelected = selectedCertIds.has(cert.id);
 
                         if (viewMode === 'list') {
                             return (
-                                <div key={cert.id} className="border border-slate-200 rounded-lg p-3 hover:shadow-md transition-shadow bg-white flex items-center gap-4 cursor-pointer group" onClick={() => handleOpenModal(cert)}>
+                                <div 
+                                    key={cert.id} 
+                                    className={`border rounded-lg p-3 hover:shadow-md transition-all bg-white flex items-center gap-4 cursor-pointer group select-none
+                                        ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50' : 'border-slate-200'}
+                                    `}
+                                    onClick={(e) => handleCardClick(e, cert)}
+                                    onContextMenu={(e) => handleContextMenu(e, cert.id)}
+                                >
+                                    {isSelectionMode && (
+                                        <div className="flex-shrink-0">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={isSelected}
+                                                onChange={() => {}} // Handled by onClick of parent
+                                                className="h-5 w-5 form-checkbox-custom cursor-pointer"
+                                            />
+                                        </div>
+                                    )}
                                     <div className="p-2 bg-slate-100 rounded text-slate-500 cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePreview(cert); }}>
                                         <CertificateIcon className="w-6 h-6" />
                                     </div>
@@ -1696,7 +1836,9 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                                 <LinkIcon className="w-3 h-3" /> {linkCount}
                                             </button>
                                         )}
-                                        <button onClick={(e) => handleClickDelete(e, cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
+                                        {!isSelectionMode && (
+                                            <button onClick={(e) => handleClickDelete(e, cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
+                                        )}
                                     </div>
                                 </div>
                             );
@@ -1706,14 +1848,34 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                         return (
                         <div 
                             key={cert.id} 
-                            className="border border-slate-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col h-full cursor-pointer relative group"
-                            onClick={() => handleOpenModal(cert)}
+                            className={`border rounded-lg overflow-hidden hover:shadow-md transition-all bg-white flex flex-col h-full cursor-pointer relative group select-none
+                                ${isSelected ? 'border-blue-500 ring-2 ring-blue-500' : 'border-slate-200'}
+                            `}
+                            onClick={(e) => handleCardClick(e, cert)}
+                            onContextMenu={(e) => handleContextMenu(e, cert.id)}
                         >
+                            {/* Checkbox Overlay for Selection Mode */}
+                            {isSelectionMode && (
+                                <div className="absolute top-2 left-2 z-20">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={isSelected}
+                                        onChange={() => {}} // Handled by onClick parent
+                                        className="h-5 w-5 form-checkbox-custom cursor-pointer shadow-sm"
+                                    />
+                                </div>
+                            )}
+
                             {/* Thumbnail Section */}
                             <div 
                                 className="h-40 bg-slate-200 border-b border-slate-100 flex items-center justify-center cursor-pointer relative overflow-hidden"
-                                onClick={(e) => { e.stopPropagation(); handlePreview(cert); }}
+                                onClick={(e) => { 
+                                    if(isSelectionMode) return;
+                                    e.stopPropagation(); 
+                                    handlePreview(cert); 
+                                }}
                                 onDoubleClick={(e) => {
+                                    if(isSelectionMode) return;
                                     e.stopPropagation();
                                     if(mainFile.data) openInNewTab(mainFile.data);
                                 }}
@@ -1746,11 +1908,13 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                     </div>
                                 )}
                                 
-                                <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-10 transition-opacity flex items-center justify-center pointer-events-none">
-                                    <span className="opacity-0 group-hover:opacity-100 bg-white/90 px-3 py-1 rounded-full text-xs font-medium shadow-sm">
-                                        Редактировать
-                                    </span>
-                                </div>
+                                {!isSelectionMode && (
+                                    <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-10 transition-opacity flex items-center justify-center pointer-events-none">
+                                        <span className="opacity-0 group-hover:opacity-100 bg-white/90 px-3 py-1 rounded-full text-xs font-medium shadow-sm">
+                                            Редактировать
+                                        </span>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="p-4 flex flex-col flex-grow">
@@ -1771,7 +1935,9 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                                 <LinkIcon className="w-3 h-3" /> {linkCount}
                                             </button>
                                         )}
-                                        <button onClick={(e) => handleClickDelete(e, cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
+                                        {!isSelectionMode && (
+                                            <button onClick={(e) => handleClickDelete(e, cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
+                                        )}
                                     </div>
                                 </div>
                                 
@@ -1808,6 +1974,51 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                  </div>
             </div>
 
+            {/* Bottom Floating Bar for Bulk Actions */}
+            {isSelectionMode && (
+                <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-white shadow-xl border border-slate-200 rounded-full px-6 py-2 flex items-center gap-4 z-50 animate-fade-in-up">
+                    <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">
+                        Выбрано: {selectedCertIds.size}
+                    </span>
+                    <div className="h-4 w-px bg-slate-300"></div>
+                    <button 
+                        onClick={handleBulkDelete}
+                        disabled={selectedCertIds.size === 0} 
+                        className="flex items-center gap-2 text-sm text-red-600 hover:text-red-800 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <DeleteIcon className="w-4 h-4" /> Удалить
+                    </button>
+                    <button 
+                        onClick={exitSelectionMode}
+                        className="text-sm text-slate-500 hover:text-slate-800 transition-colors"
+                    >
+                        Отмена
+                    </button>
+                </div>
+            )}
+
+            {/* Context Menu */}
+            {contextMenu && (
+                <ContextMenu 
+                    x={contextMenu.x} 
+                    y={contextMenu.y} 
+                    onClose={() => setContextMenu(null)}
+                >
+                    <MenuItem 
+                        icon={<CheckIcon className="w-4 h-4"/>} 
+                        label="Выбрать" 
+                        onClick={() => {
+                            setIsSelectionMode(true);
+                            if (contextMenu.certId) {
+                                setSelectedCertIds(new Set([contextMenu.certId]));
+                                setLastSelectedCertId(contextMenu.certId);
+                            }
+                            setContextMenu(null);
+                        }} 
+                    />
+                </ContextMenu>
+            )}
+
             <Modal 
                 isOpen={isModalOpen} 
                 onClose={handleCloseModal} 
@@ -1818,7 +2029,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                 <CertificateForm certificate={editingCert} settings={settings} onSave={onSave} onClose={handleCloseModal} />
             </Modal>
             
-            {/* Delete Warning Modal */}
+            {/* Single Delete Warning Modal */}
             {deleteWarning && (
                 <Modal 
                     isOpen={true} 
@@ -1868,6 +2079,70 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
 
                             <button 
                                 onClick={() => setDeleteWarning(null)} 
+                                className="w-full text-slate-500 hover:text-slate-800 text-sm py-2 mt-2"
+                            >
+                                Отмена
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Bulk Delete Warning Modal */}
+            {bulkDeleteWarning && (
+                <Modal 
+                    isOpen={true} 
+                    onClose={() => setBulkDeleteWarning(null)} 
+                    title="Массовое удаление"
+                >
+                    <div className="space-y-4">
+                        <p className="text-slate-700">
+                            Вы выбрали для удаления <strong>{bulkDeleteWarning.totalCount}</strong> сертификатов.
+                        </p>
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+                            <strong>Внимание:</strong> {bulkDeleteWarning.linkedCount} из них используются в актах.
+                        </div>
+                        
+                        <p className="text-sm text-slate-600">
+                            Выберите, как поступить с сертификатами, которые имеют связи:
+                        </p>
+
+                        <div className="flex flex-col gap-3 pt-2">
+                             <button 
+                                onClick={() => handleConfirmBulkDelete('remove_materials')} 
+                                className="w-full flex items-start gap-3 bg-red-50 text-red-800 border border-red-200 p-3 rounded-md hover:bg-red-100 transition-colors text-left"
+                            >
+                                <DeleteIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                                <div>
+                                    <div className="font-semibold text-sm">Удалить Сертификаты и Строки материалов</div>
+                                    <div className="text-xs opacity-75">Строки материалов, ссылающиеся на удаляемые сертификаты, будут удалены из актов.</div>
+                                </div>
+                            </button>
+
+                             <button 
+                                onClick={() => handleConfirmBulkDelete('clean')} 
+                                className="w-full flex items-start gap-3 bg-white border border-slate-300 p-3 rounded-md hover:bg-slate-50 transition-colors text-left"
+                            >
+                                <div className="p-0.5 bg-slate-200 rounded text-slate-600"><CloseIcon className="w-4 h-4" /></div>
+                                <div>
+                                    <div className="font-semibold text-sm text-slate-800">Удалить Сертификаты и Ссылки</div>
+                                    <div className="text-xs text-slate-500">Сертификаты удаляются. Из актов удаляется только текст "(сертификат №...)", название материала остается.</div>
+                                </div>
+                            </button>
+
+                            <button 
+                                onClick={() => handleConfirmBulkDelete('default')} 
+                                className="w-full flex items-start gap-3 bg-white border border-slate-300 p-3 rounded-md hover:bg-slate-50 transition-colors text-left"
+                            >
+                                <div className="p-0.5 bg-slate-200 rounded text-slate-600"><CheckIcon className="w-4 h-4" /></div>
+                                <div>
+                                    <div className="font-semibold text-sm text-slate-800">Удалить Сертификаты, Оставить текст</div>
+                                    <div className="text-xs text-slate-500">Сертификаты удаляются из базы. Текст в актах не меняется.</div>
+                                </div>
+                            </button>
+
+                            <button 
+                                onClick={() => setBulkDeleteWarning(null)} 
                                 className="w-full text-slate-500 hover:text-slate-800 text-sm py-2 mt-2"
                             >
                                 Отмена
