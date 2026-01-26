@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry, ExportSettings, CertificateFile, ConstructionObject } from './types';
@@ -631,7 +632,7 @@ const App: React.FC = () => {
                         {currentPage === 'settings' && (
                             <SettingsPage
                                 settings={settings}
-                                onSave={(s) => setSettings(s)}
+                                onSave={setSettings}
                                 onImport={() => {
                                     const input = document.createElement('input');
                                     input.type = 'file';

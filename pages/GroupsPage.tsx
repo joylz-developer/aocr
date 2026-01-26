@@ -170,17 +170,17 @@ const GroupsPage: React.FC<GroupsPageProps> = ({ groups, people, organizations, 
     const hasOrgs = (group: CommissionGroup) => group.builderOrgId || group.contractorOrgId || group.designerOrgId || group.workPerformerOrgId;
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md">
-            <div className="flex justify-between items-center mb-6">
+        <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
+            <div className="flex justify-between items-center mb-6 flex-shrink-0">
                 <h1 className="text-2xl font-bold text-slate-800">Группы комиссий</h1>
                 <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
                     <PlusIcon /> Создать группу
                 </button>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="flex-grow overflow-auto border rounded-md">
                 <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50">
+                    <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Название группы</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Состав</th>
