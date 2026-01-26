@@ -1,10 +1,17 @@
 
+export interface ConstructionObject {
+    id: string;
+    name: string;
+    description?: string;
+}
+
 export interface Person {
     id: string;
     name: string;
     position: string;
     organization: string;
     authDoc?: string;
+    constructionObjectId?: string; // Linked to object
 }
 
 export interface Organization {
@@ -16,6 +23,7 @@ export interface Organization {
     address: string;
     phone?: string;
     sro?: string;
+    // Organizations remain global
 }
 
 export interface Regulation {
@@ -30,6 +38,8 @@ export interface Regulation {
     activeDate?: string;
     orgApprover?: string;
     fullJson?: any; // Keep original data just in case
+    
+    constructionObjectId?: string; // Linked to object
     
     // UI Only field for grouping
     embeddedChanges?: Regulation[]; 
@@ -57,6 +67,7 @@ export interface Certificate {
     fileData?: string; 
     
     materials: string[]; // List of material names included in this certificate
+    constructionObjectId?: string; // Linked to object
 }
 
 // Map of representative roles to their descriptions
@@ -75,7 +86,7 @@ export interface Act {
     id: string;
     number: string;
     date: string; // YYYY-MM-DD
-    objectName: string;
+    objectName: string; // Snapshot of object name, but linked via ID
     
     // Legacy/generated fields
     builderDetails: string;
@@ -110,6 +121,7 @@ export interface Act {
     
     commissionGroupId?: string;
     nextWorkActId?: string;
+    constructionObjectId?: string; // Linked to object
 }
 
 export interface CommissionGroup {
@@ -122,11 +134,12 @@ export interface CommissionGroup {
     contractorOrgId?: string;
     designerOrgId?: string;
     workPerformerOrgId?: string;
+    constructionObjectId?: string; // Linked to object
 }
 
 // Types for Project Settings
 export interface ProjectSettings {
-    objectName: string;
+    // objectName: string; // REMOVED: Now managed via ConstructionObject
     defaultCopiesCount: number;
     showAdditionalInfo: boolean;
     showAttachments: boolean;
@@ -168,6 +181,7 @@ export interface ImportSettings {
     regulations?: ImportSettingsCategory;
     certificates?: ImportSettingsCategory;
     deletedActs?: ImportSettingsCategory;
+    constructionObjects?: ImportSettingsCategory; // New import category
 }
 
 export interface ExportSettings {
@@ -182,6 +196,7 @@ export interface ExportSettings {
     certificates: boolean;
     deletedActs: boolean;
     deletedCertificates: boolean;
+    constructionObjects?: boolean; // Export objects structure
 }
 
 
@@ -189,6 +204,7 @@ export interface ImportData {
     template?: string | null;
     registryTemplate?: string | null; // New data field
     projectSettings?: ProjectSettings;
+    constructionObjects?: ConstructionObject[]; // New
     acts?: Act[];
     people?: Person[];
     organizations?: Organization[];
@@ -203,7 +219,7 @@ export interface ImportData {
 export type ActTableColumnKey = Exclude<keyof Act, 
     'representatives' | 'builderDetails' | 'contractorDetails' | 
     'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 
-    'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'nextWorkActId'
+    'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'nextWorkActId' | 'constructionObjectId'
 > | 'workDates' | 'commissionGroup';
 
 // Defines the available pages in the application

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation, Certificate } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -167,7 +166,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
             id: crypto.randomUUID(),
             number: '', 
             date: new Date().toISOString().split('T')[0],
-            objectName: settings.objectName, 
+            objectName: '', 
             builderDetails: '', 
             contractorDetails: '',
             designerDetails: '', 

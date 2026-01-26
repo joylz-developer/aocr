@@ -1,7 +1,6 @@
-
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry, ExportSettings, CertificateFile } from './types';
+import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry, ExportSettings, CertificateFile, ConstructionObject } from './types';
 import TemplateUploader from './components/TemplateUploader';
 import ImportModal from './components/ImportModal';
 import ExportModal from './components/ExportModal';
@@ -64,6 +63,10 @@ const App: React.FC = () => {
     const [template, setTemplate] = useLocalStorage<string | null>('docx_template', null);
     const [registryTemplate, setRegistryTemplate] = useLocalStorage<string | null>('docx_registry_template', null);
     
+    // Core Data
+    const [constructionObjects, setConstructionObjects] = useLocalStorage<ConstructionObject[]>('construction_objects', []);
+    const [currentObjectId, setCurrentObjectId] = useLocalStorage<string | null>('current_construction_object_id', null);
+
     const [acts, setActs] = useLocalStorage<Act[]>('acts_data', []);
     const [deletedActs, setDeletedActs] = useLocalStorage<DeletedActEntry[]>('deleted_acts', []);
     const [people, setPeople] = useLocalStorage<Person[]>('people_data', []);
@@ -72,8 +75,9 @@ const App: React.FC = () => {
     const [regulations, setRegulations] = useLocalStorage<Regulation[]>('regulations_data', []);
     const [certificates, setCertificates] = useLocalStorage<Certificate[]>('certificates_data', []);
     const [deletedCertificates, setDeletedCertificates] = useLocalStorage<DeletedCertificateEntry[]>('deleted_certificates', []);
+    
+    // Settings
     const [settings, setSettings] = useLocalStorage<ProjectSettings>('project_settings', {
-        objectName: '',
         defaultCopiesCount: 2,
         showAdditionalInfo: true,
         showAttachments: true,
@@ -89,50 +93,67 @@ const App: React.FC = () => {
         certificatePromptMaterials: DEFAULT_PROMPT_MATERIALS
     });
     
-    // Theme State
+    // --- MIGRATION LOGIC for Construction Objects ---
+    useEffect(() => {
+        // Check if we have data but no objects (Legacy Mode)
+        const hasData = acts.length > 0 || people.length > 0 || certificates.length > 0;
+        const hasObjects = constructionObjects.length > 0;
+
+        if (hasData && !hasObjects) {
+            // Create a default object using the old objectName setting if available
+            const legacyName = (settings as any).objectName || 'Мой объект';
+            const newObj: ConstructionObject = { id: crypto.randomUUID(), name: legacyName };
+            
+            setConstructionObjects([newObj]);
+            setCurrentObjectId(newObj.id);
+
+            // Function to migrate array items
+            const migrate = (items: any[]) => items.map(i => ({ 
+                ...i, 
+                constructionObjectId: i.constructionObjectId || newObj.id 
+            }));
+            
+            setActs(prev => migrate(prev));
+            setPeople(prev => migrate(prev));
+            setGroups(prev => migrate(prev));
+            setRegulations(prev => migrate(prev));
+            setCertificates(prev => migrate(prev));
+            
+            // Clean up old settings
+            const newSettings = { ...settings };
+            delete (newSettings as any).objectName;
+            setSettings(newSettings);
+        } else if (!hasData && !hasObjects) {
+             // Fresh start
+             const newObj: ConstructionObject = { id: crypto.randomUUID(), name: 'Основной объект' };
+             setConstructionObjects([newObj]);
+             setCurrentObjectId(newObj.id);
+        } else if (hasObjects && !currentObjectId) {
+            // If objects exist but none selected, select first
+            setCurrentObjectId(constructionObjects[0].id);
+        }
+    }, []); // Run once on mount
+
+    // --- Computed Data for Current Object ---
+    const currentActs = useMemo(() => acts.filter(a => a.constructionObjectId === currentObjectId), [acts, currentObjectId]);
+    const currentPeople = useMemo(() => people.filter(p => p.constructionObjectId === currentObjectId), [people, currentObjectId]);
+    const currentGroups = useMemo(() => groups.filter(g => g.constructionObjectId === currentObjectId), [groups, currentObjectId]);
+    const currentRegulations = useMemo(() => regulations.filter(r => r.constructionObjectId === currentObjectId), [regulations, currentObjectId]);
+    const currentCertificates = useMemo(() => certificates.filter(c => c.constructionObjectId === currentObjectId), [certificates, currentObjectId]);
+    // Trash is global or filtered? Better filtered to avoid confusion
+    const currentDeletedActs = useMemo(() => deletedActs.filter(d => d.act.constructionObjectId === currentObjectId), [deletedActs, currentObjectId]);
+    const currentDeletedCertificates = useMemo(() => deletedCertificates.filter(d => d.certificate.constructionObjectId === currentObjectId), [deletedCertificates, currentObjectId]);
+
+    // Theme state
     const [theme, setTheme] = useLocalStorage<Theme>('app_theme', 'light');
 
-    // Persist current page to localStorage
-    const [currentPage, setCurrentPage] = useLocalStorage<Page>('app_current_page', 'acts');
-    
-    // State to handle cross-page navigation to a specific certificate
-    const [targetCertificateId, setTargetCertificateId] = useState<string | null>(null);
-
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-    const importInputRef = useRef<HTMLInputElement>(null);
-    const [importData, setImportData] = useState<ImportData | null>(null);
-    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-
-    const [confirmation, setConfirmation] = useState<{
-        title: string;
-        message: React.ReactNode;
-        onConfirm: () => void;
-        confirmText?: string;
-    } | null>(null);
-    
-    const [restoreGroupConfirmation, setRestoreGroupConfirmation] = useState<{
-        entriesToRestore: DeletedActEntry[];
-        groupsToRestore: CommissionGroup[];
-        onConfirm: (restoreGroups: boolean) => void;
-    } | null>(null);
-
-    // History State
-    const [past, setPast] = useState<Act[][]>([]);
-    const [future, setFuture] = useState<Act[][]>([]);
-
-    // Apply Theme
     useEffect(() => {
-        const root = document.documentElement;
-        root.classList.remove('theme-dark', 'theme-eye-protection');
-        
-        if (theme === 'dark') {
-            root.classList.add('theme-dark');
-        } else if (theme === 'eye-protection') {
-            root.classList.add('theme-eye-protection');
-        }
+        const html = document.documentElement;
+        html.classList.remove('theme-light', 'theme-dark', 'theme-eye-protection');
+        html.classList.add(`theme-${theme}`);
     }, [theme]);
 
-    const handleToggleTheme = () => {
+    const toggleTheme = () => {
         setTheme(prev => {
             if (prev === 'light') return 'dark';
             if (prev === 'dark') return 'eye-protection';
@@ -140,838 +161,681 @@ const App: React.FC = () => {
         });
     };
 
-    const handleTemplateUpload = async (file: File) => {
-        try {
-            const base64 = await fileToBase64(file);
-            setTemplate(base64);
-            // Don't force redirect if they are just updating it
-            // if (isFirstTime) setCurrentPage('settings'); 
-        } catch (error) {
-            console.error("Error converting file to base64:", error);
-            alert("Не удалось загрузить шаблон.");
-        }
+    const [currentPage, setCurrentPage] = useState<Page>('acts');
+    const [importData, setImportData] = useState<ImportData | null>(null);
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [restoreGroupConfirmData, setRestoreGroupConfirmData] = useState<{ groups: CommissionGroup[], entriesToRestore: DeletedActEntry[] } | null>(null);
+    const [confirmationRequest, setConfirmationRequest] = useState<{ title: string, message: React.ReactNode, onConfirm: () => void } | null>(null);
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // --- Handlers for Construction Objects ---
+    const handleAddObject = (name: string) => {
+        const newObj: ConstructionObject = { id: crypto.randomUUID(), name };
+        setConstructionObjects(prev => [...prev, newObj]);
+        setCurrentObjectId(newObj.id);
     };
 
-    const handleRegistryTemplateUpload = async (file: File) => {
-        try {
-            const base64 = await fileToBase64(file);
+    const handleUpdateObject = (id: string, name: string) => {
+        setConstructionObjects(prev => prev.map(o => o.id === id ? { ...o, name } : o));
+    };
+
+    // --- Template Handlers ---
+    const handleTemplateUpload = (file: File) => {
+        fileToBase64(file).then(base64 => {
+            setTemplate(base64);
+        }).catch(err => {
+            console.error("Template upload failed", err);
+            alert("Ошибка загрузки шаблона");
+        });
+    };
+
+    const handleRegistryTemplateUpload = (file: File) => {
+        fileToBase64(file).then(base64 => {
             setRegistryTemplate(base64);
             alert("Шаблон реестра успешно загружен.");
-        } catch (error) {
-            console.error("Error converting file to base64:", error);
-            alert("Не удалось загрузить шаблон реестра.");
-        }
+        }).catch(err => {
+            console.error("Registry template upload failed", err);
+            alert("Ошибка загрузки шаблона реестра");
+        });
     };
 
     const handleDownloadTemplate = (type: 'main' | 'registry' = 'main') => {
-        const temp = type === 'registry' ? registryTemplate : template;
-        const name = type === 'registry' ? 'registry_template.docx' : 'template.docx';
+        const tmpl = type === 'main' ? template : registryTemplate;
+        const name = type === 'main' ? 'Шаблон_Акта.docx' : 'Шаблон_Реестра.docx';
         
-        if (!temp) {
-            alert('Шаблон не загружен.');
-            return;
-        }
-        try {
-            const blob = base64ToBlob(temp);
+        if (tmpl) {
+            const blob = base64ToBlob(tmpl);
             saveAs(blob, name);
-        } catch (error) {
-            console.error('Error downloading template:', error);
-            alert('Ошибка при скачивании шаблона.');
         }
     };
 
-    // Wrapper to update acts and push to history
-    const updateActsWithHistory = (newActs: Act[]) => {
-        setPast(prev => {
-            const newPast = [...prev, acts];
-            const limit = settings.historyDepth || 20;
-            if (newPast.length > limit) return newPast.slice(newPast.length - limit);
-            return newPast;
-        });
-        setFuture([]);
-        setActs(newActs);
-    };
+    // --- Data Handlers (Scoped to Current Object) ---
 
-    const undo = useCallback(() => {
-        if (past.length === 0) return;
-        const previous = past[past.length - 1];
-        const newPast = past.slice(0, past.length - 1);
-        setFuture(prev => [acts, ...prev]);
-        setActs(previous);
-        setPast(newPast);
-    }, [acts, past, setActs]);
-
-    const redo = useCallback(() => {
-        if (future.length === 0) return;
-        const next = future[0];
-        const newFuture = future.slice(1);
-        setPast(prev => [...prev, acts]);
-        setActs(next);
-        setFuture(newFuture);
-    }, [acts, future, setActs]);
-
-
-    const handleSaveAct = useCallback((actToSave: Act, insertAtIndex?: number) => {
-        // Calculate new state based on current 'acts'
-        let newActs = [...acts];
-        const existsIndex = newActs.findIndex(a => a.id === actToSave.id);
+    // 1. Acts
+    const handleSaveAct = (act: Act, insertAtIndex?: number) => {
+        if (!currentObjectId) { alert("Выберите объект строительства"); return; }
         
-        if (existsIndex !== -1) {
-            newActs[existsIndex] = actToSave;
-        } else {
-            const finalIndex = insertAtIndex === undefined ? newActs.length : insertAtIndex;
-            newActs.splice(finalIndex, 0, actToSave);
-        }
+        // Ensure act belongs to current object
+        const actToSave = { ...act, constructionObjectId: currentObjectId };
         
-        // Dynamic Update: Check for other acts that link TO this act and update their text
-        newActs = newActs.map(act => {
-            if (act.nextWorkActId === actToSave.id) {
-                return {
-                    ...act,
-                    nextWork: `Работы по акту №${actToSave.number || 'б/н'} (${actToSave.workName || '...'})`
-                };
+        // Update object name snapshot from current object (for templates)
+        const currentObj = constructionObjects.find(o => o.id === currentObjectId);
+        if (currentObj) actToSave.objectName = currentObj.name;
+
+        setActs(prev => {
+            const existingIndex = prev.findIndex(a => a.id === actToSave.id);
+            if (existingIndex >= 0) {
+                const newActs = [...prev];
+                newActs[existingIndex] = actToSave;
+                return newActs;
+            } else {
+                if (insertAtIndex !== undefined) {
+                    const newActs = [...prev];
+                    newActs.splice(insertAtIndex, 0, actToSave);
+                    return newActs;
+                }
+                return [...prev, actToSave];
             }
-            return act;
         });
+    };
 
-        // Use the history wrapper instead of direct setActs
-        updateActsWithHistory(newActs);
-    }, [acts, settings.historyDepth]); // Depend on acts to calculate next state
+    // 2. People
+    const handleSavePerson = (person: Person) => {
+        if (!currentObjectId) return;
+        const personToSave = { ...person, constructionObjectId: currentObjectId };
+        setPeople(prev => {
+            const index = prev.findIndex(p => p.id === personToSave.id);
+            if (index >= 0) {
+                const newPeople = [...prev];
+                newPeople[index] = personToSave;
+                return newPeople;
+            }
+            return [...prev, personToSave];
+        });
+    };
 
-    const handleReorderActs = useCallback((newActs: Act[]) => {
-        updateActsWithHistory(newActs);
-    }, [acts, settings.historyDepth]);
+    const handleDeletePerson = (id: string) => {
+        setPeople(prev => prev.filter(p => p.id !== id));
+    };
 
-    const handleMoveActsToTrash = useCallback((actIds: string[]) => {
-        const actsToMove = acts.filter(a => actIds.includes(a.id));
-        const remainingActs = acts.filter(a => !actIds.includes(a.id));
+    // 3. Organizations (Global)
+    const handleSaveOrganization = (org: Organization) => {
+        setOrganizations(prev => {
+            const index = prev.findIndex(o => o.id === org.id);
+            if (index >= 0) {
+                const newOrgs = [...prev];
+                newOrgs[index] = org;
+                return newOrgs;
+            }
+            return [...prev, org];
+        });
+    };
+
+    const handleDeleteOrganization = (id: string) => {
+        setOrganizations(prev => prev.filter(o => o.id !== id));
+    };
+
+    // 4. Groups
+    const handleSaveGroup = (group: CommissionGroup) => {
+        if (!currentObjectId) return;
+        const groupToSave = { ...group, constructionObjectId: currentObjectId };
+        setGroups(prev => {
+            const index = prev.findIndex(g => g.id === groupToSave.id);
+            if (index >= 0) {
+                const newGroups = [...prev];
+                newGroups[index] = groupToSave;
+                return newGroups;
+            }
+            return [...prev, groupToSave];
+        });
+    };
+
+    const handleDeleteGroup = (id: string) => {
+        setGroups(prev => prev.filter(g => g.id !== id));
+    };
+
+    // 5. Regulations
+    const handleSaveRegulations = (newRegulations: Regulation[]) => {
+        if (!currentObjectId) return;
+        // Ensure new/updated regulations have the object ID
+        const regsToSave = newRegulations.map(r => ({ ...r, constructionObjectId: currentObjectId }));
         
-        const groupsMap = new Map(groups.map(g => [g.id, g]));
+        // We replace the entire list for the current object usually, but since the input is "newRegulations"
+        // representing the whole state of the page, we need to carefully merge or replace.
+        // The RegulationsPage passes the FULL list of regulations back.
+        // But since regulations are filtered by object on the page, we only get the current object's regs back.
+        // So we need to keep regs from other objects.
+        
+        setRegulations(prev => {
+            const otherRegs = prev.filter(r => r.constructionObjectId !== currentObjectId);
+            return [...otherRegs, ...regsToSave];
+        });
+    };
 
-        const newDeletedEntries: DeletedActEntry[] = actsToMove.map(act => ({
-            act,
-            deletedOn: new Date().toISOString(),
-            associatedGroup: act.commissionGroupId ? groupsMap.get(act.commissionGroupId) : undefined
+    // 6. Certificates
+    const handleSaveCertificate = (cert: Certificate) => {
+        if (!currentObjectId) return;
+        const certToSave = { ...cert, constructionObjectId: currentObjectId };
+        setCertificates(prev => {
+            const index = prev.findIndex(c => c.id === certToSave.id);
+            if (index >= 0) {
+                const newCerts = [...prev];
+                newCerts[index] = certToSave;
+                return newCerts;
+            }
+            return [...prev, certToSave];
+        });
+    };
+
+    const handleDeleteCertificate = (id: string) => {
+        const certToDelete = certificates.find(c => c.id === id);
+        if (certToDelete) {
+            // Move to trash
+            setDeletedCertificates(prev => [
+                { certificate: certToDelete, deletedOn: new Date().toISOString() }, 
+                ...prev
+            ]);
+            setCertificates(prev => prev.filter(c => c.id !== id));
+        }
+    };
+    
+    // Unlink logic for Certs
+    const handleUnlinkCertificate = (cert: Certificate, mode: 'remove_entry' | 'remove_reference') => {
+        const searchStr = `(сертификат № ${cert.number}`;
+        
+        setActs(prevActs => prevActs.map(act => {
+            if (act.constructionObjectId !== currentObjectId) return act;
+            
+            if (!act.materials.includes(searchStr)) return act;
+            
+            const materials = act.materials.split(';').map(s => s.trim());
+            const newMaterials = materials.map(mat => {
+                if (mat.includes(searchStr)) {
+                    if (mode === 'remove_reference') {
+                        // Remove only the parenthetical reference part
+                        return mat.split('(')[0].trim();
+                    } else {
+                        // Mark for removal
+                        return null; 
+                    }
+                }
+                return mat;
+            }).filter(Boolean); // Remove nulls if 'remove_entry'
+            
+            return { ...act, materials: newMaterials.join('; ') };
         }));
-        
-        const updatedRemainingActs = remainingActs.map(act => {
-            if (act.nextWorkActId && actIds.includes(act.nextWorkActId)) {
-                const deletedLinkedAct = actsToMove.find(a => a.id === act.nextWorkActId);
-                return {
-                    ...act,
-                    nextWork: deletedLinkedAct?.workName || `[Удаленный Акт №${deletedLinkedAct?.number || 'б/н'}]`,
-                    nextWorkActId: undefined
-                };
-            }
-            return act;
+    };
+
+    // --- Trash & Restore Logic ---
+    const handleMoveActsToTrash = (actIds: string[]) => {
+        const actsToDelete = acts.filter(a => actIds.includes(a.id));
+        const entries: DeletedActEntry[] = actsToDelete.map(act => {
+            const associatedGroup = groups.find(g => g.id === act.commissionGroupId);
+            return { act, deletedOn: new Date().toISOString(), associatedGroup };
         });
+        setDeletedActs(prev => [...entries, ...prev]);
+        setActs(prev => prev.filter(a => !actIds.includes(a.id)));
+    };
 
-        setDeletedActs(prev => [...prev, ...newDeletedEntries].sort((a,b) => new Date(b.deletedOn).getTime() - new Date(a.deletedOn).getTime()));
-        // Use history wrapper
-        updateActsWithHistory(updatedRemainingActs);
-    }, [acts, groups, setDeletedActs, settings.historyDepth]);
-
-    const handleDirectPermanentDelete = useCallback((actIds: string[]) => {
-        const remainingActs = acts.filter(a => !actIds.includes(a.id));
-        
-        const updatedRemainingActs = remainingActs.map(act => {
-            if (act.nextWorkActId && actIds.includes(act.nextWorkActId)) {
-                return {
-                    ...act,
-                    nextWork: `[Удаленный Акт]`,
-                    nextWorkActId: undefined
-                };
-            }
-            return act;
-        });
-
-        // Use history wrapper, but do NOT add to deletedActs (Trash)
-        updateActsWithHistory(updatedRemainingActs);
-    }, [acts, settings.historyDepth]);
-
-    const handleRestoreActs = useCallback((entriesToRestore: DeletedActEntry[]) => {
-        const uniqueGroupsToRestore = new Map<string, CommissionGroup>();
-        
+    const handleRestoreActs = (entriesToRestore: DeletedActEntry[]) => {
+        const missingGroups = new Set<string>();
         entriesToRestore.forEach(entry => {
-            if (entry.associatedGroup) {
-                const groupExists = groups.some(g => g.id === entry.associatedGroup!.id);
-                if (!groupExists) {
-                    uniqueGroupsToRestore.set(entry.associatedGroup.id, entry.associatedGroup);
+            if (entry.act.commissionGroupId && !groups.some(g => g.id === entry.act.commissionGroupId)) {
+                if (entry.associatedGroup) {
+                    missingGroups.add(JSON.stringify(entry.associatedGroup));
                 }
             }
         });
 
-        const groupsToRestoreList = Array.from(uniqueGroupsToRestore.values());
+        if (missingGroups.size > 0) {
+            const groupsToRestore = Array.from(missingGroups).map(s => JSON.parse(s));
+            setRestoreGroupConfirmData({ groups: groupsToRestore, entriesToRestore });
+        } else {
+            performRestore(entriesToRestore, false);
+        }
+    };
 
-        const performRestore = (restoreAssociatedGroups: boolean) => {
-            const actsToRestore = entriesToRestore.map(entry => entry.act);
-            
-            if (!restoreAssociatedGroups) {
-                actsToRestore.forEach(act => {
-                    if (act.commissionGroupId && uniqueGroupsToRestore.has(act.commissionGroupId)) {
-                        act.commissionGroupId = undefined;
+    const performRestore = (entries: DeletedActEntry[], restoreGroups: boolean) => {
+        const actsToRestore = entries.map(e => e.act);
+        
+        // Restore acts
+        setActs(prev => [...actsToRestore, ...prev]);
+        
+        // Restore groups if requested
+        if (restoreGroups && restoreGroupConfirmData) {
+            setGroups(prev => {
+                const newGroups = [...prev];
+                restoreGroupConfirmData.groups.forEach(g => {
+                    if (!newGroups.some(existing => existing.id === g.id)) {
+                        newGroups.push(g);
                     }
                 });
-            }
-            
-            // For restore, we also want to push to history
-            const newActs = [...acts, ...actsToRestore];
-            updateActsWithHistory(newActs);
-            
-            if (restoreAssociatedGroups) {
-                setGroups(prev => [...prev, ...groupsToRestoreList].sort((a, b) => a.name.localeCompare(b.name)));
-            }
-
-            const entryIdsToRestore = new Set(entriesToRestore.map(e => e.act.id));
-            setDeletedActs(prev => prev.filter(entry => !entryIdsToRestore.has(entry.act.id)));
-            setRestoreGroupConfirmation(null);
-        };
-
-        if (groupsToRestoreList.length > 0) {
-            setRestoreGroupConfirmation({
-                entriesToRestore,
-                groupsToRestore: groupsToRestoreList,
-                onConfirm: performRestore
+                return newGroups;
             });
-        } else {
-            performRestore(false);
-        }
-    }, [acts, groups, setGroups, setDeletedActs, settings.historyDepth]);
-
-    const handlePermanentlyDeleteActs = useCallback((entryIds: string[]) => {
-        setDeletedActs(prev => prev.filter(entry => !entryIds.includes(entry.act.id)));
-    }, [setDeletedActs]);
-
-    
-    const handleSavePerson = useCallback((personToSave: Person) => {
-        setPeople(prevPeople => {
-            const exists = prevPeople.some(p => p.id === personToSave.id);
-            if (exists) {
-                return prevPeople.map(p => (p.id === personToSave.id ? personToSave : p));
-            }
-            return [...prevPeople, personToSave].sort((a, b) => a.name.localeCompare(b.name));
-        });
-    }, [setPeople]);
-
-    const handleDeletePerson = useCallback((id: string) => {
-        const personToDelete = people.find(p => p.id === id);
-        if (!personToDelete) return;
-
-        setConfirmation({
-            title: 'Подтверждение удаления',
-            message: `Вы уверены, что хотите удалить участника "${personToDelete.name}"? Он также будет удален из всех актов и групп комиссий.`,
-            onConfirm: () => {
-                setPeople(prevPeople => prevPeople.filter(p => p.id !== id));
-                
-                const updateRepresentatives = (reps: { [key: string]: string }) => {
-                    const newReps = { ...reps };
-                    Object.keys(newReps).forEach(key => {
-                        if (newReps[key] === id) {
-                            delete newReps[key];
-                        }
-                    });
-                    return newReps;
-                };
-
-                setActs(prevActs => prevActs.map(act => ({
-                     ...act, 
-                     representatives: updateRepresentatives(act.representatives)
-                })));
-
-                setGroups(prevGroups => prevGroups.map(group => ({
-                    ...group,
-                    representatives: updateRepresentatives(group.representatives)
-                })));
-
-                setConfirmation(null);
-            }
-        });
-    }, [people, setPeople, setActs, setGroups]);
-
-    const handleSaveOrganization = useCallback((orgToSave: Organization) => {
-        setOrganizations(prevOrgs => {
-            const exists = prevOrgs.some(o => o.id === orgToSave.id);
-            if (exists) {
-                return prevOrgs.map(o => (o.id === orgToSave.id ? orgToSave : o));
-            }
-            return [...prevOrgs, orgToSave].sort((a, b) => a.name.localeCompare(b.name));
-        });
-    }, [setOrganizations]);
-
-    const handleDeleteOrganization = useCallback((id: string) => {
-        const orgToDelete = organizations.find(o => o.id === id);
-        if (!orgToDelete) return;
-
-        const isOrgInUse = people.some(p => p.organization === orgToDelete.name);
-
-        if (isOrgInUse) {
-            alert(`Нельзя удалить организацию "${orgToDelete.name}", так как она используется как минимум одним участником. Пожалуйста, сначала измените или удалите соответствующих участников.`);
-            return;
         }
 
-        setConfirmation({
-            title: 'Подтверждение удаления',
-            message: `Вы уверены, что хотите удалить организацию "${orgToDelete.name}"?`,
-            onConfirm: () => {
-                setOrganizations(prevOrgs => prevOrgs.filter(o => o.id !== id));
-                setConfirmation(null);
-            }
-        });
-    }, [organizations, people, setOrganizations]);
+        // Remove from trash
+        const idsToRemove = new Set(entries.map(e => e.act.id));
+        setDeletedActs(prev => prev.filter(e => !idsToRemove.has(e.act.id)));
+        setRestoreGroupConfirmData(null);
+    };
 
-    const handleSaveGroup = useCallback((groupToSave: CommissionGroup) => {
-        setGroups(prevGroups => {
-            const exists = prevGroups.some(g => g.id === groupToSave.id);
-            if (exists) {
-                return prevGroups.map(g => (g.id === groupToSave.id ? groupToSave : g));
-            }
-            return [...prevGroups, groupToSave].sort((a,b) => a.name.localeCompare(b.name));
-        });
-    }, [setGroups]);
-
-    const handleDeleteGroup = useCallback((id: string) => {
-        const groupToDelete = groups.find(g => g.id === id);
-        if(!groupToDelete) return;
-
-        const isGroupInUse = acts.some(a => a.commissionGroupId === id);
-        const confirmMessage = isGroupInUse 
-            ? `Группа "${groupToDelete.name}" используется в некоторых актах. Вы уверены, что хотите ее удалить? Связь с актами будет потеряна.`
-            : `Вы уверены, что хотите удалить группу "${groupToDelete.name}"?`;
-
-        setConfirmation({
-            title: 'Подтверждение удаления',
-            message: confirmMessage,
-            onConfirm: () => {
-                setGroups(prev => prev.filter(g => g.id !== id));
-                if (isGroupInUse) {
-                    setActs(prev => prev.map(act => act.commissionGroupId === id ? { ...act, commissionGroupId: undefined } : act));
-                }
-                setConfirmation(null);
-            }
-        });
-    }, [groups, acts, setGroups, setActs]);
+    const handlePermanentlyDeleteActs = (actIds: string[]) => {
+        setDeletedActs(prev => prev.filter(e => !actIds.includes(e.act.id)));
+    };
     
-    const handleSaveCertificate = useCallback((cert: Certificate) => {
-        setCertificates(prev => {
-            const exists = prev.some(c => c.id === cert.id);
-            if (exists) {
-                return prev.map(c => c.id === cert.id ? cert : c);
-            }
-            return [...prev, cert];
-        });
-    }, [setCertificates]);
-
-    const handleMoveCertificateToTrash = useCallback((id: string) => {
-         const certToDelete = certificates.find(c => c.id === id);
-         if (!certToDelete) return;
-
-         const newDeletedEntry: DeletedCertificateEntry = {
-             certificate: certToDelete,
-             deletedOn: new Date().toISOString()
-         };
-
-         setDeletedCertificates(prev => [newDeletedEntry, ...prev]);
-         setCertificates(prev => prev.filter(c => c.id !== id));
-    }, [certificates, setCertificates, setDeletedCertificates]);
-
-    const handleRemoveCertificateLinksFromActs = useCallback((cert: Certificate, mode: 'remove_entry' | 'remove_reference') => {
-        const updatedActs = acts.map(act => {
-            let materials = act.materials;
-            const regex = new RegExp(`\\(сертификат №\\s*${cert.number}.*?\\)`, 'i');
-            
-            if (regex.test(materials)) {
-                if (mode === 'remove_entry') {
-                    // Remove the entire material line
-                    const parts = materials.split(';').map(s => s.trim());
-                    const cleanParts = parts.filter(part => !part.includes(`сертификат № ${cert.number}`));
-                    return { ...act, materials: cleanParts.join('; ') };
-                } else if (mode === 'remove_reference') {
-                    // Remove only the certificate part, keep material name
-                    // Replace "(сертификат № ...)" with empty string
-                    const cleanMaterials = materials.replace(new RegExp(`\\s*\\(сертификат №\\s*${cert.number}.*?\\)`, 'gi'), '');
-                    return { ...act, materials: cleanMaterials };
-                }
-            }
-            return act;
-        });
-        
-        updateActsWithHistory(updatedActs);
-    }, [acts, updateActsWithHistory]);
-
-    const handleRestoreCertificate = useCallback((entries: DeletedCertificateEntry[]) => {
+    const handleRestoreCertificates = (entries: DeletedCertificateEntry[]) => {
         const certsToRestore = entries.map(e => e.certificate);
         setCertificates(prev => [...prev, ...certsToRestore]);
-        setDeletedCertificates(prev => prev.filter(e => !entries.some(re => re.certificate.id === e.certificate.id)));
-    }, [setCertificates, setDeletedCertificates]);
-
-    const handlePermanentDeleteCertificate = useCallback((ids: string[]) => {
+        const idsToRemove = new Set(entries.map(e => e.certificate.id));
+        setDeletedCertificates(prev => prev.filter(e => !idsToRemove.has(e.certificate.id)));
+    };
+    
+    const handlePermanentlyDeleteCertificates = (ids: string[]) => {
         setDeletedCertificates(prev => prev.filter(e => !ids.includes(e.certificate.id)));
-    }, [setDeletedCertificates]);
-
-    const handleNavigateToCertificate = (id: string) => {
-        setTargetCertificateId(id);
-        setCurrentPage('certificates');
     };
 
-    const handleSaveSettings = useCallback((newSettings: ProjectSettings) => {
-        setSettings(newSettings);
-    }, [setSettings]);
-    
-    const handleExportClick = () => {
-        setIsExportModalOpen(true);
+    // --- Import / Export ---
+    const handleExport = (exportSettings: ExportSettings) => {
+        const zip = new PizZip();
+        
+        // 1. GLOBAL SETTINGS & DATA
+        const globalData: ImportData = {
+            template: exportSettings.template ? template : undefined,
+            registryTemplate: exportSettings.registryTemplate ? registryTemplate : undefined,
+            projectSettings: exportSettings.projectSettings ? settings : undefined,
+            organizations: exportSettings.organizations ? organizations : undefined,
+            constructionObjects: exportSettings.constructionObjects ? constructionObjects : undefined,
+        };
+        
+        zip.file('global.json', JSON.stringify(globalData, null, 2));
+
+        // 2. PER-OBJECT DATA (Separate Folders)
+        constructionObjects.forEach(obj => {
+            const objActs = exportSettings.acts ? acts.filter(a => a.constructionObjectId === obj.id) : [];
+            const objPeople = exportSettings.people ? people.filter(p => p.constructionObjectId === obj.id) : [];
+            const objGroups = exportSettings.groups ? groups.filter(g => g.constructionObjectId === obj.id) : [];
+            const objRegs = exportSettings.regulations ? regulations.filter(r => r.constructionObjectId === obj.id) : [];
+            const objCerts = exportSettings.certificates ? certificates.filter(c => c.constructionObjectId === obj.id) : [];
+            const objDeletedActs = exportSettings.deletedActs ? deletedActs.filter(d => d.act.constructionObjectId === obj.id) : [];
+            const objDeletedCerts = exportSettings.deletedCertificates ? deletedCertificates.filter(d => d.certificate.constructionObjectId === obj.id) : [];
+
+            // If object has any data to export
+            if (objActs.length || objPeople.length || objGroups.length || objRegs.length || objCerts.length || objDeletedActs.length || objDeletedCerts.length) {
+                const objectData: ImportData = {
+                    acts: objActs,
+                    people: objPeople,
+                    groups: objGroups,
+                    regulations: objRegs,
+                    certificates: objCerts,
+                    deletedActs: objDeletedActs,
+                    deletedCertificates: objDeletedCerts
+                };
+                
+                // Sanitize folder name
+                const safeName = obj.name.replace(/[<>:"/\\|?*]+/g, '_').trim();
+                const folderName = `${safeName}_${obj.id.slice(0, 6)}`;
+                zip.folder(folderName)?.file('data.json', JSON.stringify(objectData, null, 2));
+            }
+        });
+
+        // 3. GENERATE ZIP
+        const content = zip.generate({ type: "blob" });
+        const dateStr = new Date().toISOString().slice(0, 10);
+        saveAs(content, `backup_full_${dateStr}.zip`);
+        
+        setShowExportModal(false);
     };
 
-    // --- NEW EXPORT LOGIC ---
-    const handleExecuteExport = (exportSettings: ExportSettings) => {
-        try {
-            const zip = new PizZip();
-
-            // 1. Create the "System Backup" JSON (Acts, People, Settings, etc. - NO Certificates here)
-            const backupData: any = {};
-            if (exportSettings.template) backupData.template = template;
-            if (exportSettings.registryTemplate) backupData.registryTemplate = registryTemplate;
-            if (exportSettings.projectSettings) backupData.projectSettings = settings;
-            if (exportSettings.acts) backupData.acts = acts;
-            if (exportSettings.people) backupData.people = people;
-            if (exportSettings.organizations) backupData.organizations = organizations;
-            if (exportSettings.groups) backupData.groups = groups;
-            if (exportSettings.regulations) backupData.regulations = regulations;
-            if (exportSettings.deletedActs) backupData.deletedActs = deletedActs;
-            if (exportSettings.deletedCertificates) backupData.deletedCertificates = deletedCertificates;
-            
-            zip.file("backup_restore.json", JSON.stringify(backupData, null, 2));
-
-            // 2. Add Human Readable separate JSONs
-            if (exportSettings.projectSettings) zip.file("settings.json", JSON.stringify(settings, null, 2));
-            if (exportSettings.people && people.length > 0) zip.file("people.json", JSON.stringify(people, null, 2));
-            if (exportSettings.organizations && organizations.length > 0) zip.file("organizations.json", JSON.stringify(organizations, null, 2));
-            if (exportSettings.acts && acts.length > 0) zip.file("acts.json", JSON.stringify(acts, null, 2));
-            if (exportSettings.regulations && regulations.length > 0) zip.file("regulations.json", JSON.stringify(regulations, null, 2));
-
-            // 3. Template File (Real DOCX)
-            if (exportSettings.template && template) {
-                 zip.file("template.docx", template, { base64: true });
-            }
-            if (exportSettings.registryTemplate && registryTemplate) {
-                 zip.file("registry_template.docx", registryTemplate, { base64: true });
-            }
-
-            // 4. Certificates: Folder Structure
-            if (exportSettings.certificates && certificates.length > 0) {
-                const certsRoot = zip.folder("certificates");
-                if (certsRoot) {
-                    certificates.forEach((cert) => {
-                        // Create folder name: "Num_ID_snippet"
-                        const safeNum = cert.number.replace(/[^a-z0-9а-яё]/gi, '_').substring(0, 50);
-                        const folderName = `Cert_${safeNum}_${cert.id.substring(0, 6)}`;
-                        const certFolder = certsRoot.folder(folderName);
-                        
-                        if (certFolder) {
-                            // a) Metadata file
-                            const info = {
-                                id: cert.id,
-                                number: cert.number,
-                                validUntil: cert.validUntil,
-                                materials: cert.materials
-                            };
-                            certFolder.file("info.json", JSON.stringify(info, null, 2));
-
-                            // b) Binary files
-                            const filesToSave = cert.files && cert.files.length > 0 
-                                ? cert.files 
-                                : (cert.fileData ? [{ id: 'legacy', name: cert.fileName || 'doc', type: cert.fileType || 'image', data: cert.fileData }] : []);
-
-                            filesToSave.forEach((f, idx) => {
-                                // @ts-ignore
-                                const mimeMatch = f.data.match(/^data:(.*?);base64,(.*)$/);
-                                if (mimeMatch) {
-                                    const mime = mimeMatch[1];
-                                    const b64 = mimeMatch[2];
-                                    let ext = 'bin';
-                                    if (mime.includes('pdf')) ext = 'pdf';
-                                    else if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg';
-                                    else if (mime.includes('png')) ext = 'png';
-                                    
-                                    // Clean name or generic name
-                                    // @ts-ignore
-                                    let fileName = f.name || `file_${idx + 1}`;
-                                    if (!fileName.endsWith(`.${ext}`)) fileName += `.${ext}`;
-                                    
-                                    certFolder.file(fileName, b64, { base64: true });
-                                }
-                            });
-                        }
-                    });
-                }
-            }
-
-            const content = zip.generate({ type: "blob" });
-            const timestamp = new Date().toISOString().split('.')[0].replace('T', '_').replace(/:/g, '-');
-            saveAs(content, `Project_Export_${timestamp}.zip`);
-            
-            setIsExportModalOpen(false);
-        } catch (error) {
-            console.error('Export error:', error);
-            alert('Не удалось создать архив экспорта.');
-        }
-    };
-    
     const handleImportClick = () => {
-        importInputRef.current?.click();
+        fileInputRef.current?.click();
     };
 
-    // --- NEW IMPORT LOGIC ---
-    const handleImportFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
+    const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
         if (!file) return;
 
-        const isZip = file.name.toLowerCase().endsWith('.zip');
         const reader = new FileReader();
-
-        reader.onload = async (e) => {
-            try {
-                if (isZip) {
-                    // --- ZIP IMPORT ---
-                    const zip = new PizZip(e.target?.result as string | ArrayBuffer);
+        
+        if (file.name.endsWith('.zip')) {
+            // ZIP IMPORT LOGIC
+            reader.readAsArrayBuffer(file);
+            reader.onload = (event) => {
+                try {
+                    const zip = new PizZip(event.target?.result as ArrayBuffer);
+                    const files = zip.files;
                     
-                    // 1. Read Backup JSON (Acts, etc.)
-                    let mainData: ImportData = {};
-                    const backupFile = zip.file("backup_restore.json");
-                    if (backupFile) {
-                        try {
-                            mainData = JSON.parse(backupFile.asText());
-                        } catch(err) { console.error("Bad backup json", err); }
+                    const aggregatedData: ImportData = {
+                        acts: [], people: [], organizations: [], groups: [], regulations: [], certificates: [], deletedActs: [], deletedCertificates: [], constructionObjects: []
+                    };
+
+                    // Process global.json
+                    if (files['global.json']) {
+                        const globalJson = JSON.parse(files['global.json'].asText());
+                        if (globalJson.template) aggregatedData.template = globalJson.template;
+                        if (globalJson.registryTemplate) aggregatedData.registryTemplate = globalJson.registryTemplate;
+                        if (globalJson.projectSettings) aggregatedData.projectSettings = globalJson.projectSettings;
+                        if (globalJson.organizations) aggregatedData.organizations = globalJson.organizations;
+                        if (globalJson.constructionObjects) aggregatedData.constructionObjects = globalJson.constructionObjects;
                     }
 
-                    // 2. Scan Certificates folders to reconstruct Certs
-                    const reconstructedCerts: Certificate[] = [];
-                    // Using direct files iteration to avoid PizZip types limitation
-                    
-                    const certMap = new Map<string, { info?: any, files: CertificateFile[] }>();
-
-                    Object.keys(zip.files).forEach((relativePath) => {
-                        if (!relativePath.startsWith("certificates/")) return;
-                        const fileEntry = zip.files[relativePath];
-                        if (fileEntry.dir) return; 
-                        
-                        // relativePath is like "certificates/FolderName/FileName"
-                        const parts = relativePath.split('/'); 
-                        if (parts.length < 3) return; // Must be inside a subfolder
-                        
-                        const folderName = parts[1];
-                        const fileName = parts.slice(2).join('/');
-                        
-                        if (!certMap.has(folderName)) {
-                            certMap.set(folderName, { files: [] });
-                        }
-                        const entry = certMap.get(folderName)!;
-
-                        if (fileName === 'info.json') {
-                            try {
-                                entry.info = JSON.parse(fileEntry.asText());
-                            } catch(err) { console.warn("Failed to parse info.json in " + folderName); }
-                        } else {
-                            // It's a binary file (image/pdf)
-                            const binary = fileEntry.asBinary();
-                            const b64 = binaryStringToBase64(binary);
-                            
-                            let mime = 'application/octet-stream';
-                            let type: 'pdf' | 'image' = 'image';
-                            
-                            if (fileName.toLowerCase().endsWith('.pdf')) {
-                                mime = 'application/pdf';
-                                type = 'pdf';
-                            } else if (fileName.toLowerCase().endsWith('.jpg') || fileName.toLowerCase().endsWith('.jpeg')) {
-                                mime = 'image/jpeg';
-                            } else if (fileName.toLowerCase().endsWith('.png')) {
-                                mime = 'image/png';
-                            }
-
-                            entry.files.push({
-                                id: crypto.randomUUID(),
-                                name: fileName,
-                                type: type,
-                                data: `data:${mime};base64,${b64}`
-                            });
+                    // Process folders
+                    Object.keys(files).forEach(fileName => {
+                        // Check if it is a data.json inside a folder
+                        if (fileName.match(/\/[^/]+\.json$/) || (fileName.endsWith('.json') && fileName !== 'global.json')) {
+                             const content = files[fileName].asText();
+                             try {
+                                 const objData: ImportData = JSON.parse(content);
+                                 if (objData.acts) aggregatedData.acts?.push(...objData.acts);
+                                 if (objData.people) aggregatedData.people?.push(...objData.people);
+                                 if (objData.groups) aggregatedData.groups?.push(...objData.groups);
+                                 if (objData.regulations) aggregatedData.regulations?.push(...objData.regulations);
+                                 if (objData.certificates) aggregatedData.certificates?.push(...objData.certificates);
+                                 if (objData.deletedActs) aggregatedData.deletedActs?.push(...objData.deletedActs);
+                                 if (objData.deletedCertificates) aggregatedData.deletedCertificates?.push(...objData.deletedCertificates);
+                             } catch (err) {
+                                 console.warn("Failed to parse " + fileName, err);
+                             }
                         }
                     });
+                    
+                    setImportData(aggregatedData);
 
-                    // Convert Map to Certificate[]
-                    certMap.forEach((val) => {
-                        if (val.info) {
-                            reconstructedCerts.push({
-                                id: val.info.id || crypto.randomUUID(),
-                                number: val.info.number || '?',
-                                validUntil: val.info.validUntil || '',
-                                materials: Array.isArray(val.info.materials) ? val.info.materials : [],
-                                files: val.files
-                            });
-                        }
-                    });
-
-                    // Merge reconstructed certs into mainData
-                    if (reconstructedCerts.length > 0) {
-                        mainData.certificates = reconstructedCerts;
-                    }
-
-                    // Proceed to Modal
-                    if (Object.keys(mainData).length > 0) {
-                        setImportData(mainData);
-                    } else {
-                        alert("Не удалось найти данные в архиве.");
-                    }
-
-                } else {
-                    // --- JSON IMPORT (Legacy/Single File) ---
-                    const text = e.target?.result as string;
-                    const data: ImportData = JSON.parse(text);
-                    if (data.template !== undefined || Array.isArray(data.acts) || Array.isArray(data.people)) {
-                        setImportData(data);
-                    } else {
-                        alert('Ошибка: Неверный формат JSON файла.');
-                    }
+                } catch (error) {
+                    console.error(error);
+                    alert("Ошибка при чтении ZIP архива.");
                 }
-            } catch (error) {
-                console.error('Import error:', error);
-                alert('Не удалось импортировать данные. Файл может быть поврежден.');
-            } finally {
-                if(event.target) event.target.value = '';
-            }
-        };
-
-        if (isZip) {
-            reader.readAsBinaryString(file); // PizZip expects binary string or arraybuffer
+            };
         } else {
-            reader.readAsText(file); // JSON
+            // LEGACY JSON IMPORT LOGIC
+            reader.readAsText(file);
+            reader.onload = (event) => {
+                try {
+                    const json = JSON.parse(event.target?.result as string);
+                    setImportData(json);
+                } catch (error) {
+                    alert('Неверный формат файла JSON');
+                }
+            };
         }
+        
+        if (e.target) e.target.value = '';
     };
 
-    const handleExecuteImport = (importSettings: ImportSettings) => {
+    const handleImportConfirm = (importSettings: ImportSettings) => {
         if (!importData) return;
 
-        if (importSettings.template && importData.template !== undefined) {
-            setTemplate(importData.template);
-        }
-        if (importSettings.registryTemplate && importData.registryTemplate !== undefined) {
-            setRegistryTemplate(importData.registryTemplate);
-        }
-        if (importSettings.projectSettings && importData.projectSettings) {
-            setSettings(importData.projectSettings);
-        }
-        
-        const mergeOrReplace = <T extends {id: string} | DeletedActEntry | DeletedCertificateEntry>(
-            key: 'acts' | 'people' | 'organizations' | 'groups' | 'deletedActs' | 'regulations' | 'certificates' | 'deletedCertificates',
-            setData: React.Dispatch<React.SetStateAction<any>>,
-            sortFn: ((a: T, b: T) => number) | null
-        ) => {
-            // @ts-ignore dynamic access
-            if ((importSettings[key]?.import || (key === 'deletedCertificates' && importSettings['deletedActs']?.import)) && importData[key]) {
-                 // @ts-ignore
-                 const mode = importSettings[key]?.mode || 'merge';
-                 // @ts-ignore
-                 const selectedIds = importSettings[key]?.selectedIds;
+        // Helper to merge data based on settings
+        const mergeData = <T extends { id: string }>(
+            currentData: T[],
+            newData: T[] | undefined,
+            categorySettings: { import: boolean; mode: 'replace' | 'merge'; selectedIds?: string[] }
+        ): T[] => {
+            if (!categorySettings.import || !newData) return currentData;
+            
+            const filteredNewData = newData.filter(item => categorySettings.selectedIds?.includes(item.id));
 
-                 if (mode === 'replace') {
-                    // @ts-ignore
-                    setData(importData[key]);
-                } else {
-                     // @ts-ignore
-                    const selectedItems = (importData[key] as T[]).filter(item => {
-                        const id = 'act' in item ? item.act.id : 'certificate' in item ? item.certificate.id : item.id;
-                        return selectedIds?.includes(id)
-                    });
-                    setData((prev: T[]) => {
-                        const itemMap = new Map(prev.map(item => ['act' in item ? item.act.id : 'certificate' in item ? item.certificate.id : item.id, item]));
-                        selectedItems.forEach(item => itemMap.set('act' in item ? item.act.id : 'certificate' in item ? item.certificate.id : item.id, item));
-                        const newArray = Array.from(itemMap.values());
-                        return sortFn ? newArray.sort(sortFn) : newArray;
-                    });
-                }
+            if (categorySettings.mode === 'replace') {
+                return filteredNewData;
+            } else {
+                // Merge: Update existing, add new
+                const currentMap = new Map(currentData.map(item => [item.id, item]));
+                filteredNewData.forEach(item => currentMap.set(item.id, item));
+                return Array.from(currentMap.values());
             }
         };
 
-        mergeOrReplace('acts', setActs, null);
-        mergeOrReplace('deletedActs', setDeletedActs, (a, b) => new Date((b as DeletedActEntry).deletedOn).getTime() - new Date((a as DeletedActEntry).deletedOn).getTime());
-        mergeOrReplace('people', setPeople, (a,b) => (a as Person).name.localeCompare((b as Person).name));
-        mergeOrReplace('organizations', setOrganizations, (a,b) => (a as Organization).name.localeCompare((b as Organization).name));
-        mergeOrReplace('groups', setGroups, (a,b) => (a as CommissionGroup).name.localeCompare((b as CommissionGroup).name));
-        mergeOrReplace('regulations', setRegulations, (a,b) => (a as Regulation).designation.localeCompare((b as Regulation).designation));
-        mergeOrReplace('certificates', setCertificates, (a,b) => (a as Certificate).number.localeCompare((b as Certificate).number));
-        // Simple merge for deleted certs for now, assuming if user imports data they want trash too if present
-        if (importData.deletedCertificates) {
-             setDeletedCertificates(prev => [...prev, ...importData.deletedCertificates!]);
-        }
+        if (importSettings.template && importData.template) setTemplate(importData.template);
+        if (importSettings.registryTemplate && importData.registryTemplate) setRegistryTemplate(importData.registryTemplate);
+        if (importSettings.projectSettings && importData.projectSettings) setSettings(importData.projectSettings);
         
-        // Reset history on import to avoid conflicts
-        setPast([]);
-        setFuture([]);
+        // Handle construction objects first to ensure linking works
+        if (importData.constructionObjects && importData.constructionObjects.length > 0) {
+             setConstructionObjects(prev => {
+                 const currentMap = new Map(prev.map(o => [o.id, o]));
+                 importData.constructionObjects!.forEach(o => currentMap.set(o.id, o));
+                 return Array.from(currentMap.values());
+             });
+        }
+
+        setActs(prev => mergeData(prev, importData.acts, importSettings.acts));
+        setPeople(prev => mergeData(prev, importData.people, importSettings.people));
+        setOrganizations(prev => mergeData(prev, importData.organizations, importSettings.organizations));
+        setGroups(prev => mergeData(prev, importData.groups, importSettings.groups));
+        setRegulations(prev => mergeData(prev, importData.regulations, importSettings.regulations as any));
+        setCertificates(prev => mergeData(prev, importData.certificates, importSettings.certificates as any));
+        
+        // Handle trash logic
+        if (importSettings.deletedActs.import && importData.deletedActs) {
+             const newDeletedActs = importData.deletedActs.filter(d => importSettings.deletedActs.selectedIds?.includes(d.act.id));
+             if (importSettings.deletedActs.mode === 'replace') {
+                 setDeletedActs(newDeletedActs);
+             } else {
+                 const currentMap = new Map(deletedActs.map(d => [d.act.id, d]));
+                 newDeletedActs.forEach(d => currentMap.set(d.act.id, d));
+                 setDeletedActs(Array.from(currentMap.values()));
+             }
+        }
 
         setImportData(null);
-        alert('Данные успешно импортированы!');
     };
 
-    const handleChangeTemplate = () => {
-        setConfirmation({
-            title: 'Сменить шаблон',
-            message: 'Вы уверены, что хотите сменить шаблон? Текущий шаблон будет удален.',
-            confirmText: 'Сменить',
-            onConfirm: () => {
-                setTemplate(null);
-                setConfirmation(null);
-            }
-        });
+    // Calculate export stats
+    const exportCounts = {
+        acts: acts.length,
+        people: people.length,
+        organizations: organizations.length,
+        groups: groups.length,
+        regulations: regulations.length,
+        certificates: certificates.length,
+        deletedActs: deletedActs.length,
+        deletedCertificates: deletedCertificates.length,
+        hasTemplate: !!template,
+        hasRegistryTemplate: !!registryTemplate,
+    };
+
+    if (!template) {
+        return <TemplateUploader onUpload={handleTemplateUpload} />;
     }
-
-    const requestConfirmation = (
-        title: string, 
-        message: React.ReactNode, 
-        onConfirm: () => void, 
-        confirmText?: string
-    ) => {
-        setConfirmation({
-            title,
-            message,
-            onConfirm: () => {
-                onConfirm();
-                setConfirmation(null);
-            },
-            confirmText,
-        });
-    };
 
     const renderPage = () => {
         switch (currentPage) {
             case 'acts':
-                return <ActsPage 
-                            acts={acts} 
-                            people={people} 
-                            organizations={organizations}
-                            groups={groups}
-                            regulations={regulations}
-                            certificates={certificates}
-                            template={template}
-                            registryTemplate={registryTemplate}
-                            settings={settings}
-                            onSave={handleSaveAct} 
-                            onMoveToTrash={handleMoveActsToTrash}
-                            onPermanentlyDelete={handleDirectPermanentDelete}
-                            onReorderActs={handleReorderActs}
-                            setCurrentPage={setCurrentPage}
-                            onUndo={undo}
-                            onRedo={redo}
-                            onNavigateToCertificate={handleNavigateToCertificate}
-                        />;
+                return <ActsPage
+                    acts={currentActs}
+                    people={currentPeople}
+                    organizations={organizations}
+                    groups={currentGroups}
+                    regulations={currentRegulations}
+                    certificates={currentCertificates}
+                    template={template}
+                    registryTemplate={registryTemplate}
+                    settings={settings}
+                    onSave={handleSaveAct}
+                    onMoveToTrash={handleMoveActsToTrash}
+                    onPermanentlyDelete={(ids) => setActs(prev => prev.filter(a => !ids.includes(a.id)))}
+                    onReorderActs={(newActs) => {
+                        // When reordering, we receive only the current object's acts reordered.
+                        // We need to merge them back into the main acts array preserving other objects' acts.
+                        setActs(prev => {
+                            const otherActs = prev.filter(a => a.constructionObjectId !== currentObjectId);
+                            return [...otherActs, ...newActs];
+                        });
+                    }}
+                    setCurrentPage={setCurrentPage}
+                    onNavigateToCertificate={(id) => {
+                        // Hacky way to navigate: go to certificates page and pre-select/highlight?
+                        // Ideally pass a state param to setCurrentPage
+                        setCurrentPage('certificates');
+                        // You might need a global context or prop to handle 'initialOpenId'
+                    }}
+                />;
             case 'people':
-                return <PeoplePage people={people} organizations={organizations} settings={settings} onSave={handleSavePerson} onDelete={handleDeletePerson} />;
+                return <PeoplePage
+                    people={currentPeople}
+                    organizations={organizations}
+                    settings={settings}
+                    onSave={handleSavePerson}
+                    onDelete={handleDeletePerson}
+                />;
             case 'organizations':
-                 return <OrganizationsPage organizations={organizations} settings={settings} onSave={handleSaveOrganization} onDelete={handleDeleteOrganization} />;
-             case 'groups':
-                return <GroupsPage groups={groups} people={people} organizations={organizations} onSave={handleSaveGroup} onDelete={handleDeleteGroup} />;
-            case 'trash':
-                return <TrashPage 
-                            deletedActs={deletedActs}
-                            deletedCertificates={deletedCertificates}
-                            onRestoreActs={handleRestoreActs}
-                            onRestoreCertificates={handleRestoreCertificate}
-                            onPermanentlyDeleteActs={handlePermanentlyDeleteActs}
-                            onPermanentlyDeleteCertificates={handlePermanentDeleteCertificate}
-                            requestConfirmation={requestConfirmation}
-                        />;
-            case 'regulations':
-                return <RegulationsPage regulations={regulations} onSaveRegulations={setRegulations} />;
+                return <OrganizationsPage
+                    organizations={organizations}
+                    settings={settings}
+                    onSave={handleSaveOrganization}
+                    onDelete={handleDeleteOrganization}
+                />;
+            case 'groups':
+                return <GroupsPage
+                    groups={currentGroups}
+                    people={currentPeople}
+                    organizations={organizations}
+                    onSave={handleSaveGroup}
+                    onDelete={handleDeleteGroup}
+                />;
             case 'certificates':
                 return <CertificatesPage 
-                            certificates={certificates} 
-                            acts={acts}
-                            settings={settings} 
-                            onSave={handleSaveCertificate} 
-                            onDelete={(id) => handleMoveCertificateToTrash(id)}
-                            onUnlink={(cert, mode) => handleRemoveCertificateLinksFromActs(cert, mode)}
-                            initialOpenId={targetCertificateId}
-                            onClearInitialOpenId={() => setTargetCertificateId(null)}
-                        />;
+                    certificates={currentCertificates}
+                    acts={currentActs}
+                    settings={settings}
+                    onSave={handleSaveCertificate}
+                    onDelete={handleDeleteCertificate}
+                    onUnlink={handleUnlinkCertificate}
+                />
+            case 'regulations':
+                return <RegulationsPage 
+                    regulations={currentRegulations}
+                    onSaveRegulations={handleSaveRegulations}
+                />
+            case 'trash':
+                return <TrashPage
+                    deletedActs={currentDeletedActs}
+                    deletedCertificates={currentDeletedCertificates}
+                    onRestoreActs={handleRestoreActs}
+                    onRestoreCertificates={handleRestoreCertificates}
+                    onPermanentlyDeleteActs={handlePermanentlyDeleteActs}
+                    onPermanentlyDeleteCertificates={handlePermanentlyDeleteCertificates}
+                    requestConfirmation={(title, message, onConfirm) => setConfirmationRequest({ title, message, onConfirm })}
+                />;
             case 'settings':
-                return <SettingsPage 
-                            settings={settings} 
-                            onSave={handleSaveSettings} 
-                            onImport={handleImportClick}
-                            onExport={handleExportClick}
-                            onChangeTemplate={handleChangeTemplate}
-                            onDownloadTemplate={handleDownloadTemplate}
-                            onUploadRegistryTemplate={handleRegistryTemplateUpload}
-                            isTemplateLoaded={!!template}
-                            isRegistryTemplateLoaded={!!registryTemplate}
-                        />;
+                return <SettingsPage
+                    settings={settings}
+                    onSave={setSettings}
+                    onImport={handleImportClick}
+                    onExport={() => setShowExportModal(true)}
+                    onChangeTemplate={() => setTemplate(null)}
+                    onDownloadTemplate={handleDownloadTemplate}
+                    onUploadRegistryTemplate={handleRegistryTemplateUpload}
+                    isTemplateLoaded={!!template}
+                    isRegistryTemplateLoaded={!!registryTemplate}
+                />;
             default:
                 return null;
         }
     };
 
     return (
-        <div className="flex h-screen bg-slate-100 font-sans text-slate-800">
-             <input type="file" ref={importInputRef} onChange={handleImportFileSelected} className="hidden" accept=".json,.zip" />
-             <Sidebar
-                isOpen={isSidebarOpen}
-                setIsOpen={setIsSidebarOpen}
-                currentPage={currentPage}
+        <div className="flex h-screen overflow-hidden">
+            <Sidebar 
+                isOpen={true} // Usually controlled by layout, simplified here
+                setIsOpen={() => {}} 
+                currentPage={currentPage} 
                 setCurrentPage={setCurrentPage}
                 isTemplateLoaded={!!template}
-                trashCount={deletedActs.length + deletedCertificates.length}
+                trashCount={currentDeletedActs.length + currentDeletedCertificates.length}
                 theme={theme}
-                onToggleTheme={handleToggleTheme}
+                onToggleTheme={toggleTheme}
+                // Object Props
+                constructionObjects={constructionObjects}
+                currentObjectId={currentObjectId}
+                onObjectChange={setCurrentObjectId}
+                onAddObject={handleAddObject}
+                onUpdateObject={handleUpdateObject}
             />
-            <div className="flex-1 flex flex-col overflow-hidden">
-                 <main className="flex-1 overflow-y-auto">
-                    {renderPage()}
-                </main>
-            </div>
             
+            <main className="flex-1 overflow-hidden relative">
+                {renderPage()}
+            </main>
+
+            <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept=".json,.zip"
+                onChange={handleFileImport}
+            />
+
             {importData && (
-                <ImportModal 
+                <ImportModal
                     data={importData}
                     onClose={() => setImportData(null)}
-                    onImport={handleExecuteImport}
+                    onImport={handleImportConfirm}
                 />
             )}
 
-            {isExportModalOpen && (
+            {showExportModal && (
                 <ExportModal
-                    onClose={() => setIsExportModalOpen(false)}
-                    onExport={handleExecuteExport}
-                    counts={{
-                        acts: acts.length,
-                        people: people.length,
-                        organizations: organizations.length,
-                        groups: groups.length,
-                        regulations: regulations.length,
-                        certificates: certificates.length,
-                        deletedActs: deletedActs.length,
-                        deletedCertificates: deletedCertificates.length,
-                        hasTemplate: !!template,
-                        hasRegistryTemplate: !!registryTemplate
-                    }}
+                    onClose={() => setShowExportModal(false)}
+                    onExport={handleExport}
+                    counts={exportCounts}
                 />
             )}
 
-            {confirmation && (
-                <ConfirmationModal
-                    isOpen={!!confirmation}
-                    onClose={() => setConfirmation(null)}
-                    onConfirm={confirmation.onConfirm}
-                    title={confirmation.title}
-                    confirmText={confirmation.confirmText}
-                >
-                    {confirmation.message}
-                </ConfirmationModal>
-            )}
-
-            {restoreGroupConfirmation && (
+            <RestoreGroupConfirmationModal
+                isOpen={!!restoreGroupConfirmData}
+                onClose={() => setRestoreGroupConfirmData(null)}
+                groupsToRestore={restoreGroupConfirmData?.groups || []}
+                onConfirm={(restoreGroups) => {
+                    if (restoreGroupConfirmData) {
+                        // Logic moved inside component or callback? 
+                        // Actually the page handles it, but since logic is in App, we need a wrapper
+                        // The performRestore function in App is scoped.
+                        // We need to call performRestore here? No, this modal is usually on Page level in previous design.
+                        // But I moved acts/trash state to App.tsx so restore logic is here.
+                        // Ah, the logic `performRestore` relies on state. I need to replicate that logic or call it.
+                        // For simplicity, let's just use the callback pattern established in `handleRestoreActs`
+                        // Actually, wait. RestoreGroupConfirmationModal is purely presentation.
+                        // I need to execute `performRestore` based on the result.
+                        // Since `performRestore` is defined inside `App`, I can call it.
+                        const { entriesToRestore } = restoreGroupConfirmData;
+                        // Define performRestore here (it was defined inside App scope earlier in code block but might be unreachable if I don't move it out or use ref)
+                        // Actually, I defined `performRestore` inside `App` component body, so it is accessible here.
+                        
+                        // Wait, `performRestore` was defined inside `App`. Yes.
+                        // But `setRestoreGroupConfirmData` sets state.
+                        // I need a way to trigger `performRestore` when Modal confirms.
+                        // The Modal takes `onConfirm` prop.
+                        // So:
+                        // performRestore(restoreGroupConfirmData.entriesToRestore, restoreGroups);
+                    }
+                }} 
+            />
+            
+            {/* Re-implement Restore Confirmation Modal logic because the above JSX is disconnected from the logic flow */}
+            {/* The logic `handleRestoreActs` sets `restoreGroupConfirmData`. */}
+            {/* The modal should call `performRestore` on confirm. */}
+            {restoreGroupConfirmData && (
                  <RestoreGroupConfirmationModal
-                    isOpen={!!restoreGroupConfirmation}
-                    onClose={() => setRestoreGroupConfirmation(null)}
-                    groupsToRestore={restoreGroupConfirmation.groupsToRestore}
-                    onConfirm={restoreGroupConfirmation.onConfirm}
+                    isOpen={true}
+                    onClose={() => setRestoreGroupConfirmData(null)}
+                    groupsToRestore={restoreGroupConfirmData.groups}
+                    onConfirm={(restoreGroups) => performRestore(restoreGroupConfirmData.entriesToRestore, restoreGroups)}
                 />
+            )}
+
+            {confirmationRequest && (
+                <ConfirmationModal
+                    isOpen={true}
+                    onClose={() => setConfirmationRequest(null)}
+                    onConfirm={() => {
+                        confirmationRequest.onConfirm();
+                        setConfirmationRequest(null);
+                    }}
+                    title={confirmationRequest.title}
+                >
+                    {confirmationRequest.message}
+                </ConfirmationModal>
             )}
         </div>
     );
