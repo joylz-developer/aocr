@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 're
 import { Certificate, ProjectSettings, CertificateFile, Act } from '../types';
 import Modal from '../components/Modal';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { PlusIcon, DeleteIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon, LayoutListIcon, LayoutGridIcon, LinkIcon, ChevronDownIcon, MinimizeIcon, MaximizeIcon, ArrowRightIcon, CheckIcon } from '../components/Icons';
+import { PlusIcon, DeleteIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon, LayoutListIcon, LayoutGridIcon, LinkIcon, ChevronDownIcon, MinimizeIcon, MaximizeIcon, ArrowRightIcon, CheckIcon, MenuIcon } from '../components/Icons';
 import { ContextMenu, MenuItem } from '../components/ContextMenu';
 import { GoogleGenAI } from '@google/genai';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -1394,6 +1394,10 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
     const [lastSelectedCertId, setLastSelectedCertId] = useState<string | null>(null);
     const [contextMenu, setContextMenu] = useState<{x: number, y: number, certId?: string} | null>(null);
     
+    // Menu & Selection UI State
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
     // Bulk Delete State
     const [bulkDeleteWarning, setBulkDeleteWarning] = useState<{ linkedCount: number, totalCount: number, certsWithLinks: {cert: Certificate, actNumbers: string[]}[] } | null>(null);
 
@@ -1411,6 +1415,17 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
         });
         return map;
     }, [acts, certificates]);
+
+    // Handle click outside for menu
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setIsMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // Effect to handle initial opening from external navigation
     useEffect(() => {
@@ -1686,7 +1701,6 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                 if (newSet.has(certId)) newSet.delete(certId);
                 else newSet.add(certId);
                 
-                // If exiting selection mode by unchecking last item? No, usually keep mode until explicit exit.
                 return newSet;
             });
             setLastSelectedCertId(certId);
@@ -1705,6 +1719,16 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
         setIsSelectionMode(false);
         setSelectedCertIds(new Set());
         setLastSelectedCertId(null);
+    };
+
+    const toggleSelectionMode = () => {
+        const newMode = !isSelectionMode;
+        setIsSelectionMode(newMode);
+        if (!newMode) {
+            setSelectedCertIds(new Set());
+            setLastSelectedCertId(null);
+        }
+        setIsMenuOpen(false);
     };
 
     const gridColsClass = columnCount === 1 ? 'grid-cols-1' : columnCount === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
@@ -1775,6 +1799,28 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                             3
                          </button>
                     </div>
+
+                    {/* New Menu Button */}
+                    <div className="relative ml-2" ref={menuRef}>
+                        <button
+                            onClick={() => setIsMenuOpen(!isMenuOpen)}
+                            className={`p-2 rounded-md hover:bg-slate-100 transition-colors ${isMenuOpen || isSelectionMode ? 'bg-slate-100 text-blue-600' : ''}`}
+                            title="Меню"
+                        >
+                            <MenuIcon className="w-6 h-6" />
+                        </button>
+                        {isMenuOpen && (
+                            <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-md shadow-lg z-50 py-1 animate-fade-in-up">
+                                <button
+                                    onClick={toggleSelectionMode}
+                                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between"
+                                >
+                                    <span>Удалить</span>
+                                    {isSelectionMode && <CheckIcon className="w-4 h-4 text-blue-600" />}
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -1836,9 +1882,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                                 <LinkIcon className="w-3 h-3" /> {linkCount}
                                             </button>
                                         )}
-                                        {!isSelectionMode && (
-                                            <button onClick={(e) => handleClickDelete(e, cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
-                                        )}
+                                        {/* REMOVED INDIVIDUAL DELETE BUTTON */}
                                     </div>
                                 </div>
                             );
@@ -1935,9 +1979,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                                                 <LinkIcon className="w-3 h-3" /> {linkCount}
                                             </button>
                                         )}
-                                        {!isSelectionMode && (
-                                            <button onClick={(e) => handleClickDelete(e, cert)} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors" title="Удалить"><DeleteIcon className="w-4 h-4"/></button>
-                                        )}
+                                        {/* REMOVED INDIVIDUAL DELETE BUTTON */}
                                     </div>
                                 </div>
                                 
@@ -2012,6 +2054,18 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, acts,
                             if (contextMenu.certId) {
                                 setSelectedCertIds(new Set([contextMenu.certId]));
                                 setLastSelectedCertId(contextMenu.certId);
+                            }
+                            setContextMenu(null);
+                        }} 
+                    />
+                    <MenuItem 
+                        icon={<DeleteIcon className="w-4 h-4 text-red-600"/>} 
+                        label="Удалить" 
+                        className="text-red-600 hover:bg-red-50"
+                        onClick={() => {
+                            if (contextMenu.certId) {
+                                const cert = certificates.find(c => c.id === contextMenu.certId);
+                                if (cert) handleClickDelete({ stopPropagation: () => {} } as React.MouseEvent, cert);
                             }
                             setContextMenu(null);
                         }} 
