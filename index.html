@@ -221,17 +221,127 @@
 
   /* --- Themes --- */
   
+  /* GitHub Dark Theme (Custom Overrides) */
   html.theme-dark body {
-      filter: invert(1) hue-rotate(180deg);
-      background-color: #121212;
-  }
-  
-  html.theme-dark img,
-  html.theme-dark video,
-  html.theme-dark .no-invert {
-      filter: invert(1) hue-rotate(180deg);
+      background-color: #0d1117; /* GitHub Dimmed bg */
+      color: #c9d1d9; /* GitHub Text Primary */
   }
 
+  /* Reset generic backgrounds for dark mode */
+  html.theme-dark .bg-white { background-color: #161b22; color: #c9d1d9; } /* Cards/Panels */
+  html.theme-dark .bg-slate-50 { background-color: #0d1117; color: #c9d1d9; } /* App Backgrounds / Table Headers */
+  html.theme-dark .bg-slate-100 { background-color: #21262d; color: #c9d1d9; } /* Inputs / Secondary areas */
+  html.theme-dark .bg-slate-200 { background-color: #30363d; color: #c9d1d9; } /* Hover states / Borders */
+  html.theme-dark .bg-slate-800 { background-color: #010409; } /* Deep dark areas */
+
+  /* Text Colors */
+  html.theme-dark .text-slate-900, 
+  html.theme-dark .text-slate-800, 
+  html.theme-dark .text-gray-900 { color: #f0f6fc; } /* Headings - almost white */
+  
+  html.theme-dark .text-slate-700,
+  html.theme-dark .text-slate-600,
+  html.theme-dark .text-gray-700 { color: #c9d1d9; } /* Body text */
+
+  html.theme-dark .text-slate-500,
+  html.theme-dark .text-slate-400 { color: #8b949e; } /* Muted text */
+
+  html.theme-dark .text-blue-600, 
+  html.theme-dark .text-blue-700 { color: #58a6ff; } /* GitHub Link Blue */
+  
+  /* Accents */
+  html.theme-dark .bg-blue-50 { background-color: rgba(56, 139, 253, 0.1); }
+  html.theme-dark .bg-blue-100 { background-color: rgba(56, 139, 253, 0.15); }
+  html.theme-dark .bg-blue-600 { background-color: #1f6feb; }
+  html.theme-dark .hover\:bg-blue-700:hover { background-color: #388bfd; }
+  
+  html.theme-dark .bg-green-50 { background-color: rgba(46, 160, 67, 0.1); }
+  html.theme-dark .text-green-700, html.theme-dark .text-green-800 { color: #3fb950; }
+  html.theme-dark .border-green-200 { border-color: rgba(46, 160, 67, 0.4); }
+
+  html.theme-dark .bg-red-50 { background-color: rgba(248, 81, 73, 0.1); }
+  html.theme-dark .text-red-600, html.theme-dark .text-red-700, html.theme-dark .text-red-800 { color: #f85149; }
+  html.theme-dark .border-red-200 { border-color: rgba(248, 81, 73, 0.4); }
+
+  /* Borders */
+  html.theme-dark .border-slate-100,
+  html.theme-dark .border-slate-200,
+  html.theme-dark .border-slate-300,
+  html.theme-dark .border-gray-200,
+  html.theme-dark .border-gray-300 { border-color: #30363d; }
+  
+  html.theme-dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-color: #30363d; }
+
+  /* Inputs & Form Elements */
+  html.theme-dark input:not([type="checkbox"]), 
+  html.theme-dark textarea, 
+  html.theme-dark select {
+      background-color: #0d1117 !important;
+      border-color: #30363d !important;
+      color: #c9d1d9 !important;
+  }
+  html.theme-dark input::placeholder,
+  html.theme-dark textarea::placeholder {
+      color: #6e7681;
+  }
+  html.theme-dark input:focus, 
+  html.theme-dark textarea:focus, 
+  html.theme-dark select:focus {
+      border-color: #58a6ff !important;
+      box-shadow: 0 0 0 1px #58a6ff !important;
+  }
+
+  /* Specific Component Overrides */
+  
+  /* Sidebar */
+  html.theme-dark aside.bg-white {
+      background-color: #0d1117;
+      border-right: 1px solid #30363d;
+  }
+  
+  /* Buttons (Secondary / Outline) */
+  html.theme-dark button.bg-white {
+      background-color: #21262d;
+      border-color: #363b42;
+      color: #c9d1d9;
+  }
+  html.theme-dark button.bg-white:hover {
+      background-color: #30363d;
+      border-color: #8b949e;
+  }
+  
+  /* Scroll Shadows correction for dark mode */
+  html.theme-dark .scroll-shadows {
+      background:
+          linear-gradient(#161b22 30%, rgba(22, 27, 34, 0)),
+          linear-gradient(rgba(22, 27, 34, 0), #161b22 70%) 0 100%,
+          radial-gradient(farthest-side at 50% 0, rgba(56, 139, 253, 0.15), rgba(0,0,0,0)),
+          radial-gradient(farthest-side at 50% 100%, rgba(56, 139, 253, 0.15), rgba(0,0,0,0)) 0 100%;
+      background-repeat: no-repeat;
+      background-color: #161b22;
+      background-size: 100% 40px, 100% 40px, 100% 14px, 100% 14px;
+      background-attachment: local, local, scroll, scroll;
+  }
+
+  /* Table Hover Rows */
+  html.theme-dark .hover\:bg-slate-50:hover { background-color: #161b22; }
+  
+  /* Checkboxes */
+  html.theme-dark .form-checkbox-custom {
+      background-color: #0d1117;
+      border-color: #30363d;
+  }
+  html.theme-dark .form-checkbox-custom:checked {
+      background-color: #1f6feb;
+      border-color: #1f6feb;
+  }
+  
+  /* Scrollbars */
+  html.theme-dark ::-webkit-scrollbar-track { background: #0d1117; }
+  html.theme-dark ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; border: 2px solid #0d1117; }
+  html.theme-dark ::-webkit-scrollbar-thumb:hover { background: #8b949e; }
+
+  /* --- Eye Protection Theme (Unchanged) --- */
   html.theme-eye-protection body {
       filter: sepia(0.4) contrast(0.9) brightness(0.95);
       background-color: #fbf1c7;
