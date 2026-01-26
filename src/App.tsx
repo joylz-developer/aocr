@@ -694,11 +694,20 @@ const App: React.FC = () => {
             {showExportModal && (
                 <ExportModal
                     onClose={() => setShowExportModal(false)}
-                    onExport={(settings) => {
-                        // Dummy export implementation
+                    onExport={(exportConfig) => {
                         const exportData: ImportData = {
-                            projectSettings: settings.projectSettings ? settings.projectSettings : undefined,
-                            // ... other fields
+                            projectSettings: exportConfig.projectSettings ? settings : undefined,
+                            template: exportConfig.template ? template : undefined,
+                            registryTemplate: exportConfig.registryTemplate ? registryTemplate : undefined,
+                            acts: exportConfig.acts ? acts : undefined,
+                            people: exportConfig.people ? people : undefined,
+                            organizations: exportConfig.organizations ? organizations : undefined,
+                            groups: exportConfig.groups ? groups : undefined,
+                            regulations: exportConfig.regulations ? regulations : undefined,
+                            certificates: exportConfig.certificates ? certificates : undefined,
+                            deletedActs: exportConfig.deletedActs ? deletedActs : undefined,
+                            deletedCertificates: exportConfig.deletedCertificates ? deletedCertificates : undefined,
+                            constructionObjects: exportConfig.constructionObjects ? constructionObjects : undefined,
                         };
                         const blob = new Blob([JSON.stringify(exportData)], { type: 'application/json' });
                         saveAs(blob, 'backup.json');
