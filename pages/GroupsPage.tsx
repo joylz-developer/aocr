@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { CommissionGroup, Person, ROLES, Organization } from '../types';
 import Modal from '../components/Modal';
@@ -88,19 +89,15 @@ const GroupForm: React.FC<{
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label className={labelClass}>Застройщик (технический заказчик)</label>
-                        <CustomSelect options={orgOptions} value={formData.builderOrgId || ''} onChange={(value) => handleOrgChange('builderOrgId', value)} placeholder="Не выбрано" className="mt-1" />
+                        <CustomSelect options={orgOptions} value={formData.builderOrgId || ''} onChange={(value) => handleOrgChange('builderOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
                     </div>
                     <div>
                         <label className={labelClass}>Лицо, осуществляющее строительство (Подрядчик)</label>
-                        <CustomSelect options={orgOptions} value={formData.contractorOrgId || ''} onChange={(value) => handleOrgChange('contractorOrgId', value)} placeholder="Не выбрано" className="mt-1" />
+                        <CustomSelect options={orgOptions} value={formData.contractorOrgId || ''} onChange={(value) => handleOrgChange('contractorOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
                     </div>
-                     <div>
+                     <div className="md:col-span-2">
                         <label className={labelClass}>Лицо, осуществившее подготовку проекта</label>
-                        <CustomSelect options={orgOptions} value={formData.designerOrgId || ''} onChange={(value) => handleOrgChange('designerOrgId', value)} placeholder="Не выбрано" className="mt-1" />
-                    </div>
-                     <div>
-                        <label className={labelClass}>Лицо, выполнившее работы</label>
-                        <CustomSelect options={orgOptions} value={formData.workPerformerOrgId || ''} onChange={(value) => handleOrgChange('workPerformerOrgId', value)} placeholder="Не выбрано" className="mt-1" />
+                        <CustomSelect options={orgOptions} value={formData.designerOrgId || ''} onChange={(value) => handleOrgChange('designerOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
                     </div>
                 </div>
             </div>
@@ -136,6 +133,15 @@ const GroupForm: React.FC<{
                     ))}
                 </div>
             </div>
+
+            <div className="border border-slate-200 rounded-md p-4">
+                <h3 className="text-lg font-semibold text-slate-800 mb-4">Произвели осмотр работ</h3>
+                <div>
+                    <label className={labelClass}>Лицо, выполнившее работы</label>
+                    <CustomSelect options={orgOptions} value={formData.workPerformerOrgId || ''} onChange={(value) => handleOrgChange('workPerformerOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
+                </div>
+            </div>
+
             <div className="flex justify-end space-x-3 pt-4">
                 <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-md hover:bg-slate-300">Отмена</button>
                 <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Сохранить</button>
