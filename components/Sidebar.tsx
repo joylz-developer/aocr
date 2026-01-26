@@ -18,7 +18,7 @@ interface SidebarProps {
     constructionObjects: ConstructionObject[];
     currentObjectId: string | null;
     onObjectChange: (id: string) => void;
-    onAddObject: (name: string) => void;
+    onAddObject: (name: string, cloneFromId?: string, cloneCategories?: string[]) => void;
     onUpdateObject: (id: string, name: string) => void;
 }
 
@@ -50,7 +50,7 @@ const SidebarButton: React.FC<{
         >
             <div className="flex-shrink-0">{icon}</div>
             {isOpen && <span className="ml-4 text-sm font-medium whitespace-nowrap">{label}</span>}
-             {badge > 0 && (
+             {badge !== undefined && badge > 0 && (
                 <span className={`absolute top-1 text-white text-xs font-bold rounded-full h-5 min-w-[1.25rem] flex items-center justify-center px-1 ${isOpen ? 'right-2' : 'right-1'} ${isActive ? 'bg-blue-500' : 'bg-red-500'}`}>
                     {badge}
                 </span>
@@ -67,19 +67,30 @@ const Sidebar: React.FC<SidebarProps> = ({
     const [newObjectName, setNewObjectName] = useState('');
     const [isEditingObject, setIsEditingObject] = useState(false);
     
+    // Cloning State
+    const [cloneFromId, setCloneFromId] = useState<string>('');
+    const [cloneCategories, setCloneCategories] = useState<{ [key: string]: boolean }>({
+        people: true,
+        organizations: true,
+        groups: true,
+        certificates: false,
+        regulations: true
+    });
+    
     // For editing current object
     const [editMode, setEditMode] = useState(false);
     const [editName, setEditName] = useState('');
     
     const currentObject = constructionObjects.find(o => o.id === currentObjectId);
 
+    // Order: Acts -> People -> Organizations -> Groups ...
     const navItems = [
         { page: 'acts', label: 'АОСР', icon: <ActsIcon className="w-5 h-5" /> },
         { page: 'people', label: 'Участники', icon: <PeopleIcon className="w-5 h-5" /> },
+        { page: 'organizations', label: 'Организации', icon: <OrganizationsIcon className="w-5 h-5" /> },
         { page: 'groups', label: 'Группы комиссий', icon: <GroupsIcon className="w-5 h-5" /> },
         { page: 'certificates', label: 'Сертификаты', icon: <CertificateIcon className="w-5 h-5" /> },
         { page: 'regulations', label: 'Нормативы', icon: <BookIcon className="w-5 h-5" /> },
-        { page: 'organizations', label: 'Организации', icon: <OrganizationsIcon className="w-5 h-5" /> },
     ];
 
     const getThemeIcon = () => {
@@ -101,8 +112,16 @@ const Sidebar: React.FC<SidebarProps> = ({
     const handleCreateObject = (e: React.FormEvent) => {
         e.preventDefault();
         if (newObjectName.trim()) {
-            onAddObject(newObjectName.trim());
+            const categoriesToCopy = cloneFromId 
+                ? Object.keys(cloneCategories).filter(k => cloneCategories[k]) 
+                : undefined;
+            
+            onAddObject(newObjectName.trim(), cloneFromId || undefined, categoriesToCopy);
+            
+            // Reset form
             setNewObjectName('');
+            setCloneFromId('');
+            setCloneCategories({ people: true, organizations: true, groups: true, certificates: false, regulations: true });
             setIsObjectModalOpen(false);
         }
     };
@@ -211,18 +230,10 @@ const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => setCurrentPage(item.page as Page)}
                     />
                 ))}
-            </nav>
-
-            <div className="p-3 border-t space-y-1">
-                 <SidebarButton
-                    icon={<SettingsIcon className="w-5 h-5" />}
-                    label="Настройки"
-                    isOpen={isOpen}
-                    isActive={currentPage === 'settings'}
-                    onClick={() => setCurrentPage('settings')}
-                 />
-                 
-                 <SidebarButton
+                
+                {/* Trash moved here to group with object-specific items */}
+                <div className="my-2 border-t border-slate-100 mx-1"></div>
+                <SidebarButton
                     icon={<TrashIcon className="w-5 h-5" />}
                     label="Корзина"
                     isOpen={isOpen}
@@ -230,8 +241,17 @@ const Sidebar: React.FC<SidebarProps> = ({
                     onClick={() => setCurrentPage('trash')}
                     badge={trashCount}
                  />
-                 
-                 <div className="my-1 border-t border-slate-100 pt-1"></div>
+            </nav>
+
+            {/* Footer with Settings and Theme */}
+            <div className="p-3 border-t space-y-1 mt-auto bg-slate-50/50">
+                 <SidebarButton
+                    icon={<SettingsIcon className="w-5 h-5" />}
+                    label="Настройки"
+                    isOpen={isOpen}
+                    isActive={currentPage === 'settings'}
+                    onClick={() => setCurrentPage('settings')}
+                 />
                  
                  <SidebarButton
                     icon={getThemeIcon()}
@@ -245,7 +265,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             <Modal isOpen={isObjectModalOpen} onClose={() => setIsObjectModalOpen(false)} title="Новый объект строительства">
                 <form onSubmit={handleCreateObject} className="space-y-4">
                     <p className="text-sm text-slate-600">
-                        Создайте новую папку (объект) для раздельного ведения документации. Акты, сертификаты и участники будут привязаны к этому объекту.
+                        Создайте новую папку (объект) для раздельного ведения документации.
                     </p>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Наименование объекта</label>
@@ -259,6 +279,49 @@ const Sidebar: React.FC<SidebarProps> = ({
                             required
                         />
                     </div>
+
+                    <div className="border-t border-slate-200 pt-4 mt-2">
+                        <label className="block text-sm font-medium text-slate-800 mb-2">Копировать данные из другого объекта</label>
+                        <select 
+                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white"
+                            value={cloneFromId}
+                            onChange={(e) => setCloneFromId(e.target.value)}
+                        >
+                            <option value="">-- Не копировать (пустой объект) --</option>
+                            {constructionObjects.map(obj => (
+                                <option key={obj.id} value={obj.id}>{obj.name}</option>
+                            ))}
+                        </select>
+
+                        {cloneFromId && (
+                            <div className="mt-3 space-y-2 bg-slate-50 p-3 rounded border border-slate-200">
+                                <p className="text-xs text-slate-500 font-medium mb-1">Что скопировать:</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                        <input type="checkbox" className="form-checkbox-custom h-4 w-4" checked={cloneCategories.people} onChange={e => setCloneCategories(p => ({...p, people: e.target.checked}))} />
+                                        Участники
+                                    </label>
+                                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                        <input type="checkbox" className="form-checkbox-custom h-4 w-4" checked={cloneCategories.organizations} onChange={e => setCloneCategories(p => ({...p, organizations: e.target.checked}))} />
+                                        Организации
+                                    </label>
+                                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                        <input type="checkbox" className="form-checkbox-custom h-4 w-4" checked={cloneCategories.groups} onChange={e => setCloneCategories(p => ({...p, groups: e.target.checked}))} />
+                                        Группы комиссий
+                                    </label>
+                                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                        <input type="checkbox" className="form-checkbox-custom h-4 w-4" checked={cloneCategories.regulations} onChange={e => setCloneCategories(p => ({...p, regulations: e.target.checked}))} />
+                                        Нормативы
+                                    </label>
+                                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                        <input type="checkbox" className="form-checkbox-custom h-4 w-4" checked={cloneCategories.certificates} onChange={e => setCloneCategories(p => ({...p, certificates: e.target.checked}))} />
+                                        Сертификаты
+                                    </label>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     <div className="flex justify-end gap-3 pt-2">
                         <button type="button" onClick={() => setIsObjectModalOpen(false)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded hover:bg-slate-200">Отмена</button>
                         <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium">Создать</button>
