@@ -621,11 +621,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                     {/* GENERATOR COMPONENT */}
                                     <TagGenerator />
 
-                                    <h4 className="font-semibold mt-4">Организации</h4>
+                                    <h4 className="font-semibold mt-4">Организации-участники</h4>
                                     <div className="flex flex-wrap gap-2">
                                         <TagTooltip tag="{builder_details}" description="Реквизиты Застройщика" />
                                         <TagTooltip tag="{contractor_details}" description="Реквизиты Лица, осуществляющего строительство" />
                                         <TagTooltip tag="{designer_details}" description="Реквизиты Проектировщика" />
+                                    </div>
+
+                                    <h4 className="font-semibold mt-4">Произвели осмотр работ</h4>
+                                    <div className="flex flex-wrap gap-2">
                                         <TagTooltip tag="{work_performer}" description="Реквизиты Лица, выполнившего работы" />
                                     </div>
 
