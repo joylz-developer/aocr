@@ -302,6 +302,26 @@ const RichHeaderTooltip: React.FC<{
     );
 };
 
+// Helper for live preview resolution
+const resolvePreviewTemplate = (template: string, act: Act): string => {
+    return template.replace(/\{(\w+)\}/g, (_, key) => {
+        switch(key) {
+            case 'act_number': return act.number;
+            case 'object_name': return act.objectName;
+            case 'work_name': return act.workName;
+            case 'project_docs': return act.projectDocs;
+            case 'work_start_date': return formatDateForDisplay(act.workStartDate);
+            case 'work_end_date': return formatDateForDisplay(act.workEndDate);
+            case 'materials': return act.materials;
+            case 'materials_raw': return act.materials;
+            case 'certs': return act.certs;
+            case 'regulations': return act.regulations;
+            case 'next_work': return act.nextWork;
+            default: return '';
+        }
+    });
+};
+
 
 // Main Table Component
 const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, certificates = [], template, registryTemplate, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, selectedCells, setSelectedCells, onSave, onRequestDelete, onReorderActs, setCurrentPage, createNewAct, onNavigateToCertificate }) => {
@@ -1295,6 +1315,26 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setHoveredHeaderKey(null);
     };
 
+    // Helper for live preview resolution
+    const resolvePreviewTemplate = (template: string, act: Act): string => {
+        return template.replace(/\{(\w+)\}/g, (_, key) => {
+            switch(key) {
+                case 'act_number': return act.number;
+                case 'object_name': return act.objectName;
+                case 'work_name': return act.workName;
+                case 'project_docs': return act.projectDocs;
+                case 'work_start_date': return formatDateForDisplay(act.workStartDate);
+                case 'work_end_date': return formatDateForDisplay(act.workEndDate);
+                case 'materials': return act.materials;
+                case 'materials_raw': return act.materials;
+                case 'certs': return act.certs;
+                case 'regulations': return act.regulations;
+                case 'next_work': return act.nextWork;
+                default: return '';
+            }
+        });
+    };
+
     return (
         <div 
             className="h-full flex flex-col relative outline-none" 
@@ -1423,14 +1463,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                             // Handle automatic default date
                                             if (!val && col.key === 'date' && settings.defaultActDate) {
                                                 // Resolve default value for display
-                                                const defaultResolved = settings.defaultActDate.replace(/\{(\w+)\}/g, (_, key) => {
-                                                    const map: Record<string, string> = {
-                                                        'workEndDate': act.workEndDate,
-                                                        'workStartDate': act.workStartDate,
-                                                        'act_number': act.number,
-                                                    };
-                                                    return map[key] || '';
-                                                });
+                                                const defaultResolved = resolvePreviewTemplate(settings.defaultActDate, act);
                                                 
                                                 const parsedDefault = parseDisplayDate(defaultResolved);
                                                 
@@ -1508,8 +1541,17 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 }
                                             } else { displayContent = <span className="text-slate-300 italic text-xs">Конец списка</span>; }
                                         } else if (col.key === 'additionalInfo' || col.key === 'attachments') {
-                                            if (!act[col.key] && (col.key === 'additionalInfo' ? settings.defaultAdditionalInfo : settings.defaultAttachments)) {
-                                                displayContent = <span className="text-slate-400 text-xs italic">(По умолчанию из настроек)</span>;
+                                            const val = act[col.key];
+                                            const defaultTemplate = col.key === 'additionalInfo' ? settings.defaultAdditionalInfo : settings.defaultAttachments;
+                                            
+                                            if (!val && defaultTemplate) {
+                                                const resolved = resolvePreviewTemplate(defaultTemplate, act);
+                                                displayContent = (
+                                                    <span className="text-slate-400 italic flex items-start gap-1 group/default" title={`Автоматически: ${resolved}`}>
+                                                        <SparklesIcon className="w-3 h-3 text-slate-300 opacity-50 group-hover/default:opacity-100 mt-0.5 flex-shrink-0" />
+                                                        <span className="truncate">{resolved || '(Пусто)'}</span>
+                                                    </span>
+                                                );
                                             }
                                         }
 
@@ -1571,7 +1613,25 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                                 )}
                                                             </div>
                                                         ) : (
-                                                            <textarea ref={editorRef as React.RefObject<HTMLTextAreaElement>} value={editorValue} onChange={handleEditorChange} onKeyDown={handleEditorKeyDown} className="w-full h-full resize-none bg-transparent outline-none overflow-hidden" rows={1} placeholder={col.key === 'workDates' ? 'ДД.ММ.ГГГГ - ДД.ММ.ГГГГ' : ''} />
+                                                            <div className="w-full h-full relative">
+                                                                <textarea ref={editorRef as React.RefObject<HTMLTextAreaElement>} value={editorValue} onChange={handleEditorChange} onKeyDown={handleEditorKeyDown} className="w-full h-full resize-none bg-transparent outline-none overflow-hidden pr-6" rows={1} placeholder={col.key === 'workDates' ? 'ДД.ММ.ГГГГ - ДД.ММ.ГГГГ' : ''} />
+                                                                {/* Generic Clear Button for Textareas if they have defaults */}
+                                                                {editorValue && ((col.key === 'additionalInfo' && settings.defaultAdditionalInfo) || (col.key === 'attachments' && settings.defaultAttachments)) && (
+                                                                    <button 
+                                                                        onMouseDown={(e) => {
+                                                                            e.preventDefault(); 
+                                                                            setEditorValue(''); 
+                                                                            const updatedAct = { ...act, [col.key]: '' };
+                                                                            handleSaveWithTemplateResolution(updatedAct);
+                                                                            closeEditor();
+                                                                        }}
+                                                                        className="absolute top-0 right-0 text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded"
+                                                                        title="Сбросить (использовать по умолчанию)"
+                                                                    >
+                                                                        <CloseIcon className="w-3 h-3" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         )}
                                                         {dateError && col.key === 'workDates' && (
                                                             <div className="absolute top-full left-0 z-50 bg-red-100 text-red-700 text-xs px-2 py-1 rounded shadow-md mt-1 border border-red-200">

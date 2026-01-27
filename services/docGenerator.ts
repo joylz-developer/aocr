@@ -68,38 +68,31 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
     // 2. If showActDate is TRUE (shown): We use act.date if present, otherwise fall back to default.
     
     let effectiveDate = '';
-    
     if (settings.showActDate) {
-        effectiveDate = act.date; // Can be empty or manually set
-    } else {
-        effectiveDate = ''; // Force empty so we trigger default resolution below
+        effectiveDate = act.date;
     }
-
+    // If hidden (force default) OR visible but empty (fallback)
     if (!effectiveDate && settings.defaultActDate) {
-        // Since defaultActDate is a template (e.g. {workEndDate}), we need to resolve it locally first before splitting
-        // Note: resolveStringTemplate expects YYYY-MM-DD but outputs DD.MM.YYYY.
         const resolved = resolveStringTemplate(settings.defaultActDate, act);
-        
-        // resolved is likely DD.MM.YYYY (from display format) or raw text.
-        // We need to convert it back to YYYY-MM-DD for consistency in splitting below
         if (resolved.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
             const [d, m, y] = resolved.split('.');
             effectiveDate = `${y}-${m}-${d}`;
         } else {
-            // It might be raw text or empty
             effectiveDate = resolved; 
         }
     }
 
-    let effectiveAdditionalInfo = act.additionalInfo;
-    // Logic for Additional Info (similar logic: if hidden, prefer default? Usually info isn't "hidden" like date, but "optional")
-    // Current logic: If empty in act, use default.
+    // Logic for Additional Info
+    let effectiveAdditionalInfo = '';
+    if (settings.showAdditionalInfo) {
+        effectiveAdditionalInfo = act.additionalInfo;
+    }
+    // If hidden (force default) OR visible but empty (fallback)
     if (!effectiveAdditionalInfo && settings.defaultAdditionalInfo) {
         effectiveAdditionalInfo = resolveStringTemplate(settings.defaultAdditionalInfo, act);
     }
 
     const [actYear, actMonth, actDay] = effectiveDate ? effectiveDate.split('-') : ['', '', ''];
-    // If effectiveDate wasn't YYYY-MM-DD (e.g. raw text), fallback to manual parsing or leave empty split
     const dateParts = effectiveDate && effectiveDate.includes('-') ? effectiveDate.split('-') : [];
     const finalActYear = dateParts[0] || '';
     const finalActMonth = dateParts[1] || '';
@@ -234,8 +227,13 @@ export const generateDocument = (
             ? registryReferenceString
             : act.materials;
 
-        let attachmentsTemplate = act.attachments;
-        if (!attachmentsTemplate && settings.showAttachments && settings.defaultAttachments) {
+        // Logic for Attachments
+        let attachmentsTemplate = '';
+        if (settings.showAttachments) {
+            attachmentsTemplate = act.attachments;
+        }
+        // If hidden (force default) OR visible but empty (fallback)
+        if (!attachmentsTemplate && settings.defaultAttachments) {
             attachmentsTemplate = settings.defaultAttachments;
         }
 
