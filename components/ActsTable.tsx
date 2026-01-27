@@ -499,7 +499,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 return value !== undefined && value !== null ? String(value) : '';
             });
         };
-        const dateTemplate = settings.defaultActDate !== undefined ? settings.defaultActDate : '{work_end_date}';
+        
+        // Fix: Use empty string if setting is undefined or empty
+        const dateTemplate = settings.defaultActDate || '';
         const resolvedDateString = resolve(dateTemplate, actToSave);
         
         // Only update if we resolved a valid date string. 
