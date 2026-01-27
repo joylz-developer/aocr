@@ -61,16 +61,27 @@ const resolveStringTemplate = (templateStr: string, act: Act, overrides: Record<
 
 // Function to generate data object for templates
 const prepareDocData = (act: Act, people: Person[], currentAttachments: string, settings: ProjectSettings, overrideMaterials?: string, registryReferenceText: string = '') => {
-    // Resolve Default Values if Act fields are empty
-    let effectiveDate = act.date;
+    // Resolve Default Values if Act fields are empty OR if the field is hidden in settings
+    
+    // Logic for Date:
+    // 1. If showActDate is FALSE (hidden): We MUST use the default template/value, ignoring any stale manual data in act.date.
+    // 2. If showActDate is TRUE (shown): We use act.date if present, otherwise fall back to default.
+    
+    let effectiveDate = '';
+    
+    if (settings.showActDate) {
+        effectiveDate = act.date; // Can be empty or manually set
+    } else {
+        effectiveDate = ''; // Force empty so we trigger default resolution below
+    }
+
     if (!effectiveDate && settings.defaultActDate) {
         // Since defaultActDate is a template (e.g. {workEndDate}), we need to resolve it locally first before splitting
         // Note: resolveStringTemplate expects YYYY-MM-DD but outputs DD.MM.YYYY.
-        // We need raw value to split.
-        // For simple case, let's assume defaultActDate might be {workEndDate} which maps to act.workEndDate.
         const resolved = resolveStringTemplate(settings.defaultActDate, act);
-        // resolved is DD.MM.YYYY. We need to split that.
-        // Or if it was just plain text.
+        
+        // resolved is likely DD.MM.YYYY (from display format) or raw text.
+        // We need to convert it back to YYYY-MM-DD for consistency in splitting below
         if (resolved.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
             const [d, m, y] = resolved.split('.');
             effectiveDate = `${y}-${m}-${d}`;
@@ -81,6 +92,8 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
     }
 
     let effectiveAdditionalInfo = act.additionalInfo;
+    // Logic for Additional Info (similar logic: if hidden, prefer default? Usually info isn't "hidden" like date, but "optional")
+    // Current logic: If empty in act, use default.
     if (!effectiveAdditionalInfo && settings.defaultAdditionalInfo) {
         effectiveAdditionalInfo = resolveStringTemplate(settings.defaultAdditionalInfo, act);
     }
