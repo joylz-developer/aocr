@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry, ExportSettings, CertificateFile, ConstructionObject } from './types';
@@ -693,10 +694,10 @@ const App: React.FC = () => {
             {showExportModal && (
                 <ExportModal
                     onClose={() => setShowExportModal(false)}
-                    onExport={(exportConfig) => {
+                    onExport={(settings) => {
                         // Dummy export implementation
                         const exportData: ImportData = {
-                            projectSettings: exportConfig.projectSettings ? settings : undefined,
+                            projectSettings: settings.projectSettings ? settings.projectSettings : undefined,
                             // ... other fields
                         };
                         const blob = new Blob([JSON.stringify(exportData)], { type: 'application/json' });
