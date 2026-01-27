@@ -461,7 +461,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         value={formData.defaultActDate || ''} 
                                         onChange={handleChange} 
                                         className={`${inputClass} text-sm`} 
-                                        placeholder="По умолчанию: {work_end_date}" 
+                                        placeholder="{work_end_date}" 
                                     />
                                 </div>
                             </SettingToggle>
