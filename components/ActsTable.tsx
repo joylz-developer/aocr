@@ -480,18 +480,38 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         const resolve = (templateStr: string, contextAct: Act) => {
             if (!templateStr || typeof templateStr !== 'string') return templateStr;
             return templateStr.replace(/\{(\w+)\}/g, (_, key) => {
+                // Add mapping for snake_case to camelCase
+                const map: Record<string, string> = {
+                    'work_start_date': 'workStartDate',
+                    'work_end_date': 'workEndDate',
+                    'act_date': 'date',
+                    'act_number': 'number',
+                    'object_name': 'objectName'
+                };
+                const effectiveKey = map[key] || key;
+
                 let value;
-                 if (key === 'workStartDate' || key === 'workEndDate') {
-                    value = formatDateForDisplay((contextAct as any)[key]);
+                 if (effectiveKey === 'workStartDate' || effectiveKey === 'workEndDate') {
+                    value = formatDateForDisplay((contextAct as any)[effectiveKey]);
                 } else {
-                    value = (contextAct as any)[key];
+                    value = (contextAct as any)[effectiveKey];
                 }
                 return value !== undefined && value !== null ? String(value) : '';
             });
         };
-        const dateTemplate = settings.defaultActDate !== undefined ? settings.defaultActDate : '{workEndDate}';
+        const dateTemplate = settings.defaultActDate !== undefined ? settings.defaultActDate : '{work_end_date}';
         const resolvedDateString = resolve(dateTemplate, actToSave);
-        actToSave.date = parseDisplayDate(resolvedDateString) || actToSave.date;
+        
+        // Only update if we resolved a valid date string. 
+        // If it's empty, we prefer to keep existing or default (handled by logic below or by user manual entry),
+        // unless logic dictates clearing. Here we follow standard practice: updates from template if valuable.
+        // Actually, if resolved string is "", parseDisplayDate returns null.
+        // We only assign if result is valid.
+        const parsedDate = parseDisplayDate(resolvedDateString);
+        if (parsedDate) {
+            actToSave.date = parsedDate;
+        }
+        
         return actToSave;
     }, [settings]);
 
@@ -764,6 +784,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             setIsDraggingSelection(true);
         }
     };
+    
+    // ... [Rest of ActsTable.tsx component code remains unchanged] ...
     
     const handleRowHeaderMouseDown = (e: React.MouseEvent, rowIndex: number) => {
         dragHandlePressedRef.current = true;
