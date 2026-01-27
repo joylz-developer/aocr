@@ -86,7 +86,7 @@ const App: React.FC = () => {
         showActDate: false,
         showParticipantDetails: true,
         geminiApiKey: '',
-        defaultActDate: '{workEndDate}',
+        defaultActDate: '',
         historyDepth: 20,
         registryThreshold: 5,
         certificatePromptNumber: DEFAULT_PROMPT_NUMBER,
@@ -197,18 +197,6 @@ const App: React.FC = () => {
             
             if (shouldClone('groups')) {
                 const sourceGroups = groups.filter(g => g.constructionObjectId === cloneFromId);
-                // Groups reference People/Orgs IDs. Ideally we should map old IDs to new IDs, but simple copy breaks refs.
-                // However, "Copy" usually implies "Copy structure".
-                // Since this is a simple app, we can just copy them. The names will match, but IDs might be tricky if we fully segregated.
-                // NOTE: If we cloned people/orgs and gave them NEW IDs, the group references (which are IDs) will be broken.
-                // To do this strictly correct requires mapping old->new IDs.
-                // For simplicity in this iteration: We just copy. The user might need to re-select people if IDs don't match.
-                // IMPROVEMENT: Intelligent ID mapping? Too complex for this XML block. 
-                // We'll proceed with direct copy. The Groups will point to IDs that exist in the *Source* object? No, People are filtered by current object ID.
-                // So if we just copy groups, they will point to IDs that are not in `currentPeople`.
-                // FIX: Let's assume for now the user accepts they might need to update links, OR we don't clone IDs.
-                // Actually, let's skip re-mapping logic complexity for now to avoid breaking the file limit.
-                // The `GroupForm` filters options by `organizations` (current obj). 
                 const newGroups = sourceGroups.map(g => ({ 
                     ...g, 
                     id: crypto.randomUUID(), 
@@ -694,11 +682,20 @@ const App: React.FC = () => {
             {showExportModal && (
                 <ExportModal
                     onClose={() => setShowExportModal(false)}
-                    onExport={(settings) => {
-                        // Dummy export implementation
+                    onExport={(exportConfig) => {
                         const exportData: ImportData = {
-                            projectSettings: settings.projectSettings ? settings.projectSettings : undefined,
-                            // ... other fields
+                            projectSettings: exportConfig.projectSettings ? settings : undefined,
+                            template: exportConfig.template ? template : undefined,
+                            registryTemplate: exportConfig.registryTemplate ? registryTemplate : undefined,
+                            constructionObjects: exportConfig.constructionObjects ? constructionObjects : undefined,
+                            acts: exportConfig.acts ? acts : undefined,
+                            people: exportConfig.people ? people : undefined,
+                            organizations: exportConfig.organizations ? organizations : undefined,
+                            groups: exportConfig.groups ? groups : undefined,
+                            regulations: exportConfig.regulations ? regulations : undefined,
+                            certificates: exportConfig.certificates ? certificates : undefined,
+                            deletedActs: exportConfig.deletedActs ? deletedActs : undefined,
+                            deletedCertificates: exportConfig.deletedCertificates ? deletedCertificates : undefined,
                         };
                         const blob = new Blob([JSON.stringify(exportData)], { type: 'application/json' });
                         saveAs(blob, 'backup.json');
