@@ -476,56 +476,22 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
 
     const applyTemplatesToAct = useCallback((act: Act) => {
-        const actToSave = { ...act };
-        const resolve = (templateStr: string, contextAct: Act) => {
-            if (!templateStr || typeof templateStr !== 'string') return templateStr;
-            return templateStr.replace(/\{(\w+)\}/g, (_, key) => {
-                // Add mapping for snake_case to camelCase
-                const map: Record<string, string> = {
-                    'work_start_date': 'workStartDate',
-                    'work_end_date': 'workEndDate',
-                    'act_date': 'date',
-                    'act_number': 'number',
-                    'object_name': 'objectName'
-                };
-                const effectiveKey = map[key] || key;
-
-                let value;
-                 if (effectiveKey === 'workStartDate' || effectiveKey === 'workEndDate') {
-                    value = formatDateForDisplay((contextAct as any)[effectiveKey]);
-                } else {
-                    value = (contextAct as any)[effectiveKey];
-                }
-                return value !== undefined && value !== null ? String(value) : '';
-            });
-        };
-        const dateTemplate = settings.defaultActDate || '';
-        const resolvedDateString = resolve(dateTemplate, actToSave);
-        
-        // Only update if we resolved a valid date string. 
-        // If it's empty, we prefer to keep existing or default (handled by logic below or by user manual entry),
-        // unless logic dictates clearing. Here we follow standard practice: updates from template if valuable.
-        // Actually, if resolved string is "", parseDisplayDate returns null.
-        // We only assign if result is valid.
-        const parsedDate = parseDisplayDate(resolvedDateString);
-        if (parsedDate) {
-            actToSave.date = parsedDate;
-        }
-        
-        return actToSave;
+        // This function is for "Hard Save" of values if needed, but UI uses dynamic resolution.
+        // For date, we prefer dynamic unless manually set.
+        return act; 
     }, [settings]);
 
     const handleSaveWithTemplateResolution = useCallback((actToSave: Act) => {
-        const resolvedAct = applyTemplatesToAct(actToSave);
-        onSave(resolvedAct);
-    }, [onSave, applyTemplatesToAct]);
+        // We pass acts directly now, letting empty fields be resolved dynamically
+        onSave(actToSave);
+    }, [onSave]);
     
     const performBulkUpdate = useCallback((modifiedActsMap: Map<string, Act>) => {
         if (modifiedActsMap.size === 0) return;
         let hasChanges = false;
         const finalActs = acts.map(act => {
             if (modifiedActsMap.has(act.id)) {
-                const updatedAct = applyTemplatesToAct(modifiedActsMap.get(act.id)!);
+                const updatedAct = modifiedActsMap.get(act.id)!;
                 if (JSON.stringify(act) !== JSON.stringify(updatedAct)) {
                     hasChanges = true;
                     return updatedAct;
@@ -536,7 +502,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (hasChanges) {
             onReorderActs(finalActs);
         }
-    }, [acts, applyTemplatesToAct, onReorderActs]);
+    }, [acts, onReorderActs]);
 
     const getOrgDetailsString = useCallback((org: Organization): string => {
         return `${org.name}, ИНН ${org.inn}, ОГРН ${org.ogrn}, ${org.address}`;
@@ -636,8 +602,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 const end = formatDateForDisplay(act.workEndDate);
                 initialValue = (start && end && start !== end) ? `${start} - ${end}` : (start || '');
             } else if (col.type === 'date') {
+                // For date editor, we use YYYY-MM-DD format for input[type="date"]
                 const columnKey = col.key as keyof Act;
-                initialValue = formatDateForDisplay(act[columnKey] as string || '');
+                initialValue = act[columnKey] as string || '';
             } else if (col.key === 'regulations') {
                 initialValue = act.regulations || '';
             } else if (col.key === 'materials') {
@@ -658,7 +625,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     el.style.height = `${el.scrollHeight}px`;
                     el.selectionStart = el.selectionEnd = el.value.length;
                 } else if (editorRef.current instanceof HTMLInputElement) {
-                    editorRef.current.select();
+                    // Do not select for date inputs to avoid clearing immediately on type
+                    if(col.type !== 'date') editorRef.current.select();
                 }
             }, 0);
         }
@@ -1451,8 +1419,31 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                             displayContent = groups.find(g => g.id === act.commissionGroupId)?.name || <span className="text-slate-300 italic">Не выбрано</span>;
                                         } else if (col.type === 'date') {
                                             const val = act[col.key as keyof Act] as string;
+                                            
+                                            // Handle automatic default date
                                             if (!val && col.key === 'date' && settings.defaultActDate) {
-                                                displayContent = <span className="text-slate-400 text-xs italic">(По умолчанию)</span>;
+                                                // Resolve default value for display
+                                                const defaultResolved = settings.defaultActDate.replace(/\{(\w+)\}/g, (_, key) => {
+                                                    const map: Record<string, string> = {
+                                                        'workEndDate': act.workEndDate,
+                                                        'workStartDate': act.workStartDate,
+                                                        'act_number': act.number,
+                                                    };
+                                                    return map[key] || '';
+                                                });
+                                                
+                                                const parsedDefault = parseDisplayDate(defaultResolved);
+                                                
+                                                if (parsedDefault) {
+                                                    displayContent = (
+                                                        <span className="text-slate-400 italic flex items-center gap-1 group/date" title={`Автоматически: ${defaultResolved}`}>
+                                                            {formatDateForDisplay(parsedDefault)}
+                                                            <SparklesIcon className="w-3 h-3 text-slate-300 opacity-50 group-hover/date:opacity-100" />
+                                                        </span>
+                                                    );
+                                                } else {
+                                                    displayContent = <span className="text-slate-300 text-xs italic">(Автоматически)</span>;
+                                                }
                                             } else {
                                                 displayContent = formatDateForDisplay(val);
                                             }
@@ -1544,13 +1535,41 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 {isCopied && <div className="copied-cell-overlay" />}
                                                 
                                                 {isEditing ? (
-                                                    <div ref={editorContainerRef} className="h-full w-full min-h-[1.5em] bg-transparent">
+                                                    <div ref={editorContainerRef} className="h-full w-full min-h-[1.5em] bg-transparent flex items-center">
                                                        {col.key === 'commissionGroup' ? (
                                                             <CustomSelect options={groupOptions} value={editorValue} onChange={(val) => { handleGroupChange(act, val); closeEditor(); }} startOpen={true} onCreateNew={handleCreateNewGroup} allowClear className="w-full" />
                                                         ) : col.key === 'regulations' ? (
                                                             <RegulationsInput value={editorValue} onChange={setEditorValue} regulations={regulations} onOpenDictionary={() => setRegulationsModalOpen(true)} onInfoClick={(des, target) => handleShowRegulationInfo(des, target)} />
                                                         ) : col.key === 'materials' ? (
                                                             <MaterialsInput value={editorValue} onChange={setEditorValue} certificates={certificates} onNavigateToCertificate={onNavigateToCertificate} />
+                                                        ) : col.type === 'date' ? (
+                                                            <div className="flex items-center w-full gap-1">
+                                                                <input 
+                                                                    ref={editorRef as React.RefObject<HTMLInputElement>} 
+                                                                    type="date" 
+                                                                    value={editorValue} 
+                                                                    onChange={handleEditorChange} 
+                                                                    onKeyDown={handleEditorKeyDown} 
+                                                                    className="w-full h-full bg-transparent outline-none p-1 text-sm rounded border border-blue-300 focus:ring-1 focus:ring-blue-500" 
+                                                                />
+                                                                {/* Show clear button if manually set to allow reverting to default */}
+                                                                {editorValue && (
+                                                                    <button 
+                                                                        onMouseDown={(e) => {
+                                                                            e.preventDefault(); // Prevent blur
+                                                                            setEditorValue(''); // Clear to empty -> reverts to default logic
+                                                                            // Trigger save immediately for UX
+                                                                            const updatedAct = { ...act, [col.key]: '' };
+                                                                            handleSaveWithTemplateResolution(updatedAct);
+                                                                            closeEditor();
+                                                                        }}
+                                                                        className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded"
+                                                                        title="Сбросить (использовать по умолчанию)"
+                                                                    >
+                                                                        <CloseIcon className="w-4 h-4" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         ) : (
                                                             <textarea ref={editorRef as React.RefObject<HTMLTextAreaElement>} value={editorValue} onChange={handleEditorChange} onKeyDown={handleEditorKeyDown} className="w-full h-full resize-none bg-transparent outline-none overflow-hidden" rows={1} placeholder={col.key === 'workDates' ? 'ДД.ММ.ГГГГ - ДД.ММ.ГГГГ' : ''} />
                                                         )}
