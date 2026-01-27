@@ -59,19 +59,39 @@ const resolveStringTemplate = (templateStr: string, act: Act, overrides: Record<
     });
 };
 
+// Helper to extract unique clean certificates from materials string
+const extractUniqueCertificates = (materialsStr: string): string => {
+    const uniqueDocs = new Set<string>();
+    const items = materialsStr.split(';').map(s => s.trim()).filter(Boolean);
+
+    items.forEach(item => {
+        // Expected format: "Material Name (Cert Info)"
+        const match = item.match(/^(.*)\s\((.*)\)\s*$/);
+        if (match) {
+            let certDoc = match[2].trim();
+            // Remove "valid until" dates and phrases
+            certDoc = certDoc.replace(/,?\s*(действителен|действ\.|до)\s*(\d{2}\.\d{2}\.\d{4})?.*/i, '').trim();
+            // Remove just dates at the end (e.g. "Passport 123, 01.01.2024")
+            certDoc = certDoc.replace(/,?\s*\d{2}\.\d{2}\.\d{4}$/, '').trim();
+            
+            if (certDoc) {
+                uniqueDocs.add(certDoc);
+            }
+        }
+    });
+
+    return Array.from(uniqueDocs).join('; ');
+};
+
 // Function to generate data object for templates
-const prepareDocData = (act: Act, people: Person[], currentAttachments: string, settings: ProjectSettings, overrideMaterials?: string, registryReferenceText: string = '') => {
+const prepareDocData = (act: Act, people: Person[], currentAttachments: string, settings: ProjectSettings, overrideMaterials?: string, overrideMaterialDocs?: string) => {
     // Resolve Default Values if Act fields are empty OR if the field is hidden in settings
     
-    // Logic for Date:
-    // 1. If showActDate is FALSE (hidden): We MUST use the default template/value, ignoring any stale manual data in act.date.
-    // 2. If showActDate is TRUE (shown): We use act.date if present, otherwise fall back to default.
-    
+    // Logic for Date
     let effectiveDate = '';
     if (settings.showActDate) {
         effectiveDate = act.date;
     }
-    // If hidden (force default) OR visible but empty (fallback)
     if (!effectiveDate && settings.defaultActDate) {
         const resolved = resolveStringTemplate(settings.defaultActDate, act);
         if (resolved.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
@@ -87,7 +107,6 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
     if (settings.showAdditionalInfo) {
         effectiveAdditionalInfo = act.additionalInfo;
     }
-    // If hidden (force default) OR visible but empty (fallback)
     if (!effectiveAdditionalInfo && settings.defaultAdditionalInfo) {
         effectiveAdditionalInfo = resolveStringTemplate(settings.defaultAdditionalInfo, act);
     }
@@ -101,6 +120,8 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
     const [workStartYear, workStartMonth, workStartDay] = act.workStartDate ? act.workStartDate.split('-') : ['', '', ''];
     const [workEndYear, workEndMonth, workEndDay] = act.workEndDate ? act.workEndDate.split('-') : ['', '', ''];
     
+    const uniqueDocsRaw = extractUniqueCertificates(act.materials);
+
     const data: { [key: string]: any } = {
         object_name: act.objectName,
         builder_details: act.builderDetails,
@@ -113,9 +134,15 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
         work_performer: act.workPerformer,
         work_name: act.workName,
         project_docs: act.projectDocs,
+        
+        // Materials logic
         materials: overrideMaterials !== undefined ? overrideMaterials : act.materials,
         materials_raw: act.materials,
-        registry_text: registryReferenceText,
+        
+        // Docs only logic
+        material_docs: overrideMaterialDocs !== undefined ? overrideMaterialDocs : uniqueDocsRaw,
+        material_docs_raw: uniqueDocsRaw,
+
         certs: act.certs,
         work_start_day: workStartDay,
         work_start_month: workStartMonth,
@@ -214,7 +241,7 @@ export const generateDocument = (
     act: Act, 
     people: Person[], 
     settings: ProjectSettings,
-    certificates: Certificate[] = [] // New parameter
+    certificates: Certificate[] = [] 
 ) => {
     try {
         const materialsList = act.materials.split(';').map(s => s.trim()).filter(Boolean);
@@ -226,6 +253,10 @@ export const generateDocument = (
         const smartMaterialsValue = shouldUseRegistry 
             ? registryReferenceString
             : act.materials;
+            
+        const smartMaterialDocsValue = shouldUseRegistry
+            ? registryReferenceString
+            : undefined; // undefined triggers fallback to raw unique logic in prepareDocData
 
         // Logic for Attachments
         let attachmentsTemplate = '';
@@ -237,9 +268,16 @@ export const generateDocument = (
             attachmentsTemplate = settings.defaultAttachments;
         }
 
+        // Pre-resolve attachments to handle variables inside them (like {materials})
+        // We pass "raw" materials here so the attachment list always has context if needed,
+        // but typically attachments are just text.
+        // If the user uses {materials} in attachments, it should respect the smart logic.
+        const uniqueDocsRaw = extractUniqueCertificates(act.materials);
         let resolvedAttachments = resolveStringTemplate(attachmentsTemplate || '', act, {
             materials: smartMaterialsValue,
             materials_raw: act.materials,
+            material_docs: smartMaterialDocsValue || uniqueDocsRaw,
+            material_docs_raw: uniqueDocsRaw,
             certs: act.certs
         });
         
@@ -268,14 +306,11 @@ export const generateDocument = (
                             date = dateMatch[1];
                         }
 
-                        // 2. Clean Cert Doc text: Remove date and "valid until" phrases to leave just doc number/name
-                        // Removes: ", до dd.mm.yyyy", " действительно до..."
+                        // 2. Clean Cert Doc text
                         certDoc = certInfo.replace(/,?\s*(действителен|действ\.|до)\s*(\d{2}\.\d{2}\.\d{4})?.*/i, '').trim();
-                        // Also remove just the date if it was at the end without keywords
                         certDoc = certDoc.replace(new RegExp(`,?\\s*${date}$`), '').trim();
 
                         // 3. Find Amount from Certificate Object
-                        // Extract number part to find match
                         const numberMatch = certInfo.match(/№\s*([^\s,]+)/);
                         if (numberMatch) {
                             const certNum = numberMatch[1];
@@ -298,6 +333,7 @@ export const generateDocument = (
             };
             const registryBuffer = renderDoc(registryTemplateBase64, registryData);
 
+            // For the main act, use registry references
             const actData = prepareDocData(act, people, resolvedAttachments, settings, registryReferenceString, registryReferenceString);
             const actBuffer = renderDoc(templateBase64, actData);
 
@@ -309,7 +345,8 @@ export const generateDocument = (
             saveAs(content, `Пакет_Акт_№${act.number || 'б-н'}.zip`);
 
         } else {
-            const data = prepareDocData(act, people, resolvedAttachments, settings, undefined, '');
+            // No registry: Pass undefined for overrides to let logic compute normal values
+            const data = prepareDocData(act, people, resolvedAttachments, settings, undefined, undefined);
             const buffer = renderDoc(templateBase64, data);
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
             saveAs(blob, `Акт_скрытых_работ_${act.number || 'б-н'}.docx`);

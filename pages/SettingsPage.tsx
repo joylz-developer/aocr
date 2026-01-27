@@ -128,7 +128,7 @@ const TagGenerator: React.FC = () => {
                         className="w-full max-w-sm text-sm border border-slate-300 rounded px-3 py-2 focus:outline-none focus:border-blue-500 shadow-sm"
                     />
                     <span className="text-sm text-slate-500">
-                        (например: <code>attachments</code>, <code>additional_info</code>)
+                        (например: <code>attachments</code>, <code>material_docs</code>)
                     </span>
                 </div>
             </div>
@@ -212,6 +212,7 @@ const VariableHelpTooltip: React.FC = () => {
     const variables = [
         { name: '{act_number}', desc: 'Номер акта' },
         { name: '{materials}', desc: 'Список материалов' },
+        { name: '{material_docs}', desc: 'Список уникальных документов (паспортов)' },
         { name: '{certs}', desc: 'Исполнительные схемы' },
         { name: '{work_start_date}', desc: 'Дата начала работ' },
         { name: '{work_end_date}', desc: 'Дата окончания работ' },
@@ -431,7 +432,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         <span>Значение по умолчанию</span>
                                         <VariableHelpTooltip />
                                     </label>
-                                    <textarea id="defaultAttachments" name="defaultAttachments" value={formData.defaultAttachments || ''} onChange={handleChange} className={`${inputClass} text-sm`} rows={6} placeholder="Например: Исполнительные схемы: {certs}" />
+                                    <textarea id="defaultAttachments" name="defaultAttachments" value={formData.defaultAttachments || ''} onChange={handleChange} className={`${inputClass} text-sm`} rows={6} placeholder="Например: Исполнительная схема; {certs};" />
                                     <p className="text-xs text-slate-500 mt-1">
                                         Вы можете использовать теги (например, {'{materials}'}) в этом поле. При генерации они заменятся на данные из акта. Переносы строк сохраняются.
                                         <br/><strong>Совет:</strong> Используйте {'{materials_raw}'} чтобы всегда выводить полный список материалов, даже если включен реестр.
@@ -635,9 +636,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                     <div className="flex flex-wrap gap-2">
                                         <TagTooltip tag="{work_name}" description="Наименование выполненных работ" />
                                         <TagTooltip tag="{project_docs}" description="Проектная документация" />
+                                        
                                         <TagTooltip tag="{materials}" description="Автоматически: 'Текст материалов' ИЛИ 'ссылка на реестр' (если материалов > порога)" />
                                         <TagTooltip tag="{materials_raw}" description="Всегда полный список материалов текстом" />
-                                        <TagTooltip tag="{registry_text}" description="Текст 'см. Приложение №1...' (если создан реестр), иначе пусто" />
+                                        
+                                        <TagTooltip tag="{material_docs}" description="Уникальные паспорта/сертификаты (без названий материалов). Смарт: если материалов много, будет ссылка на реестр." />
+                                        <TagTooltip tag="{material_docs_raw}" description="Все уникальные паспорта/сертификаты (без названий) всегда полным списком." />
+
                                         <TagTooltip tag="{certs}" description="Документы о качестве/схемы" />
                                         <TagTooltip tag="{regulations}" description="Нормативные документы" />
                                         <TagTooltip tag="{next_work}" description="Разрешенные следующие работы" />
