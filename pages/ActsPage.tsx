@@ -180,9 +180,11 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
             workEndDate: '', 
             regulations: '', 
             nextWork: '', 
-            additionalInfo: settings.defaultAdditionalInfo || '', 
+            // We set these to empty to allow the "Default if empty" logic in docGenerator to work.
+            // If we pre-fill them, changing settings later won't update existing acts.
+            additionalInfo: '', 
             copiesCount: String(settings.defaultCopiesCount), 
-            attachments: settings.defaultAttachments || '', 
+            attachments: '', 
             representatives: {},
         };
     };

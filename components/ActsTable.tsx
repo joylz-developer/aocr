@@ -996,8 +996,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 const actToGenerate = { ...act };
                 if (act.nextWorkActId === AUTO_NEXT_ID) {
                     const nextAct = acts[rowIndex + 1];
-                    if (nextAct) { actToGenerate.nextWork = `Работы по акту №${nextAct.number || 'б/н'} (${nextAct.workName || '...'})`; } else { actToGenerate.nextWork = ''; }
+                    // Logic to avoid "Act #n/a" if next act is empty
+                    if (nextAct && (nextAct.number || nextAct.workName)) { 
+                        actToGenerate.nextWork = `Работы по акту №${nextAct.number || 'б/н'} (${nextAct.workName || '...'})`; 
+                    } else { 
+                        // If no next act or it's empty, clear the field so it doesn't show garbage
+                        actToGenerate.nextWork = ''; 
+                    }
                 }
+                // We pass the full settings object so docGenerator can use defaults for empty fields
                 generateDocument(template, registryTemplate, actToGenerate, people, settings, certificates); 
             }
         });
@@ -1443,7 +1450,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         } else if (col.key === 'commissionGroup') {
                                             displayContent = groups.find(g => g.id === act.commissionGroupId)?.name || <span className="text-slate-300 italic">Не выбрано</span>;
                                         } else if (col.type === 'date') {
-                                            displayContent = formatDateForDisplay(act[col.key as keyof Act] as string);
+                                            const val = act[col.key as keyof Act] as string;
+                                            if (!val && col.key === 'date' && settings.defaultActDate) {
+                                                displayContent = <span className="text-slate-400 text-xs italic">(По умолчанию)</span>;
+                                            } else {
+                                                displayContent = formatDateForDisplay(val);
+                                            }
                                         } else if (col.key === 'regulations') {
                                             displayContent = (
                                                 <div className="flex flex-wrap gap-1">
@@ -1492,13 +1504,22 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         } else if (col.key === 'nextWork' && act.nextWorkActId === AUTO_NEXT_ID) {
                                             const nextAct = acts[rowIndex + 1];
                                             if (nextAct) {
-                                                displayContent = (
-                                                    <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1.5 inline-flex max-w-full">
-                                                        <ArrowDownCircleIcon className="w-3 h-3 flex-shrink-0" />
-                                                        <span className="truncate">Акт №{nextAct.number || 'б/н'} ({nextAct.workName || '...'})</span>
-                                                    </span>
-                                                );
+                                                const hasContent = nextAct.number || nextAct.workName;
+                                                if (hasContent) {
+                                                    displayContent = (
+                                                        <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1.5 inline-flex max-w-full">
+                                                            <ArrowDownCircleIcon className="w-3 h-3 flex-shrink-0" />
+                                                            <span className="truncate">Акт №{nextAct.number || 'б/н'} ({nextAct.workName || '...'})</span>
+                                                        </span>
+                                                    );
+                                                } else {
+                                                    displayContent = <span className="text-slate-300 italic text-xs">Следующий акт пуст</span>;
+                                                }
                                             } else { displayContent = <span className="text-slate-300 italic text-xs">Конец списка</span>; }
+                                        } else if (col.key === 'additionalInfo' || col.key === 'attachments') {
+                                            if (!act[col.key] && (col.key === 'additionalInfo' ? settings.defaultAdditionalInfo : settings.defaultAttachments)) {
+                                                displayContent = <span className="text-slate-400 text-xs italic">(По умолчанию из настроек)</span>;
+                                            }
                                         }
 
                                         return (

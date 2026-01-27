@@ -60,8 +60,38 @@ const resolveStringTemplate = (templateStr: string, act: Act, overrides: Record<
 };
 
 // Function to generate data object for templates
-const prepareDocData = (act: Act, people: Person[], currentAttachments: string, overrideMaterials?: string, registryReferenceText: string = '') => {
-    const [actYear, actMonth, actDay] = act.date ? act.date.split('-') : ['', '', ''];
+const prepareDocData = (act: Act, people: Person[], currentAttachments: string, settings: ProjectSettings, overrideMaterials?: string, registryReferenceText: string = '') => {
+    // Resolve Default Values if Act fields are empty
+    let effectiveDate = act.date;
+    if (!effectiveDate && settings.defaultActDate) {
+        // Since defaultActDate is a template (e.g. {workEndDate}), we need to resolve it locally first before splitting
+        // Note: resolveStringTemplate expects YYYY-MM-DD but outputs DD.MM.YYYY.
+        // We need raw value to split.
+        // For simple case, let's assume defaultActDate might be {workEndDate} which maps to act.workEndDate.
+        const resolved = resolveStringTemplate(settings.defaultActDate, act);
+        // resolved is DD.MM.YYYY. We need to split that.
+        // Or if it was just plain text.
+        if (resolved.match(/^\d{2}\.\d{2}\.\d{4}$/)) {
+            const [d, m, y] = resolved.split('.');
+            effectiveDate = `${y}-${m}-${d}`;
+        } else {
+            // It might be raw text or empty
+            effectiveDate = resolved; 
+        }
+    }
+
+    let effectiveAdditionalInfo = act.additionalInfo;
+    if (!effectiveAdditionalInfo && settings.defaultAdditionalInfo) {
+        effectiveAdditionalInfo = resolveStringTemplate(settings.defaultAdditionalInfo, act);
+    }
+
+    const [actYear, actMonth, actDay] = effectiveDate ? effectiveDate.split('-') : ['', '', ''];
+    // If effectiveDate wasn't YYYY-MM-DD (e.g. raw text), fallback to manual parsing or leave empty split
+    const dateParts = effectiveDate && effectiveDate.includes('-') ? effectiveDate.split('-') : [];
+    const finalActYear = dateParts[0] || '';
+    const finalActMonth = dateParts[1] || '';
+    const finalActDay = dateParts[2] || '';
+
     const [workStartYear, workStartMonth, workStartDay] = act.workStartDate ? act.workStartDate.split('-') : ['', '', ''];
     const [workEndYear, workEndMonth, workEndDay] = act.workEndDate ? act.workEndDate.split('-') : ['', '', ''];
     
@@ -71,9 +101,9 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
         contractor_details: act.contractorDetails,
         designer_details: act.designerDetails,
         act_number: act.number,
-        act_day: actDay,
-        act_month: actMonth,
-        act_year: actYear,
+        act_day: finalActDay,
+        act_month: finalActMonth,
+        act_year: finalActYear,
         work_performer: act.workPerformer,
         work_name: act.workName,
         project_docs: act.projectDocs,
@@ -89,7 +119,7 @@ const prepareDocData = (act: Act, people: Person[], currentAttachments: string, 
         work_end_year: workEndYear,
         regulations: act.regulations,
         next_work: act.nextWork,
-        additional_info: act.additionalInfo,
+        additional_info: effectiveAdditionalInfo,
         copies_count: act.copiesCount,
         attachments: currentAttachments,
     };
@@ -205,7 +235,7 @@ export const generateDocument = (
         resolvedAttachments = normalizeNewlines(resolvedAttachments);
 
         if (shouldUseRegistry) {
-            const baseRegistryData = prepareDocData(act, people, resolvedAttachments);
+            const baseRegistryData = prepareDocData(act, people, resolvedAttachments, settings);
             const registryData = {
                 ...baseRegistryData, 
                 materials_list: materialsList.map((m, i) => {
@@ -257,7 +287,7 @@ export const generateDocument = (
             };
             const registryBuffer = renderDoc(registryTemplateBase64, registryData);
 
-            const actData = prepareDocData(act, people, resolvedAttachments, registryReferenceString, registryReferenceString);
+            const actData = prepareDocData(act, people, resolvedAttachments, settings, registryReferenceString, registryReferenceString);
             const actBuffer = renderDoc(templateBase64, actData);
 
             const packageZip = new PizZip();
@@ -268,7 +298,7 @@ export const generateDocument = (
             saveAs(content, `Пакет_Акт_№${act.number || 'б-н'}.zip`);
 
         } else {
-            const data = prepareDocData(act, people, resolvedAttachments, undefined, '');
+            const data = prepareDocData(act, people, resolvedAttachments, settings, undefined, '');
             const buffer = renderDoc(templateBase64, data);
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
             saveAs(blob, `Акт_скрытых_работ_${act.number || 'б-н'}.docx`);
