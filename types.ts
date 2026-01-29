@@ -1,7 +1,8 @@
 
 export interface ConstructionObject {
     id: string;
-    name: string;
+    name: string; // Full name for documents
+    shortName?: string; // Short name for UI
     description?: string;
 }
 
@@ -223,7 +224,7 @@ export type ActTableColumnKey = Exclude<keyof Act,
 > | 'workDates' | 'commissionGroup';
 
 // Defines the available pages in the application
-export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups' | 'trash' | 'regulations' | 'certificates';
+export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups' | 'trash' | 'regulations' | 'certificates' | 'objects';
 
 export type Coords = { rowIndex: number; colIndex: number };
 

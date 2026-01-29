@@ -15,6 +15,7 @@ import GroupsPage from './pages/GroupsPage';
 import TrashPage from './pages/TrashPage';
 import RegulationsPage from './pages/RegulationsPage';
 import CertificatesPage from './pages/CertificatesPage';
+import ObjectsPage from './pages/ObjectsPage';
 import Sidebar from './components/Sidebar';
 import { saveAs } from 'file-saver';
 import PizZip from 'pizzip';
@@ -86,7 +87,7 @@ const App: React.FC = () => {
         showActDate: false,
         showParticipantDetails: true,
         geminiApiKey: '',
-        defaultActDate: '',
+        defaultActDate: '{workEndDate}',
         historyDepth: 20,
         registryThreshold: 5,
         certificatePromptNumber: DEFAULT_PROMPT_NUMBER,
@@ -103,7 +104,7 @@ const App: React.FC = () => {
         if (hasData && !hasObjects) {
             // Create a default object using the old objectName setting if available
             const legacyName = (settings as any).objectName || 'Мой объект';
-            const newObj: ConstructionObject = { id: crypto.randomUUID(), name: legacyName };
+            const newObj: ConstructionObject = { id: crypto.randomUUID(), name: legacyName, shortName: legacyName };
             
             setConstructionObjects([newObj]);
             setCurrentObjectId(newObj.id);
@@ -127,7 +128,7 @@ const App: React.FC = () => {
             setSettings(newSettings);
         } else if (!hasData && !hasObjects) {
              // Fresh start
-             const newObj: ConstructionObject = { id: crypto.randomUUID(), name: 'Основной объект' };
+             const newObj: ConstructionObject = { id: crypto.randomUUID(), name: 'Основной объект', shortName: 'Основной' };
              setConstructionObjects([newObj]);
              setCurrentObjectId(newObj.id);
         } else if (hasObjects && !currentObjectId) {
@@ -167,14 +168,13 @@ const App: React.FC = () => {
     const [currentPage, setCurrentPage] = useState<Page>('acts');
     const [importData, setImportData] = useState<ImportData | null>(null);
     const [showExportModal, setShowExportModal] = useState(false);
-    const [restoreGroupConfirmData, setRestoreGroupConfirmData] = useState<{ groups: CommissionGroup[], entriesToRestore: DeletedActEntry[] } | null>(null);
     const [confirmationRequest, setConfirmationRequest] = useState<{ title: string, message: React.ReactNode, onConfirm: () => void } | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // --- Handlers for Construction Objects ---
-    const handleAddObject = (name: string, cloneFromId?: string, cloneCategories?: string[]) => {
-        const newObj: ConstructionObject = { id: crypto.randomUUID(), name };
+    const handleAddObject = (name: string, shortName: string, cloneFromId?: string, cloneCategories?: string[]) => {
+        const newObj: ConstructionObject = { id: crypto.randomUUID(), name, shortName };
         
         // 1. Create the object
         setConstructionObjects(prev => [...prev, newObj]);
@@ -201,7 +201,6 @@ const App: React.FC = () => {
                     ...g, 
                     id: crypto.randomUUID(), 
                     constructionObjectId: newObj.id,
-                    // Reset relations to avoid pointing to invisible items
                     representatives: {},
                     builderOrgId: '',
                     contractorOrgId: '',
@@ -227,8 +226,8 @@ const App: React.FC = () => {
         setCurrentObjectId(newObj.id);
     };
 
-    const handleUpdateObject = (id: string, name: string) => {
-        setConstructionObjects(prev => prev.map(o => o.id === id ? { ...o, name } : o));
+    const handleUpdateObject = (id: string, name: string, shortName: string) => {
+        setConstructionObjects(prev => prev.map(o => o.id === id ? { ...o, name, shortName } : o));
     };
 
     // --- Template Handlers ---
@@ -443,15 +442,11 @@ const App: React.FC = () => {
             
             peopleToImport.forEach(srcPerson => {
                 // 1. Resolve Organization Dependency
-                // Find source org details (Global/All lookup)
                 const sourceOrg = organizations.find(o => o.name === srcPerson.organization && o.constructionObjectId === srcPerson.constructionObjectId);
                 
-                // If person has an org, ensure it exists in target
                 if (srcPerson.organization) {
-                    // Check if org with same name/INN exists in target
                     let targetOrg = currentOrganizations.find(o => o.name === srcPerson.organization);
                     
-                    // If not found by name, try to find by INN if we know source org
                     if (!targetOrg && sourceOrg) {
                         targetOrg = currentOrganizations.find(o => o.inn === sourceOrg.inn);
                     }
@@ -502,9 +497,6 @@ const App: React.FC = () => {
         if (importSettings.registryTemplate && importData.registryTemplate) {
             setRegistryTemplate(importData.registryTemplate);
         }
-        
-        // ... (Implement rest of import logic based on your needs)
-        
         setImportData(null);
     };
 
@@ -521,9 +513,6 @@ const App: React.FC = () => {
                 onToggleTheme={toggleTheme}
                 constructionObjects={constructionObjects}
                 currentObjectId={currentObjectId}
-                onObjectChange={setCurrentObjectId}
-                onAddObject={handleAddObject}
-                onUpdateObject={handleUpdateObject}
             />
 
             <main className="flex-1 h-full overflow-hidden relative">
@@ -531,6 +520,15 @@ const App: React.FC = () => {
                     <TemplateUploader onUpload={handleTemplateUpload} />
                 ) : (
                     <>
+                        {currentPage === 'objects' && (
+                            <ObjectsPage 
+                                constructionObjects={constructionObjects}
+                                currentObjectId={currentObjectId}
+                                onObjectChange={setCurrentObjectId}
+                                onAddObject={handleAddObject}
+                                onUpdateObject={handleUpdateObject}
+                            />
+                        )}
                         {currentPage === 'acts' && (
                             <ActsPage
                                 acts={currentActs}
@@ -557,9 +555,7 @@ const App: React.FC = () => {
                                 }}
                                 setCurrentPage={setCurrentPage}
                                 onNavigateToCertificate={(id) => {
-                                    // Normally switch page and set active
                                     setCurrentPage('certificates');
-                                    // Implementation detail: Use a separate context or state to highlight
                                 }}
                             />
                         )}
