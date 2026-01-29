@@ -325,7 +325,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
     const labelClass = "block text-sm font-medium text-slate-700";
 
     return (
-        <form onSubmit={handleSubmit} className="h-full flex flex-col max-w-4xl mx-auto bg-white rounded-lg shadow-md overflow-hidden relative">
+        <form onSubmit={handleSubmit} className="h-full flex flex-col w-full bg-white rounded-lg shadow-md overflow-hidden relative">
             <div className="p-6 pb-0 flex-shrink-0">
                 <h1 className="text-2xl font-bold text-slate-800 mb-6">Настройки и Справка</h1>
                 
@@ -377,8 +377,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                             </p>
                         </div>
 
-                        <fieldset className="space-y-4 pt-4 border-t">
-                            <legend className="text-base font-medium text-slate-800">Настройки формы акта</legend>
+                        <div className="space-y-4 pt-4">
+                            <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Настройки формы акта</h3>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
@@ -467,7 +467,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 </div>
                             </SettingToggle>
                             
-                        </fieldset>
+                        </div>
                     </div>
                 )}
 
