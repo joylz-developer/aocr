@@ -236,12 +236,20 @@
   html.theme-dark .bg-slate-200 { background-color: #30363d; color: #c9d1d9; }
   html.theme-dark .bg-slate-800 { background-color: #010409; }
 
+  /* FIX: Ensure hover:bg-white resolves to dark background in dark mode */
+  html.theme-dark .hover\:bg-white:hover { background-color: #161b22; }
+
   /* Blue Backgrounds for Dark Mode - Fix for too light selection colors */
   html.theme-dark .bg-blue-50 { 
       background-color: rgba(56, 139, 253, 0.10); 
       color: #c9d1d9;
       border-color: rgba(56, 139, 253, 0.2); 
   }
+  /* Fix hover on selected items */
+  html.theme-dark .hover\:bg-blue-50:hover {
+      background-color: rgba(56, 139, 253, 0.15);
+  }
+
   html.theme-dark .bg-blue-100 { 
       background-color: rgba(56, 139, 253, 0.20); 
       color: #58a6ff; 
@@ -319,7 +327,6 @@
   /* Table Hover Rows & Dropdowns */
   html.theme-dark .hover\:bg-slate-50:hover { background-color: #161b22; }
   html.theme-dark .hover\:bg-slate-100:hover { background-color: #21262d; }
-  html.theme-dark .hover\:bg-blue-50:hover { background-color: rgba(56, 139, 253, 0.15); }
   
   /* Act Picker highlight */
   html.theme-dark .act-picker-source-row > td { background-color: rgba(210, 153, 34, 0.2); }
