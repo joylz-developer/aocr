@@ -177,7 +177,7 @@ const TrashPage: React.FC<TrashPageProps> = ({
                     </div>
 
                     {selectedActIds.size > 0 && (
-                        <div className="mb-4 bg-slate-50 p-3 rounded-md border flex items-center justify-between animate-fade-in-up">
+                        <div className="mb-4 bg-slate-50 p-3 rounded-md border border-slate-200 flex items-center justify-between animate-fade-in-up">
                             <span className="text-sm font-semibold text-slate-700">Выбрано: {selectedActIds.size}</span>
                             <div className="flex items-center gap-3">
                                 <button onClick={handleBulkRestoreActs} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 text-sm rounded-md hover:bg-blue-700">
@@ -190,7 +190,7 @@ const TrashPage: React.FC<TrashPageProps> = ({
                         </div>
                     )}
                     
-                    <div className="flex-grow min-h-0 overflow-y-auto border rounded-md">
+                    <div className="flex-grow min-h-0 overflow-y-auto border border-slate-200 rounded-md">
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50 sticky top-0">
                                 <tr>
@@ -254,7 +254,7 @@ const TrashPage: React.FC<TrashPageProps> = ({
                     </div>
 
                     {selectedCertIds.size > 0 && (
-                        <div className="mb-4 bg-slate-50 p-3 rounded-md border flex items-center justify-between animate-fade-in-up">
+                        <div className="mb-4 bg-slate-50 p-3 rounded-md border border-slate-200 flex items-center justify-between animate-fade-in-up">
                             <span className="text-sm font-semibold text-slate-700">Выбрано: {selectedCertIds.size}</span>
                             <div className="flex items-center gap-3">
                                 <button onClick={handleBulkRestoreCerts} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 text-sm rounded-md hover:bg-blue-700">
@@ -267,7 +267,7 @@ const TrashPage: React.FC<TrashPageProps> = ({
                         </div>
                     )}
                     
-                    <div className="flex-grow min-h-0 overflow-y-auto border rounded-md">
+                    <div className="flex-grow min-h-0 overflow-y-auto border border-slate-200 rounded-md">
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50 sticky top-0">
                                 <tr>

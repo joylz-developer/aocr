@@ -267,6 +267,12 @@
   html.theme-dark .border-slate-100, 
   html.theme-dark .border-slate-200,
   html.theme-dark .border-slate-300 { border-color: #30363d; }
+  
+  /* Also catch generic gray borders used by default Tailwind borders */
+  html.theme-dark .border-gray-100,
+  html.theme-dark .border-gray-200,
+  html.theme-dark .border-gray-300 { border-color: #30363d; }
+
   html.theme-dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-color: #30363d; }
   
   html.theme-dark .border-blue-200 { border-color: rgba(56, 139, 253, 0.3); }

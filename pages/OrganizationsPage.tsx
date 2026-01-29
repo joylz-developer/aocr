@@ -237,7 +237,7 @@ const OrganizationsPage: React.FC<OrganizationsPageProps> = ({ organizations, al
                 </div>
             </div>
 
-            <div className="flex-grow overflow-auto border rounded-md">
+            <div className="flex-grow overflow-auto border border-slate-200 rounded-md">
                 <table className="min-w-full divide-y divide-slate-200">
                     <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                         <tr>
