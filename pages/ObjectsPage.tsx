@@ -1,7 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { ConstructionObject } from '../types';
-import { PlusIcon, EditIcon, CheckIcon, CloseIcon, ChevronLeftIcon } from '../components/Icons';
+import { PlusIcon, EditIcon, CheckIcon, CloseIcon, ChevronLeftIcon, TrashIcon, CopyIcon } from '../components/Icons';
+import ConfirmationModal from '../components/ConfirmationModal';
 
 interface ObjectsPageProps {
     constructionObjects: ConstructionObject[];
@@ -9,6 +10,8 @@ interface ObjectsPageProps {
     onObjectChange: (id: string) => void;
     onAddObject: (name: string, shortName: string, cloneFromId?: string, cloneCategories?: string[]) => void;
     onUpdateObject: (id: string, name: string, shortName: string) => void;
+    onDeleteObject: (id: string) => void;
+    onCloneObject: (id: string) => void;
 }
 
 const ObjectsPage: React.FC<ObjectsPageProps> = ({ 
@@ -16,13 +19,18 @@ const ObjectsPage: React.FC<ObjectsPageProps> = ({
     currentObjectId, 
     onObjectChange, 
     onAddObject, 
-    onUpdateObject 
+    onUpdateObject,
+    onDeleteObject,
+    onCloneObject
 }) => {
     const [view, setView] = useState<'list' | 'create' | 'edit'>('list');
     const [searchQuery, setSearchQuery] = useState('');
     
     // Form State
     const [formData, setFormData] = useState({ id: '', name: '', shortName: '' });
+    
+    // Delete Confirmation
+    const [objectToDelete, setObjectToDelete] = useState<ConstructionObject | null>(null);
     
     // Clone State
     const [cloneFromId, setCloneFromId] = useState<string>('');
@@ -68,6 +76,13 @@ const ObjectsPage: React.FC<ObjectsPageProps> = ({
             onUpdateObject(formData.id, formData.name.trim(), formData.shortName.trim());
         }
         setView('list');
+    };
+    
+    const confirmDelete = () => {
+        if (objectToDelete) {
+            onDeleteObject(objectToDelete.id);
+            setObjectToDelete(null);
+        }
     };
 
     return (
@@ -126,12 +141,31 @@ const ObjectsPage: React.FC<ObjectsPageProps> = ({
                                                 Выбрать
                                             </button>
                                         )}
+                                        
+                                        <div className="h-6 w-px bg-slate-200 mx-1"></div>
+                                        
+                                        <button 
+                                            onClick={() => onCloneObject(obj.id)}
+                                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded transition-colors"
+                                            title="Клонировать объект"
+                                        >
+                                            <CopyIcon className="w-5 h-5" />
+                                        </button>
+                                        
                                         <button 
                                             onClick={() => handleStartEdit(obj)}
                                             className="p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded transition-colors"
-                                            title="Редактировать"
+                                            title="Редактировать название"
                                         >
                                             <EditIcon className="w-5 h-5" />
+                                        </button>
+                                        
+                                        <button 
+                                            onClick={() => setObjectToDelete(obj)}
+                                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                            title="Удалить объект"
+                                        >
+                                            <TrashIcon className="w-5 h-5" />
                                         </button>
                                     </div>
                                 </div>
@@ -242,6 +276,30 @@ const ObjectsPage: React.FC<ObjectsPageProps> = ({
                     </div>
                 </form>
             )}
+            
+            <ConfirmationModal 
+                isOpen={!!objectToDelete} 
+                onClose={() => setObjectToDelete(null)} 
+                onConfirm={confirmDelete}
+                title="Удаление объекта"
+                confirmText="Удалить навсегда"
+            >
+                <div className="space-y-3">
+                    <p>
+                        Вы собираетесь удалить объект <strong>{objectToDelete?.name}</strong>.
+                    </p>
+                    <div className="bg-red-50 border border-red-200 p-3 rounded text-sm text-red-800">
+                        <strong>Внимание!</strong> Все связанные данные будут безвозвратно удалены:
+                        <ul className="list-disc pl-5 mt-1 opacity-80">
+                            <li>Акты скрытых работ</li>
+                            <li>Участники и Организации этого объекта</li>
+                            <li>Группы комиссий</li>
+                            <li>Сертификаты и Нормативы, созданные в этом объекте</li>
+                        </ul>
+                    </div>
+                    <p>Это действие нельзя отменить.</p>
+                </div>
+            </ConfirmationModal>
         </div>
     );
 };

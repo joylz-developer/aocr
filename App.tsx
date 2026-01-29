@@ -197,11 +197,13 @@ const App: React.FC = () => {
             
             if (shouldClone('groups')) {
                 const sourceGroups = groups.filter(g => g.constructionObjectId === cloneFromId);
+                // Simple clone for creation flow where refs might be broken anyway if user doesn't copy orgs/people.
+                // For dedicated cloning below, we use smarter logic.
                 const newGroups = sourceGroups.map(g => ({ 
                     ...g, 
                     id: crypto.randomUUID(), 
                     constructionObjectId: newObj.id,
-                    representatives: {},
+                    representatives: {}, // Reset relations on simple copy to avoid confusion
                     builderOrgId: '',
                     contractorOrgId: '',
                     designerOrgId: '',
@@ -228,6 +230,143 @@ const App: React.FC = () => {
 
     const handleUpdateObject = (id: string, name: string, shortName: string) => {
         setConstructionObjects(prev => prev.map(o => o.id === id ? { ...o, name, shortName } : o));
+    };
+
+    const handleDeleteObject = (id: string) => {
+        // 1. Remove the object itself
+        setConstructionObjects(prev => prev.filter(o => o.id !== id));
+
+        // 2. Remove all related data
+        setActs(prev => prev.filter(a => a.constructionObjectId !== id));
+        setPeople(prev => prev.filter(p => p.constructionObjectId !== id));
+        setOrganizations(prev => prev.filter(o => o.constructionObjectId !== id));
+        setGroups(prev => prev.filter(g => g.constructionObjectId !== id));
+        setRegulations(prev => prev.filter(r => r.constructionObjectId !== id));
+        setCertificates(prev => prev.filter(c => c.constructionObjectId !== id));
+        
+        // 3. Remove from trash
+        setDeletedActs(prev => prev.filter(d => d.act.constructionObjectId !== id));
+        setDeletedCertificates(prev => prev.filter(d => d.certificate.constructionObjectId !== id));
+
+        // 4. Handle Active Object Switch
+        if (currentObjectId === id) {
+            // Switch to the first available, or create new if empty
+            // We use the functional update state to know what's left
+            setConstructionObjects(currentList => {
+                const remaining = currentList.filter(o => o.id !== id);
+                if (remaining.length > 0) {
+                    setCurrentObjectId(remaining[0].id);
+                } else {
+                    const newObj: ConstructionObject = { id: crypto.randomUUID(), name: 'Новый объект', shortName: 'Новый' };
+                    setConstructionObjects([newObj]);
+                    setCurrentObjectId(newObj.id);
+                }
+                return remaining; // This return value is ignored by the setter logic above which uses its own prev, but effectively handled by logic
+            });
+        }
+    };
+
+    const handleCloneObject = (sourceId: string) => {
+        const sourceObj = constructionObjects.find(o => o.id === sourceId);
+        if (!sourceObj) return;
+
+        const newObj: ConstructionObject = {
+            id: crypto.randomUUID(),
+            name: `${sourceObj.name} (Копия)`,
+            shortName: sourceObj.shortName ? `${sourceObj.shortName} (Копия)` : undefined
+        };
+
+        // --- DEEP COPY LOGIC WITH REFERENCE MAPPING ---
+        const idMap = new Map<string, string>();
+
+        // 1. Copy Organizations
+        const sourceOrgs = organizations.filter(o => o.constructionObjectId === sourceId);
+        const newOrgs = sourceOrgs.map(o => {
+            const newId = crypto.randomUUID();
+            idMap.set(o.id, newId);
+            return { ...o, id: newId, constructionObjectId: newObj.id };
+        });
+
+        // 2. Copy People
+        const sourcePeople = people.filter(p => p.constructionObjectId === sourceId);
+        const newPeople = sourcePeople.map(p => {
+            const newId = crypto.randomUUID();
+            idMap.set(p.id, newId);
+            return { ...p, id: newId, constructionObjectId: newObj.id };
+        });
+
+        // 3. Copy Groups (and update Org/Person refs)
+        const sourceGroups = groups.filter(g => g.constructionObjectId === sourceId);
+        const newGroups = sourceGroups.map(g => {
+            const newGroupId = crypto.randomUUID();
+            idMap.set(g.id, newGroupId);
+
+            const newReps: { [key: string]: string } = {};
+            Object.entries(g.representatives).forEach(([role, personId]) => {
+                if (personId && idMap.has(personId)) {
+                    newReps[role] = idMap.get(personId)!;
+                }
+            });
+
+            return {
+                ...g,
+                id: newGroupId,
+                constructionObjectId: newObj.id,
+                representatives: newReps,
+                builderOrgId: idMap.get(g.builderOrgId || '') || '',
+                contractorOrgId: idMap.get(g.contractorOrgId || '') || '',
+                designerOrgId: idMap.get(g.designerOrgId || '') || '',
+                workPerformerOrgId: idMap.get(g.workPerformerOrgId || '') || '',
+            };
+        });
+
+        // 4. Copy Acts (and update Org/Group/Rep refs)
+        const sourceActs = acts.filter(a => a.constructionObjectId === sourceId);
+        const newActs = sourceActs.map(a => {
+            const newActId = crypto.randomUUID();
+            // We do NOT map Act IDs generally unless we link acts to acts (NextWork).
+            // Current NextWork implementation is text-based or loose ID.
+            
+            const newReps: { [key: string]: string } = {};
+            Object.entries(a.representatives).forEach(([role, personId]) => {
+                if (personId && idMap.has(personId)) {
+                    newReps[role] = idMap.get(personId)!;
+                }
+            });
+
+            return {
+                ...a,
+                id: newActId,
+                constructionObjectId: newObj.id,
+                objectName: newObj.name, // Update object name snapshot
+                representatives: newReps,
+                commissionGroupId: idMap.get(a.commissionGroupId || '') || undefined,
+                builderOrgId: idMap.get(a.builderOrgId || '') || undefined,
+                contractorOrgId: idMap.get(a.contractorOrgId || '') || undefined,
+                designerOrgId: idMap.get(a.designerOrgId || '') || undefined,
+                workPerformerOrgId: idMap.get(a.workPerformerOrgId || '') || undefined,
+                nextWorkActId: undefined // Break chains to avoid pointing to old acts
+            };
+        });
+
+        // 5. Copy Regulations & Certificates (No ID mapping needed usually)
+        const sourceRegs = regulations.filter(r => r.constructionObjectId === sourceId);
+        const newRegs = sourceRegs.map(r => ({ ...r, id: crypto.randomUUID(), constructionObjectId: newObj.id }));
+
+        const sourceCerts = certificates.filter(c => c.constructionObjectId === sourceId);
+        const newCerts = sourceCerts.map(c => ({ ...c, id: crypto.randomUUID(), constructionObjectId: newObj.id }));
+
+        // Update State
+        setConstructionObjects(prev => [...prev, newObj]);
+        setOrganizations(prev => [...prev, ...newOrgs]);
+        setPeople(prev => [...prev, ...newPeople]);
+        setGroups(prev => [...prev, ...newGroups]);
+        setActs(prev => [...prev, ...newActs]);
+        setRegulations(prev => [...prev, ...newRegs]);
+        setCertificates(prev => [...prev, ...newCerts]);
+
+        setCurrentObjectId(newObj.id);
+        alert(`Объект "${sourceObj.name}" успешно склонирован.`);
     };
 
     // --- Template Handlers ---
@@ -527,6 +666,8 @@ const App: React.FC = () => {
                                 onObjectChange={setCurrentObjectId}
                                 onAddObject={handleAddObject}
                                 onUpdateObject={handleUpdateObject}
+                                onDeleteObject={handleDeleteObject}
+                                onCloneObject={handleCloneObject}
                             />
                         )}
                         {currentPage === 'acts' && (
