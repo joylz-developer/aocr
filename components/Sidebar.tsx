@@ -107,7 +107,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 {isOpen ? (
                     <button 
                         onClick={() => setCurrentPage('objects')}
-                        className={`w-full bg-white border rounded-lg p-2.5 text-left transition-all group flex items-center justify-between ${currentPage === 'objects' ? 'border-blue-500 ring-1 ring-blue-500' : 'border-slate-200 hover:border-blue-400 hover:shadow-sm'}`}
+                        className={`w-full bg-white border rounded-lg p-2.5 text-left transition-all group flex items-center justify-between ${currentPage === 'objects' ? 'bg-slate-100 border-slate-300' : 'border-slate-200 hover:bg-slate-50 hover:border-slate-300 hover:shadow-sm'}`}
                     >
                         <div className="flex items-center gap-3 overflow-hidden">
                             <div className="w-8 h-8 rounded bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm flex-shrink-0 border border-blue-200">
@@ -115,18 +115,18 @@ const Sidebar: React.FC<SidebarProps> = ({
                             </div>
                             <div className="min-w-0 flex-1">
                                 <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Объект</div>
-                                <div className="text-sm font-semibold text-slate-800 truncate leading-tight group-hover:text-blue-700">
+                                <div className="text-sm font-semibold text-slate-800 truncate leading-tight">
                                     {displayName}
                                 </div>
                             </div>
                         </div>
-                        <ChevronDownIcon className={`w-4 h-4 text-slate-400 group-hover:text-blue-500 flex-shrink-0 ml-1 ${currentPage === 'objects' ? 'transform -rotate-90' : ''}`} />
+                        <ChevronDownIcon className={`w-4 h-4 text-slate-400 flex-shrink-0 ml-1 transition-transform duration-200 ${currentPage === 'objects' ? 'transform -rotate-90' : 'group-hover:text-slate-600'}`} />
                     </button>
                 ) : (
                     <div className="flex justify-center">
                         <button 
                             onClick={() => { setIsOpen(true); setTimeout(() => setCurrentPage('objects'), 100); }}
-                            className={`w-10 h-10 bg-blue-100 text-blue-700 rounded-lg flex items-center justify-center font-bold text-lg border hover:bg-blue-200 transition-colors ${currentPage === 'objects' ? 'border-blue-500 ring-2 ring-blue-500' : 'border-blue-200'}`}
+                            className={`w-10 h-10 bg-blue-100 text-blue-700 rounded-lg flex items-center justify-center font-bold text-lg border hover:bg-blue-200 transition-colors ${currentPage === 'objects' ? 'border-slate-400 ring-1 ring-slate-400' : 'border-blue-200'}`}
                             title={displayName}
                         >
                             {displayName.substring(0, 1).toUpperCase()}
