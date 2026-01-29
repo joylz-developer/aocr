@@ -19,6 +19,7 @@ import ObjectsPage from './pages/ObjectsPage';
 import Sidebar from './components/Sidebar';
 import { saveAs } from 'file-saver';
 import PizZip from 'pizzip';
+import { CheckIcon } from './components/Icons';
 
 const fileToBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -61,6 +62,28 @@ const DEFAULT_PROMPT_NUMBER = "Тип документа (обязательно
 const DEFAULT_PROMPT_DATE = "Дата выдачи/составления документа (НЕ дата окончания).";
 const DEFAULT_PROMPT_MATERIALS = "Точное наименование продукции, марки, типы и размеры (например, 'Бетон B25 W6').";
 
+const ToastNotification: React.FC<{ message: string | null; onClose: () => void }> = ({ message, onClose }) => {
+    useEffect(() => {
+        if (message) {
+            const timer = setTimeout(onClose, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [message, onClose]);
+
+    if (!message) return null;
+
+    return (
+        <div className="fixed bottom-6 right-6 z-50 animate-fade-in-up">
+            <div className="bg-slate-800 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3">
+                <div className="bg-green-500 rounded-full p-1">
+                    <CheckIcon className="w-3 h-3 text-white" />
+                </div>
+                <span className="text-sm font-medium">{message}</span>
+            </div>
+        </div>
+    );
+};
+
 const App: React.FC = () => {
     const [template, setTemplate] = useLocalStorage<string | null>('docx_template', null);
     const [registryTemplate, setRegistryTemplate] = useLocalStorage<string | null>('docx_registry_template', null);
@@ -95,6 +118,9 @@ const App: React.FC = () => {
         certificatePromptMaterials: DEFAULT_PROMPT_MATERIALS
     });
     
+    // Notification State
+    const [notification, setNotification] = useState<string | null>(null);
+
     // --- MIGRATION LOGIC for Construction Objects ---
     useEffect(() => {
         // Check if we have data but no objects (Legacy Mode)
@@ -197,8 +223,6 @@ const App: React.FC = () => {
             
             if (shouldClone('groups')) {
                 const sourceGroups = groups.filter(g => g.constructionObjectId === cloneFromId);
-                // Simple clone for creation flow where refs might be broken anyway if user doesn't copy orgs/people.
-                // For dedicated cloning below, we use smarter logic.
                 const newGroups = sourceGroups.map(g => ({ 
                     ...g, 
                     id: crypto.randomUUID(), 
@@ -250,8 +274,6 @@ const App: React.FC = () => {
 
         // 4. Handle Active Object Switch
         if (currentObjectId === id) {
-            // Switch to the first available, or create new if empty
-            // We use the functional update state to know what's left
             setConstructionObjects(currentList => {
                 const remaining = currentList.filter(o => o.id !== id);
                 if (remaining.length > 0) {
@@ -261,7 +283,7 @@ const App: React.FC = () => {
                     setConstructionObjects([newObj]);
                     setCurrentObjectId(newObj.id);
                 }
-                return remaining; // This return value is ignored by the setter logic above which uses its own prev, but effectively handled by logic
+                return remaining;
             });
         }
     };
@@ -324,8 +346,6 @@ const App: React.FC = () => {
         const sourceActs = acts.filter(a => a.constructionObjectId === sourceId);
         const newActs = sourceActs.map(a => {
             const newActId = crypto.randomUUID();
-            // We do NOT map Act IDs generally unless we link acts to acts (NextWork).
-            // Current NextWork implementation is text-based or loose ID.
             
             const newReps: { [key: string]: string } = {};
             Object.entries(a.representatives).forEach(([role, personId]) => {
@@ -366,7 +386,7 @@ const App: React.FC = () => {
         setCertificates(prev => [...prev, ...newCerts]);
 
         setCurrentObjectId(newObj.id);
-        alert(`Объект "${sourceObj.name}" успешно склонирован.`);
+        setNotification(`Объект "${sourceObj.name}" успешно склонирован!`);
     };
 
     // --- Template Handlers ---
@@ -382,7 +402,7 @@ const App: React.FC = () => {
     const handleRegistryTemplateUpload = (file: File) => {
         fileToBase64(file).then(base64 => {
             setRegistryTemplate(base64);
-            alert("Шаблон реестра успешно загружен.");
+            setNotification("Шаблон реестра успешно загружен.");
         }).catch(err => {
             console.error("Registry template upload failed", err);
             alert("Ошибка загрузки шаблона реестра");
@@ -569,9 +589,9 @@ const App: React.FC = () => {
             
             if (newOrgs.length > 0) {
                 setOrganizations(prev => [...prev, ...newOrgs]);
-                alert(`Скопировано ${newOrgs.length} организаций.`);
+                setNotification(`Скопировано ${newOrgs.length} организаций.`);
             } else {
-                alert("Все выбранные организации уже существуют в текущем объекте (проверка по ИНН).");
+                setNotification("Все выбранные организации уже существуют в текущем объекте (проверка по ИНН).");
             }
         }
         else if (isPerson(items[0])) {
@@ -607,7 +627,7 @@ const App: React.FC = () => {
             
             if (newOrgs.length > 0) setOrganizations(prev => [...prev, ...newOrgs]);
             if (newPeople.length > 0) setPeople(prev => [...prev, ...newPeople]);
-            alert(`Скопировано ${newPeople.length} участников и ${newOrgs.length} связанных организаций.`);
+            setNotification(`Скопировано ${newPeople.length} участников и ${newOrgs.length} связанных организаций.`);
         } else {
              // Certificates
              const certsToImport = items as Certificate[];
@@ -617,7 +637,7 @@ const App: React.FC = () => {
                  constructionObjectId: currentObjectId
              }));
              setCertificates(prev => [...prev, ...newCerts]);
-             alert(`Скопировано ${newCerts.length} сертификатов.`);
+             setNotification(`Скопировано ${newCerts.length} сертификатов.`);
         }
     };
 
@@ -866,6 +886,8 @@ const App: React.FC = () => {
                     {confirmationRequest.message}
                 </ConfirmationModal>
             )}
+            
+            <ToastNotification message={notification} onClose={() => setNotification(null)} />
         </div>
     );
 };

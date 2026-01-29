@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { ConstructionObject } from '../types';
-import { PlusIcon, EditIcon, CheckIcon, CloseIcon, ChevronLeftIcon, TrashIcon, CopyIcon } from '../components/Icons';
+import { PlusIcon, EditIcon, CheckIcon, ChevronLeftIcon, TrashIcon, CopyIcon } from '../components/Icons';
 import ConfirmationModal from '../components/ConfirmationModal';
 
 interface ObjectsPageProps {
@@ -109,7 +109,7 @@ const ObjectsPage: React.FC<ObjectsPageProps> = ({
                         />
                     </div>
 
-                    <div className="flex-grow overflow-y-auto border border-slate-200 rounded-md bg-slate-50 divide-y divide-slate-100">
+                    <div className="flex-grow overflow-y-auto border border-slate-200 rounded-md bg-slate-50 divide-y divide-slate-200">
                         {filteredObjects.length > 0 ? (
                             filteredObjects.map(obj => (
                                 <div 
@@ -136,7 +136,7 @@ const ObjectsPage: React.FC<ObjectsPageProps> = ({
                                         {currentObjectId !== obj.id && (
                                             <button 
                                                 onClick={() => onObjectChange(obj.id)}
-                                                className="px-3 py-1.5 text-sm bg-white border border-slate-300 text-slate-700 rounded hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                                                className="px-3 py-1.5 text-sm bg-white border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium"
                                             >
                                                 Выбрать
                                             </button>
@@ -146,7 +146,7 @@ const ObjectsPage: React.FC<ObjectsPageProps> = ({
                                         
                                         <button 
                                             onClick={() => onCloneObject(obj.id)}
-                                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded transition-colors"
+                                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors"
                                             title="Клонировать объект"
                                         >
                                             <CopyIcon className="w-5 h-5" />
@@ -154,7 +154,7 @@ const ObjectsPage: React.FC<ObjectsPageProps> = ({
                                         
                                         <button 
                                             onClick={() => handleStartEdit(obj)}
-                                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded transition-colors"
+                                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors"
                                             title="Редактировать название"
                                         >
                                             <EditIcon className="w-5 h-5" />
@@ -162,7 +162,7 @@ const ObjectsPage: React.FC<ObjectsPageProps> = ({
                                         
                                         <button 
                                             onClick={() => setObjectToDelete(obj)}
-                                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                                             title="Удалить объект"
                                         >
                                             <TrashIcon className="w-5 h-5" />
