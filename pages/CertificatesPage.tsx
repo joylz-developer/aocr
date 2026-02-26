@@ -709,7 +709,7 @@ const CertificateForm: React.FC<{
                     </div>
                     <div className={`flex flex-col h-full min-h-0 transition-all duration-300 ${isGalleryCollapsed ? 'w-full pl-2' : 'w-full md:w-2/5'}`}>
                         <div className="overflow-y-auto pr-2 flex-grow space-y-5 pb-4">
-                            {ai && activeFile && (
+                            {isAiConfigured && activeFile && (
                                 <div className="flex flex-col">
                                     <button type="button" onClick={handleAiScan} disabled={isScanning || isPreviewMode} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-4 py-2.5 rounded-lg hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-sm font-medium"><SparklesIcon className="w-5 h-5" />{isScanning ? 'Анализ текущего файла...' : 'Сканировать (AI)'}</button>
                                     {aiError && <p className="text-red-500 text-xs mt-2">{aiError}</p>}
@@ -770,7 +770,7 @@ const CertificateForm: React.FC<{
                                     {formData.materials.length === 0 && !isPreviewMode && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded">Список материалов пуст</p>}
                                     {!isPreviewMode && formData.materials.map((item, idx) => ( <div key={idx} className={`flex items-start gap-1 group py-1 px-1 rounded transition-colors ${hoveredDeleteIndex === idx ? 'bg-red-50' : ''}`}><AutoResizeTextarea value={item} onChange={(e) => handleEditMaterial(idx, e.target.value)} className="block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded focus:bg-white transition-colors py-1 px-2 bg-slate-50" /><button type="button" onClick={() => handleRemoveMaterial(idx)} onMouseEnter={() => setHoveredDeleteIndex(idx)} onMouseLeave={() => setHoveredDeleteIndex(null)} className="text-slate-400 hover:text-red-500 p-1.5 rounded hover:bg-red-100 mt-0.5 transition-colors" title="Удалить строку"><CloseIcon className="w-4 h-4" /></button></div> ))}
                                 </div>
-                                {formData.materials.length > 0 && ai && (
+                                {formData.materials.length > 0 && isAiConfigured && (
                                     <div className="mt-6 pt-4 border-t border-slate-200">
                                         {!diffResult ? (
                                             <div className="flex gap-2">
