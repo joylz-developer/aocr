@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ProjectSettings, ROLES } from '../types';
+import { generateContent } from '../services/aiService';
 import { ImportIcon, ExportIcon, TemplateIcon, DownloadIcon, QuestionMarkCircleIcon, CloudUploadIcon, DeleteIcon, CopyIcon, SparklesIcon } from '../components/Icons';
 
 interface SettingsPageProps {
@@ -291,7 +292,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
         setFormData(settings);
     }, [settings]);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
         setFormData(prev => ({
             ...prev,
@@ -320,6 +321,24 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
             if (registryInputRef.current) registryInputRef.current.value = '';
         }
     }
+
+    const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+    const [testMessage, setTestMessage] = useState<string | null>(null);
+
+    const handleTestConnection = async () => {
+        setTestStatus('loading');
+        setTestMessage(null);
+        try {
+            const response = await generateContent(formData, "Hello, are you working?", undefined, undefined, false);
+            if (response.text) {
+                setTestStatus('success');
+                setTestMessage("Подключение успешно! Ответ: " + response.text.substring(0, 50) + "...");
+            }
+        } catch (error: any) {
+            setTestStatus('error');
+            setTestMessage("Ошибка подключения: " + (error.message || "Неизвестная ошибка"));
+        }
+    };
 
     const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900";
     const labelClass = "block text-sm font-medium text-slate-700";
@@ -434,6 +453,22 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                     </div>
                                 </>
                             )}
+                            
+                            <div className="pt-2">
+                                <button
+                                    type="button"
+                                    onClick={handleTestConnection}
+                                    disabled={testStatus === 'loading'}
+                                    className="px-4 py-2 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 text-sm font-medium flex items-center gap-2"
+                                >
+                                    {testStatus === 'loading' ? 'Проверка...' : 'Проверить подключение'}
+                                </button>
+                                {testMessage && (
+                                    <p className={`text-xs mt-2 ${testStatus === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                                        {testMessage}
+                                    </p>
+                                )}
+                            </div>
                         </div>
 
                         <div className="space-y-4 pt-4">

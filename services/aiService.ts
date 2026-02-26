@@ -74,9 +74,11 @@ export const generateContent = async (
             messages: messages,
         };
         
-        if (jsonMode) {
+        if (jsonMode && !model.includes('qwen')) {
             body.response_format = { type: "json_object" };
         }
+        
+        console.log(`Sending request to ${endpoint} with model ${model}`);
         
         const response = await fetch(endpoint, {
             method: 'POST',
@@ -91,7 +93,8 @@ export const generateContent = async (
         
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorData.error?.message || ''}`);
+            console.error("AI API Error:", errorData);
+            throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorData.error?.message || JSON.stringify(errorData)}`);
         }
         
         const data = await response.json();
