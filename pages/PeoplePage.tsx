@@ -111,7 +111,12 @@ const PersonForm: React.FC<{
 
             const response = await generateContent(settings, prompt, mimeType, base64Data, true);
 
-            const result = JSON.parse(response.text);
+            const text = response.text;
+            const jsonStartIndex = text.indexOf('{');
+            const jsonEndIndex = text.lastIndexOf('}');
+            if (jsonStartIndex === -1 || jsonEndIndex === -1) throw new Error("JSON structure not found in response");
+            const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
+            const result = JSON.parse(jsonString);
 
             setFormData(prev => {
                 const aiOrgName = result.organization;

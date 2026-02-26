@@ -593,7 +593,12 @@ const CertificateForm: React.FC<{
             const response = await generateContent(settings, prompt, undefined, undefined, true);
             const text = response.text;
             if(!text) throw new Error("No response");
-            const newList = JSON.parse(text);
+            
+            const jsonStartIndex = text.indexOf('[');
+            const jsonEndIndex = text.lastIndexOf(']');
+            if (jsonStartIndex === -1 || jsonEndIndex === -1) throw new Error("JSON array structure not found");
+            const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
+            const newList = JSON.parse(jsonString);
             if (Array.isArray(newList)) {
                 setDiffResult(calculateDiff(formData.materials, newList));
             }

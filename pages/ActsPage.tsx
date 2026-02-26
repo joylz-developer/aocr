@@ -305,7 +305,12 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
 
             const response = await generateContent(settings, prompt, undefined, undefined, true);
 
-            const result = JSON.parse(response.text);
+            const text = response.text;
+            const jsonStartIndex = text.indexOf('[');
+            const jsonEndIndex = text.lastIndexOf(']');
+            if (jsonStartIndex === -1 || jsonEndIndex === -1) throw new Error("JSON array structure not found in response");
+            const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
+            const result = JSON.parse(jsonString);
             
             if (Array.isArray(result)) {
                 result.forEach((update: any) => {

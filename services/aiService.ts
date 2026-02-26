@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { ProjectSettings } from '../types';
+import { convertPdfToImage } from '../utils/pdfConverter';
 
 export interface AiResponse {
     text: string;
@@ -8,11 +9,15 @@ export interface AiResponse {
 export const generateContent = async (
     settings: ProjectSettings,
     prompt: string,
-    mimeType?: string,
-    base64Data?: string,
+    initialMimeType?: string,
+    initialBase64Data?: string,
     jsonMode: boolean = false
 ): Promise<AiResponse> => {
     const model = settings.aiModel || 'gemini-2.5-flash';
+    
+    // Use local variables to allow modification
+    let mimeType = initialMimeType;
+    let base64Data = initialBase64Data;
     
     if (model === 'gemini-2.5-flash') {
         if (!settings.geminiApiKey) {
@@ -42,6 +47,25 @@ export const generateContent = async (
         // OpenAI Compatible (e.g. OpenRouter, Qwen)
         if (!settings.openAiApiKey) {
             throw new Error("OpenRouter API ключ не настроен");
+        }
+
+        if (mimeType && mimeType.toLowerCase().includes('pdf')) {
+            try {
+                console.log("Converting PDF to image for non-Gemini model...");
+                if (!base64Data) throw new Error("No PDF data provided");
+                
+                // Convert PDF to image
+                const convertedImage = await convertPdfToImage(base64Data);
+                
+                // Update mimeType and base64Data to use the converted image
+                mimeType = 'image/jpeg';
+                base64Data = convertedImage;
+                
+                console.log("PDF successfully converted to image");
+            } catch (error: any) {
+                console.error("PDF conversion failed:", error);
+                throw new Error(`Не удалось конвертировать PDF в изображение: ${error.message}. Пожалуйста, загрузите изображение (JPG/PNG) вручную.`);
+            }
         }
         
         const baseUrl = settings.openAiBaseUrl || 'https://openrouter.ai/api/v1';
