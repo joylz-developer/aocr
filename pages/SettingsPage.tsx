@@ -358,23 +358,82 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
             <div className="flex-grow overflow-y-auto px-6 pb-20">
                 {activeTab === 'general' && (
                     <div className="space-y-6">
-                        <div>
-                            <label htmlFor="geminiApiKey" className={labelClass}>
-                                Gemini API Key
-                            </label>
-                            <input
-                                type="password"
-                                id="geminiApiKey"
-                                name="geminiApiKey"
-                                value={formData.geminiApiKey || ''}
-                                onChange={handleChange}
-                                className={inputClass}
-                                placeholder="Введите ваш API ключ"
-                            />
-                            <p className="text-xs text-slate-500 mt-1">
-                                Получите ваш ключ в <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Google AI Studio</a>.
-                                Ключ хранится локально в вашем браузере.
-                            </p>
+                        <div className="space-y-4">
+                            <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Настройки AI (Распознавание документов)</h3>
+                            
+                            <div>
+                                <label htmlFor="aiModel" className={labelClass}>
+                                    AI Модель
+                                </label>
+                                <select
+                                    id="aiModel"
+                                    name="aiModel"
+                                    value={formData.aiModel || 'gemini-2.5-flash'}
+                                    onChange={handleChange}
+                                    className={inputClass}
+                                >
+                                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                    <option value="qwen/qwen-2.5-vl-72b-instruct">Qwen 2.5 VL 72B Instruct (OpenRouter)</option>
+                                    <option value="qwen/qwen-2.5-vl-7b-instruct">Qwen 2.5 VL 7B Instruct (OpenRouter)</option>
+                                </select>
+                            </div>
+
+                            {(!formData.aiModel || formData.aiModel === 'gemini-2.5-flash') && (
+                                <div>
+                                    <label htmlFor="geminiApiKey" className={labelClass}>
+                                        Gemini API Key
+                                    </label>
+                                    <input
+                                        type="password"
+                                        id="geminiApiKey"
+                                        name="geminiApiKey"
+                                        value={formData.geminiApiKey || ''}
+                                        onChange={handleChange}
+                                        className={inputClass}
+                                        placeholder="Введите ваш API ключ"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        Получите ваш ключ в <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Google AI Studio</a>.
+                                        Ключ хранится локально в вашем браузере.
+                                    </p>
+                                </div>
+                            )}
+
+                            {formData.aiModel && formData.aiModel.startsWith('qwen') && (
+                                <>
+                                    <div>
+                                        <label htmlFor="openAiApiKey" className={labelClass}>
+                                            OpenRouter API Key
+                                        </label>
+                                        <input
+                                            type="password"
+                                            id="openAiApiKey"
+                                            name="openAiApiKey"
+                                            value={formData.openAiApiKey || ''}
+                                            onChange={handleChange}
+                                            className={inputClass}
+                                            placeholder="sk-or-v1-..."
+                                        />
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            Получите ключ на <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">OpenRouter</a>.
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label htmlFor="openAiBaseUrl" className={labelClass}>
+                                            OpenAI Base URL (Опционально)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            id="openAiBaseUrl"
+                                            name="openAiBaseUrl"
+                                            value={formData.openAiBaseUrl || 'https://openrouter.ai/api/v1'}
+                                            onChange={handleChange}
+                                            className={inputClass}
+                                            placeholder="https://openrouter.ai/api/v1"
+                                        />
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                         <div className="space-y-4 pt-4">

@@ -148,6 +148,12 @@ export interface ProjectSettings {
     showActDate?: boolean;
     showParticipantDetails?: boolean;
     geminiApiKey?: string;
+    
+    // New AI Settings
+    aiModel?: string;
+    openAiApiKey?: string;
+    openAiBaseUrl?: string;
+
     defaultAttachments?: string;
     defaultAdditionalInfo?: string;
     defaultActDate?: string;

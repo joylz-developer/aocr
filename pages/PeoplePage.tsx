@@ -4,7 +4,7 @@ import { Person, Organization, ProjectSettings, ConstructionObject } from '../ty
 import Modal from '../components/Modal';
 import CustomSelect from '../components/CustomSelect';
 import { PlusIcon, EditIcon, DeleteIcon, CopyIcon } from '../components/Icons';
-import { GoogleGenAI } from '@google/genai';
+import { generateContent } from '../services/aiService';
 import ObjectResourceImporter from '../components/ObjectResourceImporter';
 
 interface PeoplePageProps {
@@ -59,7 +59,7 @@ const PersonForm: React.FC<{
     const [ocrError, setOcrError] = useState<string | null>(null);
     const [ocrWarning, setOcrWarning] = useState<string | null>(null);
     const ocrInputRef = useRef<HTMLInputElement>(null);
-    const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
+    const isAiConfigured = settings.aiModel === 'gemini-2.5-flash' ? !!settings.geminiApiKey : !!settings.openAiApiKey;
 
     const orgOptions = useMemo(() => {
         return organizations.map(org => ({
@@ -93,7 +93,7 @@ const PersonForm: React.FC<{
 
     const handleImageSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (!file || !ai) return;
+        if (!file || !isAiConfigured) return;
 
         setIsOcrLoading(true);
         setOcrError(null);
@@ -109,14 +109,7 @@ const PersonForm: React.FC<{
             - "authDoc": Реквизиты документа, подтверждающего полномочия (например, "Приказ №123 от 01.01.2024").
             Если какое-то поле не найдено, оставь для него пустую строку.`;
 
-            const imagePart = { inlineData: { mimeType, data: base64Data } };
-            const textPart = { text: prompt };
-
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: { parts: [imagePart, textPart] },
-                config: { responseMimeType: "application/json" }
-            });
+            const response = await generateContent(settings, prompt, mimeType, base64Data, true);
 
             const result = JSON.parse(response.text);
 
@@ -174,10 +167,10 @@ const PersonForm: React.FC<{
     
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            {ai && (
+            {isAiConfigured && (
                 <div>
                      <input type="file" ref={ocrInputRef} onChange={handleImageSelected} className="hidden" accept="image/*" />
-                     <button type="button" onClick={handleOcrClick} disabled={isOcrLoading} className="w-full flex justify-center items-center gap-2 px-4 py-2 border border-slate-300 text-sm font-medium rounded-md shadow-sm text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed" title={ai ? "Заполнить по фото документа" : "Введите API ключ в Настройках, чтобы включить эту функцию"}>
+                     <button type="button" onClick={handleOcrClick} disabled={isOcrLoading} className="w-full flex justify-center items-center gap-2 px-4 py-2 border border-slate-300 text-sm font-medium rounded-md shadow-sm text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed" title={isAiConfigured ? "Заполнить по фото документа" : "Настройте AI в Настройках, чтобы включить эту функцию"}>
                         <CameraIcon /> {isOcrLoading ? "Анализ изображения..." : "✨ Заполнить по фото"}
                     </button>
                     {ocrError && <p className="text-red-500 text-sm mt-2 text-center">{ocrError}</p>}

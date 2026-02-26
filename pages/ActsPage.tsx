@@ -7,7 +7,7 @@ import { ColumnsIcon, SparklesIcon } from '../components/Icons';
 import ActsTable from '../components/ActsTable';
 import DeleteActsConfirmationModal from '../components/DeleteActsConfirmationModal';
 import { ALL_COLUMNS } from '../components/ActsTableConfig';
-import { GoogleGenAI } from '@google/genai';
+import { generateContent } from '../services/aiService';
 
 interface ActsPageProps {
     acts: Act[];
@@ -194,13 +194,15 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         setActsPendingDeletion(actsToDelete);
     };
 
+    const isAiConfigured = settings.aiModel === 'gemini-2.5-flash' ? !!settings.geminiApiKey : !!settings.openAiApiKey;
+
     const handleAiEditClick = () => {
         if (selectedCells.size === 0) {
             alert("Пожалуйста, выделите ячейки для редактирования.");
             return;
         }
-        if (!settings.geminiApiKey) {
-            alert("Пожалуйста, добавьте API ключ Gemini в настройках.");
+        if (!isAiConfigured) {
+            alert("Пожалуйста, настройте AI Провайдер в настройках.");
             setCurrentPage('settings');
             return;
         }
@@ -255,8 +257,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
             }).filter(Boolean);
 
             if (cellsToUpdate.length === 0) return;
-
-            const ai = new GoogleGenAI({ apiKey: settings.geminiApiKey! });
             
             // Define data formats for specific columns
             const columnRules: Record<string, string> = {
@@ -303,11 +303,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                 - Dates MUST be YYYY-MM-DD.
             `;
 
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: { parts: [{ text: prompt }] },
-                config: { responseMimeType: "application/json" }
-            });
+            const response = await generateContent(settings, prompt, undefined, undefined, true);
 
             const result = JSON.parse(response.text);
             

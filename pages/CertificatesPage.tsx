@@ -5,7 +5,7 @@ import Modal from '../components/Modal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { PlusIcon, DeleteIcon, CertificateIcon, CloseIcon, CloudUploadIcon, SparklesIcon, RestoreIcon, LayoutListIcon, LayoutGridIcon, LinkIcon, ChevronDownIcon, MinimizeIcon, MaximizeIcon, ArrowRightIcon, CheckIcon, MenuIcon, CopyIcon } from '../components/Icons';
 import { ContextMenu, MenuItem } from '../components/ContextMenu';
-import { GoogleGenAI } from '@google/genai';
+import { generateContent } from '../services/aiService';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import ObjectResourceImporter from '../components/ObjectResourceImporter';
 
@@ -441,7 +441,7 @@ const CertificateForm: React.FC<{
     const [diffResult, setDiffResult] = useState<DiffItem[] | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const ai = settings.geminiApiKey ? new GoogleGenAI({ apiKey: settings.geminiApiKey }) : null;
+    const isAiConfigured = settings.aiModel === 'gemini-2.5-flash' ? !!settings.geminiApiKey : !!settings.openAiApiKey;
 
     useEffect(() => {
         if (formData.files.length > 0 && !activeFileId) {
@@ -553,7 +553,7 @@ const CertificateForm: React.FC<{
     };
 
     const handleAiScan = async () => {
-        if (!activeFile || !ai) return;
+        if (!activeFile || !isAiConfigured) return;
         setIsScanning(true); setAiError(null); setAiSuggestions(null); setShowAiMaterials(true);
         try {
             const [mimeType, base64Data] = activeFile.data.split(',');
@@ -563,12 +563,8 @@ const CertificateForm: React.FC<{
             const promptDate = settings.certificatePromptDate || "Issue Date YYYY-MM-DD";
             const promptMaterials = settings.certificatePromptMaterials || "Exact material names";
             const finalPrompt = `Analyze the provided document image/PDF. Extract: {"numbers": ["${promptNumber}"], "dates": ["${promptDate}"], "materials": ["${promptMaterials}"]}. Valid JSON only.`;
-            const part = { inlineData: { mimeType: cleanMimeType, data: base64Data } };
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: { parts: [part, { text: finalPrompt }] },
-                config: { responseMimeType: "application/json" }
-            });
+            
+            const response = await generateContent(settings, finalPrompt, cleanMimeType, base64Data, true);
             const text = response.text;
             if (!text) throw new Error("Empty response from AI");
             const jsonStartIndex = text.indexOf('{');
@@ -590,15 +586,11 @@ const CertificateForm: React.FC<{
     };
 
     const handleAiMassEdit = async () => {
-        if (!ai || !massEditPrompt.trim() || formData.materials.length === 0) return;
+        if (!isAiConfigured || !massEditPrompt.trim() || formData.materials.length === 0) return;
         setIsMassEditing(true); setDiffResult(null);
         try {
             const prompt = `Current materials list: ${JSON.stringify(formData.materials)}. User request: "${massEditPrompt}". Return ONLY new JSON array of strings.`;
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: { parts: [{ text: prompt }] },
-                config: { responseMimeType: "application/json" }
-            });
+            const response = await generateContent(settings, prompt, undefined, undefined, true);
             const text = response.text;
             if(!text) throw new Error("No response");
             const newList = JSON.parse(text);
