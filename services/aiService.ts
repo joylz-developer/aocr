@@ -72,6 +72,7 @@ export const generateContent = async (
         const body: any = {
             model: model,
             messages: messages,
+            max_tokens: 4096,
         };
         
         if (jsonMode && !model.includes('qwen')) {
@@ -99,6 +100,8 @@ export const generateContent = async (
         
         const data = await response.json();
         const text = data.choices?.[0]?.message?.content;
+        
+        console.log("AI Response:", text);
         
         if (!text) {
             throw new Error("Empty response from AI");

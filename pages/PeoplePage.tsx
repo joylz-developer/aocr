@@ -143,9 +143,9 @@ const PersonForm: React.FC<{
                 };
             });
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("OCR error:", error);
-            setOcrError("Не удалось распознать данные. Попробуйте другое изображение.");
+            setOcrError(`Ошибка распознавания: ${error.message || "Неизвестная ошибка"}`);
         } finally {
             setIsOcrLoading(false);
             if (event.target) event.target.value = '';

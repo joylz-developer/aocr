@@ -577,9 +577,9 @@ const CertificateForm: React.FC<{
             const rawMaterials = Array.isArray(result.materials) ? result.materials : [];
             const uniqueMaterials = Array.from(new Set(rawMaterials)) as string[];
             setAiSuggestions({ numbers, dates, materials: uniqueMaterials });
-        } catch (error) {
+        } catch (error: any) {
             console.error("AI Scan Error:", error);
-            setAiError("Не удалось распознать данные. Убедитесь, что API ключ верен.");
+            setAiError(`Ошибка распознавания: ${error.message || "Неизвестная ошибка"}`);
         } finally {
             setIsScanning(false);
         }
