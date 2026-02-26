@@ -1,7 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 // Use a CDN for the worker to avoid complex bundler configuration issues in this environment
 // Alternatively, we could use the local worker if we can guarantee the path
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 export const convertPdfToImage = async (base64Pdf: string): Promise<string> => {
     try {
