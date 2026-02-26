@@ -102,12 +102,17 @@ const PersonForm: React.FC<{
         try {
             const { mimeType, data: base64Data } = await imageFileToBase64(file);
 
-            const prompt = `Проанализируй изображение и извлеки информацию о человеке. Верни результат в формате JSON со следующими ключами: "name", "position", "organization", "authDoc".
-            - "name": Полное имя (ФИО).
-            - "position": Должность.
-            - "organization": Название организации.
-            - "authDoc": Реквизиты документа, подтверждающего полномочия (например, "Приказ №123 от 01.01.2024").
-            Если какое-то поле не найдено, оставь для него пустую строку.`;
+            const prompt = `
+Analyze the provided document image. This is a personal identification document or certificate.
+Extract the following information into a valid JSON object:
+1. "name": The full name of the person (ФИО).
+2. "position": The job title or position (if available).
+3. "organization": The name of the organization (if available).
+4. "authDoc": The document details confirming authority (e.g., "Order No. 123 from 01.01.2024").
+
+If a field is not found, use an empty string.
+Return ONLY the JSON object. Do not include markdown formatting.
+            `.trim();
 
             const response = await generateContent(settings, prompt, mimeType, base64Data, true);
 

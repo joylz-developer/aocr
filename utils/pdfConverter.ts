@@ -20,8 +20,8 @@ export const convertPdfToImage = async (base64Pdf: string): Promise<string> => {
         // Get the first page
         const page = await pdf.getPage(1);
 
-        // Set scale for better quality (e.g., 2.0)
-        const scale = 2.0;
+        // Set scale for better quality (e.g., 3.0)
+        const scale = 3.0;
         const viewport = page.getViewport({ scale });
 
         // Prepare canvas using OffscreenCanvas if available, or create a canvas element
@@ -45,7 +45,7 @@ export const convertPdfToImage = async (base64Pdf: string): Promise<string> => {
 
         // Convert canvas to base64 JPEG image
         // Remove the data URL prefix to match the expected format in aiService
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
         const base64Image = dataUrl.split(',')[1];
 
         return base64Image;

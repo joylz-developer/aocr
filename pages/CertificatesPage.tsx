@@ -562,7 +562,19 @@ const CertificateForm: React.FC<{
             const promptNumber = settings.certificatePromptNumber || "Document Type + Number";
             const promptDate = settings.certificatePromptDate || "Issue Date YYYY-MM-DD";
             const promptMaterials = settings.certificatePromptMaterials || "Exact material names";
-            const finalPrompt = `Analyze the provided document image/PDF. Extract: {"numbers": ["${promptNumber}"], "dates": ["${promptDate}"], "materials": ["${promptMaterials}"]}. Valid JSON only.`;
+            
+            const finalPrompt = `
+Analyze the provided document image. This is a certificate or passport for construction materials.
+Your task is to extract the following information and return it in a valid JSON object:
+
+1. "numbers": Extract the document number (e.g., "Certificate No. 123", "Passport No. 456"). Return an array of strings.
+2. "dates": Extract the document date (issue date). Format as YYYY-MM-DD if possible. Return an array of strings.
+3. "materials": Extract the names of the materials listed in the document. Return an array of strings.
+
+If you cannot find specific information, return an empty array for that field.
+The output must be a valid JSON object with the keys: "numbers", "dates", "materials".
+Do not include any markdown formatting or additional text. Just the JSON.
+            `.trim();
             
             const response = await generateContent(settings, finalPrompt, cleanMimeType, base64Data, true);
             const text = response.text;

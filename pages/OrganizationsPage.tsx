@@ -94,16 +94,20 @@ const OrganizationForm: React.FC<{
         try {
             const { mimeType, data: base64Data } = await imageFileToBase64(file);
             
-            const prompt = `Извлеки из этого изображения информацию об организации и верни в формате JSON.
-            Ключи JSON должны быть: "name", "ogrn", "inn", "kpp", "address", "phone", "sro".
-            - name: Полное наименование организации.
-            - ogrn: ОГРН.
-            - inn: ИНН.
-            - kpp: КПП (если есть).
-            - address: Юридический/почтовый адрес.
-            - phone: Контактный телефон/факс.
-            - sro: Информация о членстве в СРО.
-            Если какое-то поле не найдено, оставь для него пустую строку.`;
+            const prompt = `
+Analyze the provided document image. This is an official organization document (e.g., registration certificate, SRO membership).
+Extract the following information into a valid JSON object:
+1. "name": Full organization name.
+2. "ogrn": OGRN (Primary State Registration Number).
+3. "inn": INN (Taxpayer Identification Number).
+4. "kpp": KPP (Tax Registration Reason Code) (if available).
+5. "address": Legal or postal address.
+6. "phone": Contact phone/fax (if available).
+7. "sro": Information about SRO membership (if available).
+
+If a field is not found, use an empty string.
+Return ONLY the JSON object. Do not include markdown formatting.
+            `.trim();
 
             const response = await generateContent(settings, prompt, mimeType, base64Data, true);
 
