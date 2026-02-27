@@ -391,9 +391,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                     onChange={handleChange}
                                     className={inputClass}
                                 >
-                                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                                    <option value="qwen/qwen-2.5-vl-72b-instruct">Qwen 2.5 VL 72B Instruct (OpenRouter)</option>
-                                    <option value="qwen/qwen-2.5-vl-7b-instruct">Qwen 2.5 VL 7B Instruct (OpenRouter)</option>
+                                    <option value="gemini-2.5-flash">Gemini 2.5 Flash (Google API Key)</option>
+                                    <optgroup label="OpenRouter (Платные / Дешевые)">
+                                        <option value="qwen/qwen-2.5-vl-72b-instruct">Qwen 2.5 VL 72B Instruct</option>
+                                        <option value="qwen/qwen-2.5-vl-7b-instruct">Qwen 2.5 VL 7B Instruct</option>
+                                    </optgroup>
+                                    <optgroup label="OpenRouter (Бесплатные)">
+                                        <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash Exp (Free)</option>
+                                        <option value="meta-llama/llama-3.2-11b-vision-instruct:free">Llama 3.2 11B Vision (Free)</option>
+                                    </optgroup>
                                 </select>
                             </div>
 
@@ -440,6 +446,20 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                     <div>
                                         <label htmlFor="openAiBaseUrl" className={labelClass}>
                                             OpenAI Base URL (Опционально)
+                                            <div className="relative inline-flex ml-2 group">
+                                                <button type="button" className="text-slate-400 hover:text-blue-600 focus:outline-none" aria-label="Справка">
+                                                    <QuestionMarkCircleIcon className="w-4 h-4" />
+                                                </button>
+                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-80 bg-slate-800 text-white text-xs rounded-lg shadow-lg p-3 z-50 hidden group-hover:block pointer-events-none">
+                                                    <p className="font-semibold mb-1">Базовый адрес API:</p>
+                                                    <ul className="list-disc pl-4 space-y-1 text-slate-300">
+                                                        <li>Оставьте пустым для <strong>OpenRouter</strong> (по умолчанию).</li>
+                                                        <li>Используйте для переключения на других провайдеров (DeepSeek, Together AI).</li>
+                                                        <li>Для локальных нейросетей (Ollama, LM Studio): <code className="text-cyan-300">http://localhost:11434/v1</code></li>
+                                                    </ul>
+                                                    <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-0 h-0 border-l-8 border-l-transparent border-r-8 border-r-transparent border-t-8 border-t-slate-800 -mb-2"></div>
+                                                </div>
+                                            </div>
                                         </label>
                                         <input
                                             type="text"
