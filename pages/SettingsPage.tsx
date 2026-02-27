@@ -397,12 +397,32 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         <option value="qwen/qwen-2.5-vl-7b-instruct">Qwen 2.5 VL 7B Instruct</option>
                                     </optgroup>
                                     <optgroup label="OpenRouter (Бесплатные)">
-                                        <option value="google/gemini-2.0-flash-lite-preview-02-05:free">Gemini 2.0 Flash Lite (Free)</option>
-                                        <option value="google/gemini-2.0-pro-exp-02-05:free">Gemini 2.0 Pro Exp (Free)</option>
+                                        <option value="google/gemini-2.0-flash-thinking-exp:free">Gemini 2.0 Flash Thinking Exp (Free)</option>
                                         <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash Exp (Free)</option>
                                     </optgroup>
+                                    <option value="custom">Ввести свой ID модели...</option>
                                 </select>
                             </div>
+
+                            {formData.aiModel === 'custom' && (
+                                <div>
+                                    <label htmlFor="customAiModel" className={labelClass}>
+                                        ID Модели (с OpenRouter)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="customAiModel"
+                                        name="customAiModel"
+                                        value={formData.customAiModel || ''}
+                                        onChange={handleChange}
+                                        className={inputClass}
+                                        placeholder="например: google/gemini-2.0-pro-exp-02-05:free"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        Найдите ID модели на <a href="https://openrouter.ai/models?q=free" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">OpenRouter Models</a>.
+                                    </p>
+                                </div>
+                            )}
 
                             {(!formData.aiModel || formData.aiModel === 'gemini-2.5-flash') && (
                                 <div>

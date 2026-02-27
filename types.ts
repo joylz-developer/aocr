@@ -151,6 +151,7 @@ export interface ProjectSettings {
     
     // New AI Settings
     aiModel?: string;
+    customAiModel?: string; // For custom OpenRouter models
     openAiApiKey?: string;
     openAiBaseUrl?: string;
 
