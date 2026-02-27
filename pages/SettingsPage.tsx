@@ -397,8 +397,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         <option value="qwen/qwen-2.5-vl-7b-instruct">Qwen 2.5 VL 7B Instruct</option>
                                     </optgroup>
                                     <optgroup label="OpenRouter (Бесплатные)">
+                                        <option value="google/gemini-2.0-flash-lite-preview-02-05:free">Gemini 2.0 Flash Lite (Free)</option>
+                                        <option value="google/gemini-2.0-pro-exp-02-05:free">Gemini 2.0 Pro Exp (Free)</option>
                                         <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash Exp (Free)</option>
-                                        <option value="meta-llama/llama-3.2-11b-vision-instruct:free">Llama 3.2 11B Vision (Free)</option>
                                     </optgroup>
                                 </select>
                             </div>
@@ -424,7 +425,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 </div>
                             )}
 
-                            {formData.aiModel && formData.aiModel.startsWith('qwen') && (
+                            {formData.aiModel && formData.aiModel !== 'gemini-2.5-flash' && (
                                 <>
                                     <div>
                                         <label htmlFor="openAiApiKey" className={labelClass}>
