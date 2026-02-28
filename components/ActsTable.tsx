@@ -1367,7 +1367,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             )}
 
             <div 
-                className="flex-grow overflow-auto relative scroll-shadows p-4" 
+                className="flex-grow overflow-auto relative scroll-shadows" 
                 ref={scrollContainerRef}
             >
                 <table className="w-full border-collapse text-sm min-w-max">
