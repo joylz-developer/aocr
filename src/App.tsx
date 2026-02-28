@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry, ExportSettings, CertificateFile, ConstructionObject } from './types';
-import TemplateUploader from './components/TemplateUploader';
+import FileUploader from './components/FileUploader';
 import ImportModal from './components/ImportModal';
 import ExportModal from './components/ExportModal';
 import ConfirmationModal from './components/ConfirmationModal';
@@ -679,7 +679,7 @@ const App: React.FC = () => {
 
             <main className="flex-1 h-full overflow-hidden relative">
                 {!template && currentPage === 'acts' ? (
-                    <TemplateUploader onUpload={handleTemplateUpload} />
+                    <FileUploader onUpload={handleTemplateUpload} />
                 ) : (
                     <>
                         {currentPage === 'objects' && (
