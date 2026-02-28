@@ -38,8 +38,7 @@ export const convertPdfToImage = async (base64Pdf: string): Promise<string> => {
         // Render PDF page into canvas context
         const renderContext = {
             canvasContext: context,
-            viewport: viewport,
-            canvas: canvas
+            viewport: viewport
         };
         
         await page.render(renderContext).promise;
