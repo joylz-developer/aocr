@@ -41,7 +41,6 @@ export const convertPdfToImage = async (base64Pdf: string): Promise<string> => {
             viewport: viewport
         };
         
-        // @ts-ignore - pdfjs-dist types are sometimes tricky with canvas context
         await page.render(renderContext).promise;
 
         // Convert canvas to base64 JPEG image

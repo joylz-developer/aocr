@@ -2,8 +2,8 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry, ExportSettings, CertificateFile, ConstructionObject } from './types';
-import FileUploader from './components/FileUploader';
-import DataImportModal from './components/DataImportModal';
+import TemplateUploader from './components/TemplateUploader';
+import ImportModal from './components/ImportModal';
 import ExportModal from './components/ExportModal';
 import ConfirmationModal from './components/ConfirmationModal';
 import RestoreGroupConfirmationModal from './components/RestoreGroupConfirmationModal';
@@ -679,7 +679,7 @@ const App: React.FC = () => {
 
             <main className="flex-1 h-full overflow-hidden relative">
                 {!template && currentPage === 'acts' ? (
-                    <FileUploader onUpload={handleTemplateUpload} />
+                    <TemplateUploader onUpload={handleTemplateUpload} />
                 ) : (
                     <>
                         {currentPage === 'objects' && (
@@ -832,7 +832,7 @@ const App: React.FC = () => {
             </main>
 
             {importData && (
-                <DataImportModal
+                <ImportModal
                     data={importData}
                     onClose={() => setImportData(null)}
                     onImport={handleGlobalImport}
