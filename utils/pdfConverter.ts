@@ -41,7 +41,7 @@ export const convertPdfToImage = async (base64Pdf: string): Promise<string> => {
             viewport: viewport
         };
         
-        await page.render(renderContext as any).promise;
+        await page.render(renderContext).promise;
 
         // Convert canvas to base64 JPEG image
         // Remove the data URL prefix to match the expected format in aiService
