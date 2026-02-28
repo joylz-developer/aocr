@@ -119,27 +119,7 @@ export const generateContent = async (
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             console.error("AI API Error:", errorData);
-            
-            let errorMessage = "Неизвестная ошибка API";
-            if (response.status === 401) {
-                errorMessage = "Ошибка авторизации: Неверный API ключ.";
-            } else if (response.status === 404) {
-                errorMessage = `Модель '${model}' не найдена (404). Проверьте правильность ID модели.`;
-            } else if (response.status === 400) {
-                errorMessage = `Неверный запрос (400): ${errorData.error?.message || 'Проверьте параметры запроса или ID модели.'}`;
-            } else if (response.status === 429) {
-                errorMessage = "Превышен лимит запросов (429). Пожалуйста, подождите немного.";
-            } else if (response.status >= 500) {
-                errorMessage = `Ошибка сервера (${response.status}). Попробуйте позже.`;
-            } else if (errorData.error?.message) {
-                errorMessage = errorData.error.message;
-            }
-            
-            if (errorMessage.toLowerCase().includes('embedding')) {
-                errorMessage = `Ошибка модели: Выбранная модель '${model}' не поддерживает генерацию текста или является моделью эмбеддингов (embeddings). Выберите модель для генерации текста (chat/completions).`;
-            }
-
-            throw new Error(`Ошибка API (${response.status}): ${errorMessage}`);
+            throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorData.error?.message || JSON.stringify(errorData)}`);
         }
         
         const data = await response.json();

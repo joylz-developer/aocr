@@ -123,29 +123,6 @@ const App: React.FC = () => {
     
     // Notification State
     const [notification, setNotification] = useState<string | null>(null);
-    const [apiStatus, setApiStatus] = useState<'idle' | 'checking' | 'online' | 'error'>('idle');
-
-    // Check API connection on mount and when settings change
-    useEffect(() => {
-        const checkConnection = async () => {
-            setApiStatus('checking');
-            try {
-                const { generateContent } = await import('./services/aiService');
-                await generateContent(settings, "test", undefined, undefined, false);
-                setApiStatus('online');
-            } catch (error) {
-                setApiStatus('error');
-            }
-        };
-        
-        // Only check if we have an API key configured
-        if ((settings.aiModel === 'gemini-2.5-flash' && settings.geminiApiKey) || 
-            (settings.aiModel !== 'gemini-2.5-flash' && settings.openAiApiKey)) {
-            checkConnection();
-        } else {
-            setApiStatus('idle');
-        }
-    }, [settings.aiModel, settings.geminiApiKey, settings.openAiApiKey, settings.openAiBaseUrl, settings.customAiModel]);
 
     // --- MIGRATION LOGIC for Construction Objects ---
     useEffect(() => {
@@ -698,7 +675,6 @@ const App: React.FC = () => {
                 onToggleTheme={toggleTheme}
                 constructionObjects={constructionObjects}
                 currentObjectId={currentObjectId}
-                apiStatus={apiStatus}
             />
 
             <main className="flex-1 h-full overflow-hidden relative">
@@ -920,3 +896,5 @@ const App: React.FC = () => {
 };
 
 export default App;
+
+// Empty change
