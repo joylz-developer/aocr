@@ -3,7 +3,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry, ExportSettings, CertificateFile, ConstructionObject } from './types';
 import FileUploader from './components/FileUploader';
-import ImportModal from './components/ImportModal';
+import DataImportModal from './components/DataImportModal';
 import ExportModal from './components/ExportModal';
 import ConfirmationModal from './components/ConfirmationModal';
 import RestoreGroupConfirmationModal from './components/RestoreGroupConfirmationModal';
@@ -832,7 +832,7 @@ const App: React.FC = () => {
             </main>
 
             {importData && (
-                <ImportModal
+                <DataImportModal
                     data={importData}
                     onClose={() => setImportData(null)}
                     onImport={handleGlobalImport}
