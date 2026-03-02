@@ -332,9 +332,9 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
             
             setIsAiModalOpen(false);
             setAiPrompt('');
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            alert("Ошибка при обработке AI запроса.");
+            alert(`Ошибка при обработке AI запроса: ${error.message || "Неизвестная ошибка"}`);
         } finally {
             setAiLoading(false);
         }
