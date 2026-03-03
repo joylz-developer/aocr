@@ -92,7 +92,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         <aside className={`bg-white shadow-lg flex flex-col transition-all duration-300 ease-in-out ${isOpen ? 'w-64' : 'w-20'} z-20`}>
             {/* Header: Toggle & Brand */}
             <div className={`flex items-center border-b border-slate-100 h-16 flex-shrink-0 ${isOpen ? 'justify-between px-4' : 'justify-center'}`}>
-                {isOpen && <h1 className="text-xl font-bold text-blue-700">DocGen AI</h1>}
+                {isOpen && <h1 className="text-xl font-bold text-blue-700">DocGen</h1>}
                 <button
                     onClick={() => setIsOpen(!isOpen)}
                     className="p-2 rounded-md hover:bg-slate-100 text-slate-500"
