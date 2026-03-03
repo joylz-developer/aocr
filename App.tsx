@@ -15,9 +15,11 @@ import GroupsPage from './pages/GroupsPage';
 import TrashPage from './pages/TrashPage';
 import RegulationsPage from './pages/RegulationsPage';
 import CertificatesPage from './pages/CertificatesPage';
+import ObjectsPage from './pages/ObjectsPage';
 import Sidebar from './components/Sidebar';
 import { saveAs } from 'file-saver';
 import PizZip from 'pizzip';
+import { CheckIcon } from './components/Icons';
 
 const fileToBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -60,6 +62,28 @@ const DEFAULT_PROMPT_NUMBER = "Тип документа (обязательно
 const DEFAULT_PROMPT_DATE = "Дата выдачи/составления документа (НЕ дата окончания).";
 const DEFAULT_PROMPT_MATERIALS = "Точное наименование продукции, марки, типы и размеры (например, 'Бетон B25 W6').";
 
+const ToastNotification: React.FC<{ message: string | null; onClose: () => void }> = ({ message, onClose }) => {
+    useEffect(() => {
+        if (message) {
+            const timer = setTimeout(onClose, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [message, onClose]);
+
+    if (!message) return null;
+
+    return (
+        <div className="fixed bottom-6 right-6 z-50 animate-fade-in-up">
+            <div className="bg-slate-800 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3">
+                <div className="bg-green-500 rounded-full p-1">
+                    <CheckIcon className="w-3 h-3 text-white" />
+                </div>
+                <span className="text-sm font-medium">{message}</span>
+            </div>
+        </div>
+    );
+};
+
 const App: React.FC = () => {
     const [template, setTemplate] = useLocalStorage<string | null>('docx_template', null);
     const [registryTemplate, setRegistryTemplate] = useLocalStorage<string | null>('docx_registry_template', null);
@@ -97,6 +121,9 @@ const App: React.FC = () => {
         certificatePromptMaterials: DEFAULT_PROMPT_MATERIALS
     });
     
+    // Notification State
+    const [notification, setNotification] = useState<string | null>(null);
+
     // --- MIGRATION LOGIC for Construction Objects ---
     useEffect(() => {
         // Check if we have data but no objects (Legacy Mode)
@@ -106,7 +133,7 @@ const App: React.FC = () => {
         if (hasData && !hasObjects) {
             // Create a default object using the old objectName setting if available
             const legacyName = (settings as any).objectName || 'Мой объект';
-            const newObj: ConstructionObject = { id: crypto.randomUUID(), name: legacyName };
+            const newObj: ConstructionObject = { id: crypto.randomUUID(), name: legacyName, shortName: legacyName };
             
             setConstructionObjects([newObj]);
             setCurrentObjectId(newObj.id);
@@ -130,7 +157,7 @@ const App: React.FC = () => {
             setSettings(newSettings);
         } else if (!hasData && !hasObjects) {
              // Fresh start
-             const newObj: ConstructionObject = { id: crypto.randomUUID(), name: 'Основной объект' };
+             const newObj: ConstructionObject = { id: crypto.randomUUID(), name: 'Основной объект', shortName: 'Основной' };
              setConstructionObjects([newObj]);
              setCurrentObjectId(newObj.id);
         } else if (hasObjects && !currentObjectId) {
@@ -170,14 +197,13 @@ const App: React.FC = () => {
     const [currentPage, setCurrentPage] = useState<Page>('acts');
     const [importData, setImportData] = useState<ImportData | null>(null);
     const [showExportModal, setShowExportModal] = useState(false);
-    const [restoreGroupConfirmData, setRestoreGroupConfirmData] = useState<{ groups: CommissionGroup[], entriesToRestore: DeletedActEntry[] } | null>(null);
     const [confirmationRequest, setConfirmationRequest] = useState<{ title: string, message: React.ReactNode, onConfirm: () => void } | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // --- Handlers for Construction Objects ---
-    const handleAddObject = (name: string, cloneFromId?: string, cloneCategories?: string[]) => {
-        const newObj: ConstructionObject = { id: crypto.randomUUID(), name };
+    const handleAddObject = (name: string, shortName: string, cloneFromId?: string, cloneCategories?: string[]) => {
+        const newObj: ConstructionObject = { id: crypto.randomUUID(), name, shortName };
         
         // 1. Create the object
         setConstructionObjects(prev => [...prev, newObj]);
@@ -200,24 +226,11 @@ const App: React.FC = () => {
             
             if (shouldClone('groups')) {
                 const sourceGroups = groups.filter(g => g.constructionObjectId === cloneFromId);
-                // Groups reference People/Orgs IDs. Ideally we should map old IDs to new IDs, but simple copy breaks refs.
-                // However, "Copy" usually implies "Copy structure".
-                // Since this is a simple app, we can just copy them. The names will match, but IDs might be tricky if we fully segregated.
-                // NOTE: If we cloned people/orgs and gave them NEW IDs, the group references (which are IDs) will be broken.
-                // To do this strictly correct requires mapping old->new IDs.
-                // For simplicity in this iteration: We just copy. The user might need to re-select people if IDs don't match.
-                // IMPROVEMENT: Intelligent ID mapping? Too complex for this XML block. 
-                // We'll proceed with direct copy. The Groups will point to IDs that exist in the *Source* object? No, People are filtered by current object ID.
-                // So if we just copy groups, they will point to IDs that are not in `currentPeople`.
-                // FIX: Let's assume for now the user accepts they might need to update links, OR we don't clone IDs.
-                // Actually, let's skip re-mapping logic complexity for now to avoid breaking the file limit.
-                // The `GroupForm` filters options by `organizations` (current obj). 
                 const newGroups = sourceGroups.map(g => ({ 
                     ...g, 
                     id: crypto.randomUUID(), 
                     constructionObjectId: newObj.id,
-                    // Reset relations to avoid pointing to invisible items
-                    representatives: {},
+                    representatives: {}, // Reset relations on simple copy to avoid confusion
                     builderOrgId: '',
                     contractorOrgId: '',
                     designerOrgId: '',
@@ -242,8 +255,141 @@ const App: React.FC = () => {
         setCurrentObjectId(newObj.id);
     };
 
-    const handleUpdateObject = (id: string, name: string) => {
-        setConstructionObjects(prev => prev.map(o => o.id === id ? { ...o, name } : o));
+    const handleUpdateObject = (id: string, name: string, shortName: string) => {
+        setConstructionObjects(prev => prev.map(o => o.id === id ? { ...o, name, shortName } : o));
+    };
+
+    const handleDeleteObject = (id: string) => {
+        // 1. Remove the object itself
+        setConstructionObjects(prev => prev.filter(o => o.id !== id));
+
+        // 2. Remove all related data
+        setActs(prev => prev.filter(a => a.constructionObjectId !== id));
+        setPeople(prev => prev.filter(p => p.constructionObjectId !== id));
+        setOrganizations(prev => prev.filter(o => o.constructionObjectId !== id));
+        setGroups(prev => prev.filter(g => g.constructionObjectId !== id));
+        setRegulations(prev => prev.filter(r => r.constructionObjectId !== id));
+        setCertificates(prev => prev.filter(c => c.constructionObjectId !== id));
+        
+        // 3. Remove from trash
+        setDeletedActs(prev => prev.filter(d => d.act.constructionObjectId !== id));
+        setDeletedCertificates(prev => prev.filter(d => d.certificate.constructionObjectId !== id));
+
+        // 4. Handle Active Object Switch
+        if (currentObjectId === id) {
+            setConstructionObjects(currentList => {
+                const remaining = currentList.filter(o => o.id !== id);
+                if (remaining.length > 0) {
+                    setCurrentObjectId(remaining[0].id);
+                } else {
+                    const newObj: ConstructionObject = { id: crypto.randomUUID(), name: 'Новый объект', shortName: 'Новый' };
+                    setConstructionObjects([newObj]);
+                    setCurrentObjectId(newObj.id);
+                }
+                return remaining;
+            });
+        }
+    };
+
+    const handleCloneObject = (sourceId: string) => {
+        const sourceObj = constructionObjects.find(o => o.id === sourceId);
+        if (!sourceObj) return;
+
+        const newObj: ConstructionObject = {
+            id: crypto.randomUUID(),
+            name: `${sourceObj.name} (Копия)`,
+            shortName: sourceObj.shortName ? `${sourceObj.shortName} (Копия)` : undefined
+        };
+
+        // --- DEEP COPY LOGIC WITH REFERENCE MAPPING ---
+        const idMap = new Map<string, string>();
+
+        // 1. Copy Organizations
+        const sourceOrgs = organizations.filter(o => o.constructionObjectId === sourceId);
+        const newOrgs = sourceOrgs.map(o => {
+            const newId = crypto.randomUUID();
+            idMap.set(o.id, newId);
+            return { ...o, id: newId, constructionObjectId: newObj.id };
+        });
+
+        // 2. Copy People
+        const sourcePeople = people.filter(p => p.constructionObjectId === sourceId);
+        const newPeople = sourcePeople.map(p => {
+            const newId = crypto.randomUUID();
+            idMap.set(p.id, newId);
+            return { ...p, id: newId, constructionObjectId: newObj.id };
+        });
+
+        // 3. Copy Groups (and update Org/Person refs)
+        const sourceGroups = groups.filter(g => g.constructionObjectId === sourceId);
+        const newGroups = sourceGroups.map(g => {
+            const newGroupId = crypto.randomUUID();
+            idMap.set(g.id, newGroupId);
+
+            const newReps: { [key: string]: string } = {};
+            Object.entries(g.representatives).forEach(([role, personId]) => {
+                if (personId && idMap.has(personId)) {
+                    newReps[role] = idMap.get(personId)!;
+                }
+            });
+
+            return {
+                ...g,
+                id: newGroupId,
+                constructionObjectId: newObj.id,
+                representatives: newReps,
+                builderOrgId: idMap.get(g.builderOrgId || '') || '',
+                contractorOrgId: idMap.get(g.contractorOrgId || '') || '',
+                designerOrgId: idMap.get(g.designerOrgId || '') || '',
+                workPerformerOrgId: idMap.get(g.workPerformerOrgId || '') || '',
+            };
+        });
+
+        // 4. Copy Acts (and update Org/Group/Rep refs)
+        const sourceActs = acts.filter(a => a.constructionObjectId === sourceId);
+        const newActs = sourceActs.map(a => {
+            const newActId = crypto.randomUUID();
+            
+            const newReps: { [key: string]: string } = {};
+            Object.entries(a.representatives).forEach(([role, personId]) => {
+                if (personId && idMap.has(personId)) {
+                    newReps[role] = idMap.get(personId)!;
+                }
+            });
+
+            return {
+                ...a,
+                id: newActId,
+                constructionObjectId: newObj.id,
+                objectName: newObj.name, // Update object name snapshot
+                representatives: newReps,
+                commissionGroupId: idMap.get(a.commissionGroupId || '') || undefined,
+                builderOrgId: idMap.get(a.builderOrgId || '') || undefined,
+                contractorOrgId: idMap.get(a.contractorOrgId || '') || undefined,
+                designerOrgId: idMap.get(a.designerOrgId || '') || undefined,
+                workPerformerOrgId: idMap.get(a.workPerformerOrgId || '') || undefined,
+                nextWorkActId: undefined // Break chains to avoid pointing to old acts
+            };
+        });
+
+        // 5. Copy Regulations & Certificates (No ID mapping needed usually)
+        const sourceRegs = regulations.filter(r => r.constructionObjectId === sourceId);
+        const newRegs = sourceRegs.map(r => ({ ...r, id: crypto.randomUUID(), constructionObjectId: newObj.id }));
+
+        const sourceCerts = certificates.filter(c => c.constructionObjectId === sourceId);
+        const newCerts = sourceCerts.map(c => ({ ...c, id: crypto.randomUUID(), constructionObjectId: newObj.id }));
+
+        // Update State
+        setConstructionObjects(prev => [...prev, newObj]);
+        setOrganizations(prev => [...prev, ...newOrgs]);
+        setPeople(prev => [...prev, ...newPeople]);
+        setGroups(prev => [...prev, ...newGroups]);
+        setActs(prev => [...prev, ...newActs]);
+        setRegulations(prev => [...prev, ...newRegs]);
+        setCertificates(prev => [...prev, ...newCerts]);
+
+        setCurrentObjectId(newObj.id);
+        setNotification(`Объект "${sourceObj.name}" успешно склонирован!`);
     };
 
     // --- Template Handlers ---
@@ -259,7 +405,7 @@ const App: React.FC = () => {
     const handleRegistryTemplateUpload = (file: File) => {
         fileToBase64(file).then(base64 => {
             setRegistryTemplate(base64);
-            alert("Шаблон реестра успешно загружен.");
+            setNotification("Шаблон реестра успешно загружен.");
         }).catch(err => {
             console.error("Registry template upload failed", err);
             alert("Ошибка загрузки шаблона реестра");
@@ -446,9 +592,9 @@ const App: React.FC = () => {
             
             if (newOrgs.length > 0) {
                 setOrganizations(prev => [...prev, ...newOrgs]);
-                alert(`Скопировано ${newOrgs.length} организаций.`);
+                setNotification(`Скопировано ${newOrgs.length} организаций.`);
             } else {
-                alert("Все выбранные организации уже существуют в текущем объекте (проверка по ИНН).");
+                setNotification("Все выбранные организации уже существуют в текущем объекте (проверка по ИНН).");
             }
         }
         else if (isPerson(items[0])) {
@@ -458,15 +604,11 @@ const App: React.FC = () => {
             
             peopleToImport.forEach(srcPerson => {
                 // 1. Resolve Organization Dependency
-                // Find source org details (Global/All lookup)
                 const sourceOrg = organizations.find(o => o.name === srcPerson.organization && o.constructionObjectId === srcPerson.constructionObjectId);
                 
-                // If person has an org, ensure it exists in target
                 if (srcPerson.organization) {
-                    // Check if org with same name/INN exists in target
                     let targetOrg = currentOrganizations.find(o => o.name === srcPerson.organization);
                     
-                    // If not found by name, try to find by INN if we know source org
                     if (!targetOrg && sourceOrg) {
                         targetOrg = currentOrganizations.find(o => o.inn === sourceOrg.inn);
                     }
@@ -488,7 +630,7 @@ const App: React.FC = () => {
             
             if (newOrgs.length > 0) setOrganizations(prev => [...prev, ...newOrgs]);
             if (newPeople.length > 0) setPeople(prev => [...prev, ...newPeople]);
-            alert(`Скопировано ${newPeople.length} участников и ${newOrgs.length} связанных организаций.`);
+            setNotification(`Скопировано ${newPeople.length} участников и ${newOrgs.length} связанных организаций.`);
         } else {
              // Certificates
              const certsToImport = items as Certificate[];
@@ -498,7 +640,7 @@ const App: React.FC = () => {
                  constructionObjectId: currentObjectId
              }));
              setCertificates(prev => [...prev, ...newCerts]);
-             alert(`Скопировано ${newCerts.length} сертификатов.`);
+             setNotification(`Скопировано ${newCerts.length} сертификатов.`);
         }
     };
 
@@ -517,9 +659,6 @@ const App: React.FC = () => {
         if (importSettings.registryTemplate && importData.registryTemplate) {
             setRegistryTemplate(importData.registryTemplate);
         }
-        
-        // ... (Implement rest of import logic based on your needs)
-        
         setImportData(null);
     };
 
@@ -536,9 +675,6 @@ const App: React.FC = () => {
                 onToggleTheme={toggleTheme}
                 constructionObjects={constructionObjects}
                 currentObjectId={currentObjectId}
-                onObjectChange={setCurrentObjectId}
-                onAddObject={handleAddObject}
-                onUpdateObject={handleUpdateObject}
             />
 
             <main className="flex-1 h-full overflow-hidden relative">
@@ -546,6 +682,17 @@ const App: React.FC = () => {
                     <TemplateUploader onUpload={handleTemplateUpload} />
                 ) : (
                     <>
+                        {currentPage === 'objects' && (
+                            <ObjectsPage 
+                                constructionObjects={constructionObjects}
+                                currentObjectId={currentObjectId}
+                                onObjectChange={setCurrentObjectId}
+                                onAddObject={handleAddObject}
+                                onUpdateObject={handleUpdateObject}
+                                onDeleteObject={handleDeleteObject}
+                                onCloneObject={handleCloneObject}
+                            />
+                        )}
                         {currentPage === 'acts' && (
                             <ActsPage
                                 acts={currentActs}
@@ -572,9 +719,7 @@ const App: React.FC = () => {
                                 }}
                                 setCurrentPage={setCurrentPage}
                                 onNavigateToCertificate={(id) => {
-                                    // Normally switch page and set active
                                     setCurrentPage('certificates');
-                                    // Implementation detail: Use a separate context or state to highlight
                                 }}
                             />
                         )}
@@ -744,6 +889,8 @@ const App: React.FC = () => {
                     {confirmationRequest.message}
                 </ConfirmationModal>
             )}
+            
+            <ToastNotification message={notification} onClose={() => setNotification(null)} />
         </div>
     );
 };

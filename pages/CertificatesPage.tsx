@@ -614,9 +614,8 @@ Do not include any markdown formatting or additional text. Just the JSON.
             if (Array.isArray(newList)) {
                 setDiffResult(calculateDiff(formData.materials, newList));
             }
-        } catch (error: any) {
-            console.error("AI Mass Edit Error:", error);
-            alert(`Ошибка при обработке AI: ${error.message || "Неизвестная ошибка"}`);
+        } catch (e) {
+            alert("Ошибка при обработке AI. Попробуйте другой запрос.");
             setDiffResult(null);
         } finally { setIsMassEditing(false); }
     };

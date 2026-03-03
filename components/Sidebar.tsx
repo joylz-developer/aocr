@@ -16,7 +16,6 @@ interface SidebarProps {
     // Objects Props
     constructionObjects: ConstructionObject[];
     currentObjectId: string | null;
-    apiStatus?: 'idle' | 'checking' | 'online' | 'error';
 }
 
 const SidebarButton: React.FC<{
@@ -58,7 +57,7 @@ const SidebarButton: React.FC<{
 
 const Sidebar: React.FC<SidebarProps> = ({ 
     isOpen, setIsOpen, currentPage, setCurrentPage, trashCount, theme, onToggleTheme,
-    constructionObjects, currentObjectId, apiStatus = 'idle'
+    constructionObjects, currentObjectId
 }) => {
     const currentObject = constructionObjects.find(o => o.id === currentObjectId);
     const displayName = currentObject?.shortName || currentObject?.name || 'Выберите объект';
@@ -163,18 +162,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             {/* Footer */}
             <div className="p-3 border-t border-slate-100 space-y-1 mt-auto bg-slate-50/50">
                  <SidebarButton
-                    icon={
-                        <div className="relative">
-                            <SettingsIcon className="w-5 h-5" />
-                            {apiStatus !== 'idle' && (
-                                <div className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border border-white ${
-                                    apiStatus === 'online' ? 'bg-green-500' : 
-                                    apiStatus === 'error' ? 'bg-red-500' : 
-                                    'bg-yellow-500 animate-pulse'
-                                }`} title={`API: ${apiStatus}`} />
-                            )}
-                        </div>
-                    }
+                    icon={<SettingsIcon className="w-5 h-5" />}
                     label="Настройки"
                     isOpen={isOpen}
                     isActive={currentPage === 'settings'}
