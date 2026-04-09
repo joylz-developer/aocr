@@ -153,19 +153,22 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
                 const json = JSON.parse(text);
                 if (!Array.isArray(json)) throw new Error("Format error: Root must be an array");
 
-                const parsedRegulations: Regulation[] = json.map((item: any) => ({
-                    id: crypto.randomUUID(),
-                    designation: item["Обозначение"] || item["Designation"] || '',
-                    fullName: item["Полное название"] || item["Full Name"] || '',
-                    status: item["Статус"] || item["Status"] || '',
-                    title: item["Заглавие на русском языке"] || item["Title"] || '',
-                    replacement: item["Обозначение заменяющего"] || item["Replacement"] || undefined,
-                    registrationDate: item["Дата регистрации"],
-                    approvalDate: item["Дата утверждения"],
-                    activeDate: item["Дата введения в действие"],
-                    orgApprover: item["Орган, утвердивший свод правил"],
-                    fullJson: item
-                })).filter(r => r.designation); // Filter out empty entries
+                const parsedRegulations: Regulation[] = json.map((item: any) => {
+                    const fullJson = item.fullJson || item;
+                    return {
+                        id: item.id || crypto.randomUUID(),
+                        designation: item.designation || item["Обозначение"] || item["Designation"] || fullJson["Обозначение"] || '',
+                        fullName: item.fullName || item["Полное название"] || item["Full Name"] || fullJson["Полное название"] || '',
+                        status: item.status || item["Статус"] || item["Status"] || fullJson["Статус"] || '',
+                        title: item.title || item["Заглавие на русском языке"] || item["Title"] || fullJson["Заглавие на русском языке"] || '',
+                        replacement: item.replacement || item["Обозначение заменяющего"] || item["Replacement"] || fullJson["Обозначение заменяющего"] || undefined,
+                        registrationDate: item.registrationDate || item["Дата регистрации"] || fullJson["Дата регистрации"],
+                        approvalDate: item.approvalDate || item["Дата утверждения"] || fullJson["Дата утверждения"],
+                        activeDate: item.activeDate || item["Дата введения в действие"] || fullJson["Дата введения в действие"],
+                        orgApprover: item.orgApprover || item["Орган, утвердивший свод правил"] || fullJson["Орган, утвердивший свод правил"],
+                        fullJson: fullJson
+                    };
+                }).filter((r: Regulation) => r.designation); // Filter out empty entries
 
                 const existingDesignations = new Set(regulations.map(r => r.designation));
                 const uniqueNew = parsedRegulations.filter(r => !existingDesignations.has(r.designation));
