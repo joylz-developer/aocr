@@ -794,12 +794,15 @@ const App: React.FC = () => {
                                                 reader.onload = (ev) => {
                                                     try {
                                                         const zip = new PizZip(ev.target?.result as ArrayBuffer);
-                                                        const backupFile = zip.file('backup.json');
-                                                        if (backupFile) {
-                                                            const json = JSON.parse(backupFile.asText());
-                                                            setImportData(json);
+                                                        const jsonFileNames = Object.keys(zip.files).filter(name => name.endsWith('.json'));
+                                                        if (jsonFileNames.length > 0) {
+                                                            const backupFile = zip.file(jsonFileNames[0]);
+                                                            if (backupFile) {
+                                                                const json = JSON.parse(backupFile.asText());
+                                                                setImportData(json);
+                                                            }
                                                         } else {
-                                                            alert('Файл backup.json не найден в архиве. Убедитесь, что вы загружаете правильный файл экспорта.');
+                                                            alert('Файл с данными (.json) не найден в архиве. Убедитесь, что вы загружаете правильный файл экспорта.');
                                                         }
                                                     } catch (err: any) {
                                                         alert('Ошибка чтения архива или неверный формат: ' + err.message);
