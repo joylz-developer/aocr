@@ -87,7 +87,7 @@ const ExportModal: React.FC<ExportModalProps> = ({ onClose, onExport, counts }) 
         <Modal isOpen={true} onClose={onClose} title="Экспорт данных">
             <div className="space-y-4">
                 <p className="text-slate-600 text-sm">
-                    Выберите, какие данные включить в файл резервной копии (.json).
+                    Выберите, какие данные включить в файл резервной копии (.zip).
                 </p>
 
                 <div className="flex justify-end gap-2 text-sm text-blue-600">

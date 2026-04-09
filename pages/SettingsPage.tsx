@@ -613,7 +613,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 <ImportIcon className="w-5 h-5"/> Управление данными
                             </h3>
                             <p className="text-sm text-slate-600 mb-4">
-                                Вы можете сохранить резервную копию выбранных данных в файл JSON или восстановить данные из файла.
+                                Вы можете сохранить резервную копию выбранных данных в архив ZIP или восстановить данные из файла.
                             </p>
                             <div className="flex gap-3">
                                 <button 
