@@ -914,16 +914,20 @@ const App: React.FC = () => {
                                                             const actsFile = zip.file('acts.json');
                                                             const peopleFile = zip.file('people.json');
                                                             const orgsFile = zip.file('organizations.json');
+                                                            const groupsFile = zip.file('groups.json');
                                                             const settingsFile = zip.file('settings.json');
                                                             const regsFile = zip.file('regulations.json');
+                                                            const objectsFile = zip.file('constructionObjects.json');
                                                             
-                                                            if (actsFile || peopleFile || settingsFile) {
+                                                            if (actsFile || peopleFile || settingsFile || groupsFile) {
                                                                 json = {};
                                                                 if (actsFile) json.acts = JSON.parse(actsFile.asText());
                                                                 if (peopleFile) json.people = JSON.parse(peopleFile.asText());
                                                                 if (orgsFile) json.organizations = JSON.parse(orgsFile.asText());
+                                                                if (groupsFile) json.groups = JSON.parse(groupsFile.asText());
                                                                 if (settingsFile) json.projectSettings = JSON.parse(settingsFile.asText());
                                                                 if (regsFile) json.regulations = JSON.parse(regsFile.asText());
+                                                                if (objectsFile) json.constructionObjects = JSON.parse(objectsFile.asText());
                                                                 
                                                                 const templateFile = zip.file('template.docx');
                                                                 if (templateFile) {
@@ -1064,27 +1068,42 @@ const App: React.FC = () => {
                 <ExportModal
                     onClose={() => setShowExportModal(false)}
                     onExport={(exportConfig) => {
+                        const filterByObj = <T extends { constructionObjectId?: string }>(items: T[]) => {
+                            if (!currentObjectId) return items;
+                            return items.filter(item => !item.constructionObjectId || item.constructionObjectId === currentObjectId);
+                        };
+
                         const exportData: ImportData = {
                             projectSettings: exportConfig.projectSettings ? settings : undefined,
                             template: exportConfig.template ? template : undefined,
                             registryTemplate: exportConfig.registryTemplate ? registryTemplate : undefined,
-                            constructionObjects: exportConfig.constructionObjects ? constructionObjects : undefined,
-                            acts: exportConfig.acts ? acts : undefined,
-                            people: exportConfig.people ? people : undefined,
-                            organizations: exportConfig.organizations ? organizations : undefined,
-                            groups: exportConfig.groups ? groups : undefined,
-                            regulations: exportConfig.regulations ? regulations : undefined,
-                            certificates: exportConfig.certificates ? certificates.map(c => ({...c, files: [], fileData: undefined})) : undefined,
-                            deletedActs: exportConfig.deletedActs ? deletedActs : undefined,
-                            deletedCertificates: exportConfig.deletedCertificates ? deletedCertificates : undefined,
+                            constructionObjects: exportConfig.constructionObjects ? constructionObjects.filter(o => !currentObjectId || o.id === currentObjectId) : undefined,
+                            acts: exportConfig.acts ? filterByObj(acts) : undefined,
+                            people: exportConfig.people ? filterByObj(people) : undefined,
+                            organizations: exportConfig.organizations ? filterByObj(organizations) : undefined,
+                            groups: exportConfig.groups ? filterByObj(groups) : undefined,
+                            regulations: exportConfig.regulations ? filterByObj(regulations) : undefined,
+                            certificates: exportConfig.certificates ? filterByObj(certificates).map(c => ({...c, files: [], fileData: undefined})) : undefined,
+                            deletedActs: exportConfig.deletedActs ? deletedActs.filter(d => !currentObjectId || !d.act.constructionObjectId || d.act.constructionObjectId === currentObjectId) : undefined,
+                            deletedCertificates: exportConfig.deletedCertificates ? deletedCertificates.filter(d => !currentObjectId || !d.certificate.constructionObjectId || d.certificate.constructionObjectId === currentObjectId) : undefined,
                         };
                         const zip = new PizZip();
-                        zip.file('backup.json', JSON.stringify(exportData));
+                        zip.file('backup.json', JSON.stringify(exportData, null, 2));
+                        
+                        // Write separate files for backward compatibility and user preference
+                        if (exportData.acts) zip.file('acts.json', JSON.stringify(exportData.acts, null, 2));
+                        if (exportData.people) zip.file('people.json', JSON.stringify(exportData.people, null, 2));
+                        if (exportData.organizations) zip.file('organizations.json', JSON.stringify(exportData.organizations, null, 2));
+                        if (exportData.groups) zip.file('groups.json', JSON.stringify(exportData.groups, null, 2));
+                        if (exportData.regulations) zip.file('regulations.json', JSON.stringify(exportData.regulations, null, 2));
+                        if (exportData.projectSettings) zip.file('settings.json', JSON.stringify(exportData.projectSettings, null, 2));
+                        if (exportData.constructionObjects) zip.file('constructionObjects.json', JSON.stringify(exportData.constructionObjects, null, 2));
                         
                         if (exportConfig.certificates && certificates.length > 0) {
+                            const filteredCerts = filterByObj(certificates);
                             const certsFolder = zip.folder('certificates');
-                            if (certsFolder) {
-                                certificates.forEach(cert => {
+                            if (certsFolder && filteredCerts.length > 0) {
+                                filteredCerts.forEach(cert => {
                                     const safeName = (cert.number || 'cert').replace(/[^a-z0-9а-яё]/gi, '_');
                                     const folderName = `Cert_${safeName}_${cert.id.substring(0, 6)}`;
                                     const certFolder = certsFolder.folder(folderName);
