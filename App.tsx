@@ -650,8 +650,32 @@ const App: React.FC = () => {
     const handleGlobalImport = (importSettings: ImportSettings) => {
         if (!importData) return;
         
+        let targetObjectId = currentObjectId;
+
+        // Ensure we have a target object for legacy data
+        if (importData.projectSettings && (importData.projectSettings as any).objectName) {
+            const legacyName = (importData.projectSettings as any).objectName;
+            let existingObj = constructionObjects.find(o => o.name === legacyName);
+            if (!existingObj) {
+                existingObj = { id: crypto.randomUUID(), name: legacyName, shortName: legacyName };
+                setConstructionObjects(prev => [...prev, existingObj!]);
+            }
+            targetObjectId = existingObj.id;
+            setCurrentObjectId(targetObjectId);
+        } else if (!targetObjectId && constructionObjects.length > 0) {
+            targetObjectId = constructionObjects[0].id;
+            setCurrentObjectId(targetObjectId);
+        } else if (!targetObjectId) {
+            const newObj = { id: crypto.randomUUID(), name: 'Импортированный объект', shortName: 'Импорт' };
+            setConstructionObjects([newObj]);
+            targetObjectId = newObj.id;
+            setCurrentObjectId(targetObjectId);
+        }
+
         if (importSettings.projectSettings && importData.projectSettings) {
-            setSettings(importData.projectSettings);
+            const newSettings = { ...importData.projectSettings };
+            delete (newSettings as any).objectName;
+            setSettings(newSettings);
         }
         if (importSettings.template && importData.template) {
             setTemplate(importData.template);
@@ -660,28 +684,31 @@ const App: React.FC = () => {
             setRegistryTemplate(importData.registryTemplate);
         }
 
-        const processImport = <T extends { id: string }>(
+        const processImport = <T extends { id: string, constructionObjectId?: string }>(
             categorySettings: ImportSettingsCategory | undefined,
             importedItems: T[] | undefined,
             setItems: React.Dispatch<React.SetStateAction<T[]>>
         ) => {
             if (!categorySettings?.import || !importedItems) return;
 
-            const selectedItems = importedItems.filter(item => 
-                !categorySettings.selectedIds || categorySettings.selectedIds.includes(item.id)
-            );
+            const selectedItems = importedItems
+                .filter(item => !categorySettings.selectedIds || categorySettings.selectedIds.includes(item.id))
+                .map(item => ({
+                    ...item,
+                    constructionObjectId: item.constructionObjectId || targetObjectId
+                }));
 
             if (categorySettings.mode === 'replace') {
-                setItems(selectedItems);
+                setItems(selectedItems as any);
             } else {
                 setItems(prev => {
                     const newItems = [...prev];
                     selectedItems.forEach(importedItem => {
                         const existingIndex = newItems.findIndex(item => item.id === importedItem.id);
                         if (existingIndex >= 0) {
-                            newItems[existingIndex] = importedItem;
+                            newItems[existingIndex] = importedItem as any;
                         } else {
-                            newItems.push(importedItem);
+                            newItems.push(importedItem as any);
                         }
                     });
                     return newItems;
@@ -696,9 +723,15 @@ const App: React.FC = () => {
         ) => {
             if (!categorySettings?.import || !importedItems) return;
 
-            const selectedItems = importedItems.filter(item => 
-                !categorySettings.selectedIds || categorySettings.selectedIds.includes(item.act.id)
-            );
+            const selectedItems = importedItems
+                .filter(item => !categorySettings.selectedIds || categorySettings.selectedIds.includes(item.act.id))
+                .map(item => ({
+                    ...item,
+                    act: {
+                        ...item.act,
+                        constructionObjectId: item.act.constructionObjectId || targetObjectId
+                    }
+                }));
 
             if (categorySettings.mode === 'replace') {
                 setItems(selectedItems);
@@ -864,15 +897,51 @@ const App: React.FC = () => {
                                                 reader.onload = (ev) => {
                                                     try {
                                                         const zip = new PizZip(ev.target?.result as ArrayBuffer);
-                                                        const jsonFileNames = Object.keys(zip.files).filter(name => name.endsWith('.json'));
-                                                        if (jsonFileNames.length > 0) {
-                                                            const backupFile = zip.file(jsonFileNames[0]);
-                                                            if (backupFile) {
-                                                                const json = JSON.parse(backupFile.asText());
-                                                                setImportData(json);
-                                                            }
+                                                        let json: any = null;
+                                                        
+                                                        // 1. Try backup.json or backup_restore.json
+                                                        const backupFile = zip.file('backup.json') || zip.file('backup_restore.json');
+                                                        if (backupFile) {
+                                                            json = JSON.parse(backupFile.asText());
                                                         } else {
-                                                            alert('Файл с данными (.json) не найден в архиве. Убедитесь, что вы загружаете правильный файл экспорта.');
+                                                            // 2. Try to reconstruct from split files
+                                                            const actsFile = zip.file('acts.json');
+                                                            const peopleFile = zip.file('people.json');
+                                                            const orgsFile = zip.file('organizations.json');
+                                                            const settingsFile = zip.file('settings.json');
+                                                            const regsFile = zip.file('regulations.json');
+                                                            
+                                                            if (actsFile || peopleFile || settingsFile) {
+                                                                json = {};
+                                                                if (actsFile) json.acts = JSON.parse(actsFile.asText());
+                                                                if (peopleFile) json.people = JSON.parse(peopleFile.asText());
+                                                                if (orgsFile) json.organizations = JSON.parse(orgsFile.asText());
+                                                                if (settingsFile) json.projectSettings = JSON.parse(settingsFile.asText());
+                                                                if (regsFile) json.regulations = JSON.parse(regsFile.asText());
+                                                                
+                                                                const templateFile = zip.file('template.docx');
+                                                                if (templateFile) {
+                                                                    json.template = window.btoa(templateFile.asBinary());
+                                                                }
+                                                            } else {
+                                                                // 3. Fallback to any .json that looks like an ImportData object
+                                                                const jsonFileNames = Object.keys(zip.files).filter(name => name.endsWith('.json'));
+                                                                for (const name of jsonFileNames) {
+                                                                    try {
+                                                                        const parsed = JSON.parse(zip.file(name)!.asText());
+                                                                        if (parsed && !Array.isArray(parsed) && (parsed.acts || parsed.people || parsed.projectSettings)) {
+                                                                            json = parsed;
+                                                                            break;
+                                                                        }
+                                                                    } catch (e) {}
+                                                                }
+                                                            }
+                                                        }
+
+                                                        if (json) {
+                                                            setImportData(json);
+                                                        } else {
+                                                            alert('Файл с данными не найден в архиве. Убедитесь, что вы загружаете правильный файл экспорта.');
                                                         }
                                                     } catch (err: any) {
                                                         alert('Ошибка чтения архива или неверный формат: ' + err.message);
