@@ -784,18 +784,40 @@ const App: React.FC = () => {
                                 onImport={() => {
                                     const input = document.createElement('input');
                                     input.type = 'file';
-                                    input.accept = 'application/json';
+                                    input.accept = '.zip,.json';
                                     input.onchange = (e) => {
                                         const file = (e.target as HTMLInputElement).files?.[0];
                                         if (file) {
-                                            const reader = new FileReader();
-                                            reader.onload = (ev) => {
-                                                try {
-                                                    const json = JSON.parse(ev.target?.result as string);
-                                                    setImportData(json);
-                                                } catch (err) { alert('Invalid JSON'); }
-                                            };
-                                            reader.readAsText(file);
+                                            const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed';
+                                            if (isZip) {
+                                                const reader = new FileReader();
+                                                reader.onload = (ev) => {
+                                                    try {
+                                                        const zip = new PizZip(ev.target?.result as ArrayBuffer);
+                                                        const backupFile = zip.file('backup.json');
+                                                        if (backupFile) {
+                                                            const json = JSON.parse(backupFile.asText());
+                                                            setImportData(json);
+                                                        } else {
+                                                            alert('Файл backup.json не найден в архиве. Убедитесь, что вы загружаете правильный файл экспорта.');
+                                                        }
+                                                    } catch (err: any) {
+                                                        alert('Ошибка чтения архива или неверный формат: ' + err.message);
+                                                    }
+                                                };
+                                                reader.readAsArrayBuffer(file);
+                                            } else {
+                                                const reader = new FileReader();
+                                                reader.onload = (ev) => {
+                                                    try {
+                                                        const json = JSON.parse(ev.target?.result as string);
+                                                        setImportData(json);
+                                                    } catch (err: any) { 
+                                                        alert('Ошибка чтения JSON файла: ' + err.message + '\nВозможно, вы пытаетесь загрузить архив как текстовый файл?'); 
+                                                    }
+                                                };
+                                                reader.readAsText(file);
+                                            }
                                         }
                                     };
                                     input.click();
@@ -857,8 +879,15 @@ const App: React.FC = () => {
                             deletedActs: exportConfig.deletedActs ? deletedActs : undefined,
                             deletedCertificates: exportConfig.deletedCertificates ? deletedCertificates : undefined,
                         };
-                        const blob = new Blob([JSON.stringify(exportData)], { type: 'application/json' });
-                        saveAs(blob, 'backup.json');
+                        const zip = new PizZip();
+                        zip.file('backup.json', JSON.stringify(exportData));
+                        const blob = zip.generate({ type: 'blob' });
+                        
+                        const now = new Date();
+                        const pad = (n: number) => n.toString().padStart(2, '0');
+                        const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+                        
+                        saveAs(blob, `Project_Export_${dateStr}.zip`);
                         setShowExportModal(false);
                     }}
                     counts={{
