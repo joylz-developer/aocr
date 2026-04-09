@@ -659,7 +659,77 @@ const App: React.FC = () => {
         if (importSettings.registryTemplate && importData.registryTemplate) {
             setRegistryTemplate(importData.registryTemplate);
         }
+
+        const processImport = <T extends { id: string }>(
+            categorySettings: ImportSettingsCategory | undefined,
+            importedItems: T[] | undefined,
+            setItems: React.Dispatch<React.SetStateAction<T[]>>
+        ) => {
+            if (!categorySettings?.import || !importedItems) return;
+
+            const selectedItems = importedItems.filter(item => 
+                !categorySettings.selectedIds || categorySettings.selectedIds.includes(item.id)
+            );
+
+            if (categorySettings.mode === 'replace') {
+                setItems(selectedItems);
+            } else {
+                setItems(prev => {
+                    const newItems = [...prev];
+                    selectedItems.forEach(importedItem => {
+                        const existingIndex = newItems.findIndex(item => item.id === importedItem.id);
+                        if (existingIndex >= 0) {
+                            newItems[existingIndex] = importedItem;
+                        } else {
+                            newItems.push(importedItem);
+                        }
+                    });
+                    return newItems;
+                });
+            }
+        };
+
+        const processDeletedActsImport = (
+            categorySettings: ImportSettingsCategory | undefined,
+            importedItems: DeletedActEntry[] | undefined,
+            setItems: React.Dispatch<React.SetStateAction<DeletedActEntry[]>>
+        ) => {
+            if (!categorySettings?.import || !importedItems) return;
+
+            const selectedItems = importedItems.filter(item => 
+                !categorySettings.selectedIds || categorySettings.selectedIds.includes(item.act.id)
+            );
+
+            if (categorySettings.mode === 'replace') {
+                setItems(selectedItems);
+            } else {
+                setItems(prev => {
+                    const newItems = [...prev];
+                    selectedItems.forEach(importedItem => {
+                        const existingIndex = newItems.findIndex(item => item.act.id === importedItem.act.id);
+                        if (existingIndex >= 0) {
+                            newItems[existingIndex] = importedItem;
+                        } else {
+                            newItems.push(importedItem);
+                        }
+                    });
+                    return newItems;
+                });
+            }
+        };
+
+        processImport(importSettings.constructionObjects, importData.constructionObjects, setConstructionObjects);
+        processImport(importSettings.acts, importData.acts, setActs);
+        processImport(importSettings.people, importData.people, setPeople);
+        processImport(importSettings.organizations, importData.organizations, setOrganizations);
+        processImport(importSettings.groups, importData.groups, setGroups);
+        processImport(importSettings.regulations, importData.regulations, setRegulations);
+        processImport(importSettings.certificates, importData.certificates, setCertificates);
+        
+        processDeletedActsImport(importSettings.deletedActs, importData.deletedActs, setDeletedActs);
+
         setImportData(null);
+        setNotification('Данные успешно импортированы!');
     };
 
     return (
