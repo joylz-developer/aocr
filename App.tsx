@@ -817,7 +817,13 @@ const App: React.FC = () => {
                                 onReorderActs={(newActs) => {
                                     setActs(prev => {
                                         const other = prev.filter(a => a.constructionObjectId !== currentObjectId);
-                                        return [...other, ...newActs];
+                                        const currentObj = constructionObjects.find(o => o.id === currentObjectId);
+                                        const actsWithObjectId = newActs.map(a => ({
+                                            ...a,
+                                            constructionObjectId: currentObjectId || undefined,
+                                            objectName: currentObj ? currentObj.name : a.objectName
+                                        }));
+                                        return [...other, ...actsWithObjectId];
                                     });
                                 }}
                                 setCurrentPage={setCurrentPage}
