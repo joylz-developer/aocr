@@ -945,6 +945,57 @@ const App: React.FC = () => {
                                                         }
 
                                                         if (json) {
+                                                            const certInfoPaths = Object.keys(zip.files).filter(path => path.startsWith('certificates/') && path.endsWith('info.json'));
+                                                            if (certInfoPaths.length > 0) {
+                                                                const loadedCerts: Certificate[] = [];
+                                                                certInfoPaths.forEach(infoPath => {
+                                                                    try {
+                                                                        const infoFile = zip.file(infoPath);
+                                                                        if (!infoFile) return;
+                                                                        const info = JSON.parse(infoFile.asText());
+                                                                        
+                                                                        const folderPath = infoPath.substring(0, infoPath.length - 'info.json'.length);
+                                                                        const filePaths = Object.keys(zip.files).filter(p => p.startsWith(folderPath) && p !== infoPath && !zip.files[p].dir);
+                                                                        
+                                                                        const files: CertificateFile[] = [];
+                                                                        filePaths.forEach(fp => {
+                                                                            const f = zip.file(fp);
+                                                                            if (!f) return;
+                                                                            const fileName = fp.substring(folderPath.length);
+                                                                            const ext = fileName.split('.').pop()?.toLowerCase() || 'png';
+                                                                            const type = ext === 'pdf' ? 'pdf' : 'image';
+                                                                            
+                                                                            const base64 = window.btoa(f.asBinary());
+                                                                            const mimeType = type === 'pdf' ? 'application/pdf' : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+                                                                            const dataUrl = `data:${mimeType};base64,${base64}`;
+                                                                            
+                                                                            files.push({
+                                                                                id: crypto.randomUUID(),
+                                                                                type,
+                                                                                name: fileName,
+                                                                                data: dataUrl
+                                                                            });
+                                                                        });
+                                                                        
+                                                                        loadedCerts.push({
+                                                                            ...info,
+                                                                            files
+                                                                        });
+                                                                    } catch (e) {
+                                                                        console.error("Failed to parse cert", e);
+                                                                    }
+                                                                });
+                                                                
+                                                                if (!json.certificates) json.certificates = [];
+                                                                loadedCerts.forEach(lc => {
+                                                                    const existingIdx = json.certificates.findIndex((c: any) => c.id === lc.id);
+                                                                    if (existingIdx >= 0) {
+                                                                        json.certificates[existingIdx] = lc;
+                                                                    } else {
+                                                                        json.certificates.push(lc);
+                                                                    }
+                                                                });
+                                                            }
                                                             setImportData(json);
                                                         } else {
                                                             alert('Файл с данными не найден в архиве. Убедитесь, что вы загружаете правильный файл экспорта.');
@@ -1023,12 +1074,48 @@ const App: React.FC = () => {
                             organizations: exportConfig.organizations ? organizations : undefined,
                             groups: exportConfig.groups ? groups : undefined,
                             regulations: exportConfig.regulations ? regulations : undefined,
-                            certificates: exportConfig.certificates ? certificates : undefined,
+                            certificates: exportConfig.certificates ? certificates.map(c => ({...c, files: [], fileData: undefined})) : undefined,
                             deletedActs: exportConfig.deletedActs ? deletedActs : undefined,
                             deletedCertificates: exportConfig.deletedCertificates ? deletedCertificates : undefined,
                         };
                         const zip = new PizZip();
                         zip.file('backup.json', JSON.stringify(exportData));
+                        
+                        if (exportConfig.certificates && certificates.length > 0) {
+                            const certsFolder = zip.folder('certificates');
+                            if (certsFolder) {
+                                certificates.forEach(cert => {
+                                    const safeName = (cert.number || 'cert').replace(/[^a-z0-9а-яё]/gi, '_');
+                                    const folderName = `Cert_${safeName}_${cert.id.substring(0, 6)}`;
+                                    const certFolder = certsFolder.folder(folderName);
+                                    if (certFolder) {
+                                        const info = {
+                                            id: cert.id,
+                                            number: cert.number,
+                                            validUntil: cert.validUntil,
+                                            materials: cert.materials,
+                                            amount: cert.amount,
+                                            constructionObjectId: cert.constructionObjectId
+                                        };
+                                        certFolder.file('info.json', JSON.stringify(info, null, 2));
+                                        
+                                        if (cert.files && cert.files.length > 0) {
+                                            cert.files.forEach((f, idx) => {
+                                                if (f.data) {
+                                                    const base64Data = f.data.split(',')[1] || f.data;
+                                                    certFolder.file(f.name || `file_${idx}.png`, base64Data, { base64: true });
+                                                }
+                                            });
+                                        } else if (cert.fileData) {
+                                            const base64Data = cert.fileData.split(',')[1] || cert.fileData;
+                                            const ext = cert.fileType === 'pdf' ? 'pdf' : 'png';
+                                            certFolder.file(cert.fileName || `file.${ext}`, base64Data, { base64: true });
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                        
                         const blob = zip.generate({ type: 'blob' });
                         
                         const now = new Date();
