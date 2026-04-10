@@ -286,6 +286,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
     const [helpSubTab, setHelpSubTab] = useState<HelpSubTab>('main');
     const [formData, setFormData] = useState<ProjectSettings>(settings);
     const [isSaved, setIsSaved] = useState(false);
+    const [editingModel, setEditingModel] = useState<AiModelConfig | null>(null);
     const registryInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -308,38 +309,61 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
         }));
     };
 
-    const handleAddAiModel = () => {
-        setFormData(prev => ({
-            ...prev,
-            aiModels: [
-                ...(prev.aiModels || []),
-                { 
-                    id: crypto.randomUUID(), 
-                    name: 'Новая модель', 
-                    modelId: '',
-                    provider: 'openai',
-                    apiKey: '',
-                    baseUrl: 'https://openrouter.ai/api/v1'
-                }
-            ]
-        }));
+    const handleAddNewModel = () => {
+        setEditingModel({ 
+            id: crypto.randomUUID(), 
+            name: 'Новая модель', 
+            modelId: '',
+            provider: 'openai',
+            apiKey: '',
+            baseUrl: 'https://openrouter.ai/api/v1'
+        });
     };
 
-    const handleUpdateAiModel = (id: string, field: keyof AiModelConfig, value: string) => {
-        setFormData(prev => ({
-            ...prev,
-            aiModels: (prev.aiModels || []).map(model => 
-                model.id === id ? { ...model, [field]: value } : model
-            )
-        }));
+    const handleEditModel = (model: AiModelConfig) => {
+        setEditingModel({ ...model });
+    };
+
+    const handleCancelEdit = () => {
+        setEditingModel(null);
+    };
+
+    const handleSaveModel = () => {
+        if (!editingModel) return;
+        
+        setFormData(prev => {
+            const exists = prev.aiModels?.some(m => m.id === editingModel.id);
+            const newModels = exists 
+                ? prev.aiModels!.map(m => m.id === editingModel.id ? editingModel : m)
+                : [...(prev.aiModels || []), editingModel];
+            
+            const newData = { ...prev, aiModels: newModels };
+            
+            // Auto-save to prevent data loss on refresh
+            setTimeout(() => onSave(newData), 0);
+            return newData;
+        });
+        setEditingModel(null);
     };
 
     const handleRemoveAiModel = (id: string) => {
-        setFormData(prev => ({
-            ...prev,
-            aiModels: (prev.aiModels || []).filter(model => model.id !== id),
-            activeAiModelId: prev.activeAiModelId === id ? '' : prev.activeAiModelId
-        }));
+        setFormData(prev => {
+            const newModels = (prev.aiModels || []).filter(model => model.id !== id);
+            const newActiveId = prev.activeAiModelId === id ? '' : prev.activeAiModelId;
+            const newData = { ...prev, aiModels: newModels, activeAiModelId: newActiveId };
+            
+            setTimeout(() => onSave(newData), 0);
+            return newData;
+        });
+    };
+    
+    const handleActiveModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const val = e.target.value;
+        setFormData(prev => {
+            const newData = { ...prev, activeAiModelId: val };
+            setTimeout(() => onSave(newData), 0);
+            return newData;
+        });
     };
     
     const handleSubmit = (e: React.FormEvent) => {
@@ -429,7 +453,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                     id="activeAiModelId"
                                     name="activeAiModelId"
                                     value={formData.activeAiModelId || ''}
-                                    onChange={handleChange}
+                                    onChange={handleActiveModelChange}
                                     className={inputClass}
                                 >
                                     <option value="">-- Не выбрана --</option>
@@ -446,97 +470,147 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                             <div className="mt-6 border border-slate-200 rounded-md p-4 bg-slate-50">
                                 <div className="flex justify-between items-center mb-4">
                                     <h4 className="text-sm font-medium text-slate-700">Настроенные модели</h4>
-                                    <button
-                                        type="button"
-                                        onClick={handleAddAiModel}
-                                        className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-200 transition-colors font-medium"
-                                    >
-                                        + Добавить модель
-                                    </button>
+                                    {!editingModel && (
+                                        <button
+                                            type="button"
+                                            onClick={handleAddNewModel}
+                                            className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-200 transition-colors font-medium"
+                                        >
+                                            + Добавить модель
+                                        </button>
+                                    )}
                                 </div>
                                 
-                                {(!formData.aiModels || formData.aiModels.length === 0) ? (
+                                {editingModel ? (
+                                    <div className="bg-white p-4 border border-blue-200 rounded-md shadow-sm">
+                                        <h5 className="text-sm font-medium text-slate-800 mb-4 border-b border-slate-100 pb-2">
+                                            {formData.aiModels?.some(m => m.id === editingModel.id) ? 'Редактирование модели' : 'Новая модель'}
+                                        </h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-600 mb-1">Название (для вас)</label>
+                                                <input
+                                                    type="text"
+                                                    value={editingModel.name}
+                                                    onChange={(e) => setEditingModel({...editingModel, name: e.target.value})}
+                                                    placeholder="Например: Мой Gemini"
+                                                    className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-600 mb-1">Провайдер API</label>
+                                                <select
+                                                    value={editingModel.provider}
+                                                    onChange={(e) => setEditingModel({...editingModel, provider: e.target.value as 'gemini'|'openai'})}
+                                                    className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none bg-white"
+                                                >
+                                                    <option value="openai">OpenRouter / OpenAI Compatible</option>
+                                                    <option value="gemini">Google Gemini API (Native)</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-600 mb-1">ID Модели</label>
+                                                <input
+                                                    type="text"
+                                                    value={editingModel.modelId}
+                                                    onChange={(e) => setEditingModel({...editingModel, modelId: e.target.value})}
+                                                    placeholder={editingModel.provider === 'gemini' ? "gemini-2.5-flash" : "qwen/qwen-2.5-vl-72b-instruct"}
+                                                    className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none font-mono"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-600 mb-1">API Ключ</label>
+                                                <input
+                                                    type="password"
+                                                    value={editingModel.apiKey}
+                                                    onChange={(e) => setEditingModel({...editingModel, apiKey: e.target.value})}
+                                                    placeholder="sk-or-v1-..."
+                                                    className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none font-mono"
+                                                />
+                                            </div>
+                                            {editingModel.provider === 'openai' && (
+                                                <div className="md:col-span-2">
+                                                    <label className="block text-xs font-medium text-slate-600 mb-1">Base URL</label>
+                                                    <input
+                                                        type="text"
+                                                        value={editingModel.baseUrl}
+                                                        onChange={(e) => setEditingModel({...editingModel, baseUrl: e.target.value})}
+                                                        placeholder="https://openrouter.ai/api/v1"
+                                                        className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none font-mono"
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="mt-4 flex justify-end gap-2 pt-4 border-t border-slate-100">
+                                            <button
+                                                type="button"
+                                                onClick={handleCancelEdit}
+                                                className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
+                                            >
+                                                Отмена
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleSaveModel}
+                                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                                            >
+                                                Сохранить модель
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (!formData.aiModels || formData.aiModels.length === 0) ? (
                                     <div className="text-center py-6 bg-white border border-slate-200 rounded-md">
                                         <p className="text-sm text-slate-500 mb-2">Нет добавленных моделей</p>
-                                        <button type="button" onClick={handleAddAiModel} className="text-sm text-blue-600 hover:underline">Добавить первую модель</button>
+                                        <button type="button" onClick={handleAddNewModel} className="text-sm text-blue-600 hover:underline">Добавить первую модель</button>
                                     </div>
                                 ) : (
-                                    <div className="space-y-4">
+                                    <div className="space-y-3">
                                         {formData.aiModels.map(model => (
-                                            <div key={model.id} className="bg-white p-4 border border-slate-200 rounded-md relative shadow-sm">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveAiModel(model.id)}
-                                                    className="absolute top-3 right-3 text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors"
-                                                    title="Удалить модель"
-                                                >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                                                    </svg>
-                                                </button>
-                                                
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pr-8">
-                                                    <div>
-                                                        <label className="block text-xs font-medium text-slate-600 mb-1">Название (для вас)</label>
-                                                        <input
-                                                            type="text"
-                                                            value={model.name}
-                                                            onChange={(e) => handleUpdateAiModel(model.id, 'name', e.target.value)}
-                                                            placeholder="Например: Мой Gemini"
-                                                            className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none"
-                                                        />
+                                            <div key={model.id} className="bg-white p-3 border border-slate-200 rounded-md flex justify-between items-center shadow-sm hover:border-blue-300 transition-colors">
+                                                <div>
+                                                    <div className="font-medium text-sm text-slate-800 flex items-center gap-2">
+                                                        {model.name}
+                                                        {formData.activeAiModelId === model.id && (
+                                                            <span className="bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Активная</span>
+                                                        )}
                                                     </div>
-                                                    <div>
-                                                        <label className="block text-xs font-medium text-slate-600 mb-1">Провайдер API</label>
-                                                        <select
-                                                            value={model.provider}
-                                                            onChange={(e) => handleUpdateAiModel(model.id, 'provider', e.target.value as 'gemini' | 'openai')}
-                                                            className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none bg-white"
-                                                        >
-                                                            <option value="openai">OpenRouter / OpenAI Compatible</option>
-                                                            <option value="gemini">Google Gemini API (Native)</option>
-                                                        </select>
+                                                    <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
+                                                        <span className="bg-slate-100 px-1.5 py-0.5 rounded">{model.provider === 'gemini' ? 'Gemini API' : 'OpenRouter'}</span>
+                                                        <span className="font-mono">{model.modelId}</span>
                                                     </div>
-                                                    <div>
-                                                        <label className="block text-xs font-medium text-slate-600 mb-1">ID Модели</label>
-                                                        <input
-                                                            type="text"
-                                                            value={model.modelId}
-                                                            onChange={(e) => handleUpdateAiModel(model.id, 'modelId', e.target.value)}
-                                                            placeholder={model.provider === 'gemini' ? "gemini-2.5-flash" : "qwen/qwen-2.5-vl-72b-instruct"}
-                                                            className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none font-mono"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-xs font-medium text-slate-600 mb-1">API Ключ</label>
-                                                        <input
-                                                            type="password"
-                                                            value={model.apiKey}
-                                                            onChange={(e) => handleUpdateAiModel(model.id, 'apiKey', e.target.value)}
-                                                            placeholder="sk-or-v1-..."
-                                                            className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none font-mono"
-                                                        />
-                                                    </div>
-                                                    {model.provider === 'openai' && (
-                                                        <div className="md:col-span-2">
-                                                            <label className="block text-xs font-medium text-slate-600 mb-1">Base URL</label>
-                                                            <input
-                                                                type="text"
-                                                                value={model.baseUrl}
-                                                                onChange={(e) => handleUpdateAiModel(model.id, 'baseUrl', e.target.value)}
-                                                                placeholder="https://openrouter.ai/api/v1"
-                                                                className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none font-mono"
-                                                            />
-                                                        </div>
-                                                    )}
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleEditModel(model)}
+                                                        className="text-blue-600 hover:bg-blue-50 p-1.5 rounded transition-colors"
+                                                        title="Редактировать"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                                        </svg>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveAiModel(model.id)}
+                                                        className="text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors"
+                                                        title="Удалить"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
                                 )}
-                                <p className="text-xs text-slate-500 mt-4">
-                                    Найдите ID моделей на <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">OpenRouter Models</a>.
-                                </p>
+                                
+                                {!editingModel && (
+                                    <p className="text-xs text-slate-500 mt-4">
+                                        Найдите ID моделей на <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">OpenRouter Models</a>.
+                                    </p>
+                                )}
                             </div>
 
                             <div className="pt-2">
