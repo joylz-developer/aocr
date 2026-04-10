@@ -439,59 +439,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 </select>
                             </div>
 
-                            <div className="mt-4 border border-slate-200 rounded-md p-4 bg-slate-50">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h4 className="text-sm font-medium text-slate-700">Свои модели (OpenRouter)</h4>
-                                    <button
-                                        type="button"
-                                        onClick={handleAddCustomModel}
-                                        className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
-                                    >
-                                        + Добавить модель
-                                    </button>
-                                </div>
-                                
-                                {(!formData.customAiModels || formData.customAiModels.length === 0) ? (
-                                    <p className="text-xs text-slate-500 text-center py-2">Нет добавленных моделей</p>
-                                ) : (
-                                    <div className="space-y-3">
-                                        {formData.customAiModels.map(model => (
-                                            <div key={model.id} className="flex gap-2 items-start bg-white p-2 border border-slate-200 rounded">
-                                                <div className="flex-grow space-y-2">
-                                                    <input
-                                                        type="text"
-                                                        value={model.name}
-                                                        onChange={(e) => handleUpdateCustomModel(model.id, 'name', e.target.value)}
-                                                        placeholder="Название (например: Qwen 2.5 VL)"
-                                                        className="w-full text-sm px-2 py-1 border border-slate-300 rounded focus:border-blue-500 focus:outline-none"
-                                                    />
-                                                    <input
-                                                        type="text"
-                                                        value={model.modelId}
-                                                        onChange={(e) => handleUpdateCustomModel(model.id, 'modelId', e.target.value)}
-                                                        placeholder="ID модели (например: qwen/qwen-2.5-vl-72b-instruct)"
-                                                        className="w-full text-sm px-2 py-1 border border-slate-300 rounded focus:border-blue-500 focus:outline-none font-mono"
-                                                    />
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveCustomModel(model.id)}
-                                                    className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors mt-1"
-                                                    title="Удалить модель"
-                                                >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                                <p className="text-xs text-slate-500 mt-3">
-                                    Найдите ID модели на <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">OpenRouter Models</a>.
-                                </p>
-                            </div>
-
                             <div className="pt-2">
                                 <button
                                     type="button"
