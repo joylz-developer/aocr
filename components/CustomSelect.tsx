@@ -84,10 +84,17 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
 
     return (
         <div className={`relative group ${className || ''}`} ref={selectRef}>
-            <button
-                type="button"
+            <div
+                role="button"
+                tabIndex={0}
                 className={buttonClassName || defaultButtonClass}
                 onClick={toggleDropdown}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleDropdown();
+                    }
+                }}
                 aria-haspopup="listbox"
                 aria-expanded={isOpen}
             >
@@ -110,7 +117,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
                     )}
                      <ChevronDownIcon className={`w-5 h-5 text-slate-400 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'transform rotate-180' : ''}`} />
                 </div>
-            </button>
+            </div>
 
             {isOpen && (
                 <div className={dropdownClassName || defaultDropdownClass}>
