@@ -102,7 +102,7 @@ const PersonForm: React.FC<{
         try {
             const { mimeType, data: base64Data } = await imageFileToBase64(file);
 
-            const prompt = `
+            const prompt = settings.personExtractionPrompt || `
 Analyze the provided document image. This is a personal identification document or certificate.
 Extract the following information into a valid JSON object:
 1. "name": The full name of the person (ФИО).

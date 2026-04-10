@@ -61,6 +61,28 @@ const binaryStringToBase64 = (binary: string): string => {
 const DEFAULT_PROMPT_NUMBER = "Тип документа (обязательно укажи 'Паспорт качества', 'Сертификат соответствия' или другой тип) + Номер документа. Пример: 'Паспорт качества № 123'";
 const DEFAULT_PROMPT_DATE = "Дата выдачи/составления документа (НЕ дата окончания).";
 const DEFAULT_PROMPT_MATERIALS = "Точное наименование продукции, марки, типы и размеры (например, 'Бетон B25 W6').";
+const DEFAULT_PROMPT_PERSON = `Analyze the provided document image. This is a personal identification document or certificate.
+Extract the following information into a valid JSON object:
+1. "name": The full name of the person (ФИО).
+2. "position": The job title or position (if available).
+3. "organization": The name of the organization (if available).
+4. "authDoc": The document details confirming authority (e.g., "Order No. 123 from 01.01.2024").
+
+If a field is not found, use an empty string.
+Return ONLY the JSON object. Do not include markdown formatting.`;
+
+const DEFAULT_PROMPT_ORGANIZATION = `Analyze the provided document image. This is an official organization document (e.g., registration certificate, SRO membership).
+Extract the following information into a valid JSON object:
+1. "name": Full organization name.
+2. "ogrn": OGRN (Primary State Registration Number).
+3. "inn": INN (Taxpayer Identification Number).
+4. "kpp": KPP (Tax Registration Reason Code) (if available).
+5. "address": Legal or postal address.
+6. "phone": Contact phone/fax (if available).
+7. "sro": Information about SRO membership (if available).
+
+If a field is not found, use an empty string.
+Return ONLY the JSON object. Do not include markdown formatting.`;
 
 const ToastNotification: React.FC<{ message: string | null; onClose: () => void }> = ({ message, onClose }) => {
     useEffect(() => {
@@ -118,7 +140,10 @@ const App: React.FC = () => {
         registryThreshold: 5,
         certificatePromptNumber: DEFAULT_PROMPT_NUMBER,
         certificatePromptDate: DEFAULT_PROMPT_DATE,
-        certificatePromptMaterials: DEFAULT_PROMPT_MATERIALS
+        certificatePromptMaterials: DEFAULT_PROMPT_MATERIALS,
+        personExtractionPrompt: DEFAULT_PROMPT_PERSON,
+        organizationExtractionPrompt: DEFAULT_PROMPT_ORGANIZATION,
+        customAiModels: []
     });
     
     // Notification State

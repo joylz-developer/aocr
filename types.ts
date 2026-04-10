@@ -139,6 +139,12 @@ export interface CommissionGroup {
 }
 
 // Types for Project Settings
+export interface CustomAiModel {
+    id: string;
+    name: string;
+    modelId: string;
+}
+
 export interface ProjectSettings {
     // objectName: string; // REMOVED: Now managed via ConstructionObject
     defaultCopiesCount: number;
@@ -151,7 +157,8 @@ export interface ProjectSettings {
     
     // New AI Settings
     aiModel?: string;
-    customAiModel?: string; // For custom OpenRouter models
+    customAiModel?: string; // For custom OpenRouter models (legacy)
+    customAiModels?: CustomAiModel[]; // List of user-defined models
     openAiApiKey?: string;
     openAiBaseUrl?: string;
 
@@ -167,6 +174,8 @@ export interface ProjectSettings {
     certificatePromptNumber?: string;
     certificatePromptDate?: string;
     certificatePromptMaterials?: string;
+    personExtractionPrompt?: string;
+    organizationExtractionPrompt?: string;
 }
 
 // Types for Import/Export feature

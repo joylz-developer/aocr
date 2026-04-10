@@ -94,7 +94,7 @@ const OrganizationForm: React.FC<{
         try {
             const { mimeType, data: base64Data } = await imageFileToBase64(file);
             
-            const prompt = `
+            const prompt = settings.organizationExtractionPrompt || `
 Analyze the provided document image. This is an official organization document (e.g., registration certificate, SRO membership).
 Extract the following information into a valid JSON object:
 1. "name": Full organization name.

@@ -13,7 +13,16 @@ export const generateContent = async (
     initialBase64Data?: string,
     jsonMode: boolean = false
 ): Promise<AiResponse> => {
-    const model = settings.aiModel === 'custom' ? settings.customAiModel : (settings.aiModel || 'gemini-2.5-flash');
+    let model = settings.aiModel || 'gemini-2.5-flash';
+    
+    // Check if it's a custom model
+    const customModel = settings.customAiModels?.find(m => m.id === model);
+    if (customModel) {
+        model = customModel.modelId;
+    } else if (model === 'custom') {
+        // Fallback for legacy custom model
+        model = settings.customAiModel || 'gemini-2.5-flash';
+    }
     
     // Use local variables to allow modification
     let mimeType = initialMimeType;

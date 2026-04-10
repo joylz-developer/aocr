@@ -278,7 +278,7 @@ const SettingToggle: React.FC<SettingToggleProps> = ({ id, label, description, c
     </div>
 );
 
-type SettingsTab = 'general' | 'data' | 'help';
+type SettingsTab = 'general' | 'ai_prompts' | 'data' | 'help';
 type HelpSubTab = 'main' | 'registry';
 
 const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport, onExport, onChangeTemplate, onDownloadTemplate, onUploadRegistryTemplate, isTemplateLoaded, isRegistryTemplateLoaded }) => {
@@ -305,6 +305,33 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
          setFormData(prev => ({
             ...prev,
             [name]: parseInt(value, 10) || 0,
+        }));
+    };
+
+    const handleAddCustomModel = () => {
+        setFormData(prev => ({
+            ...prev,
+            customAiModels: [
+                ...(prev.customAiModels || []),
+                { id: crypto.randomUUID(), name: 'Новая модель', modelId: '' }
+            ]
+        }));
+    };
+
+    const handleUpdateCustomModel = (id: string, field: 'name' | 'modelId', value: string) => {
+        setFormData(prev => ({
+            ...prev,
+            customAiModels: (prev.customAiModels || []).map(model => 
+                model.id === id ? { ...model, [field]: value } : model
+            )
+        }));
+    };
+
+    const handleRemoveCustomModel = (id: string) => {
+        setFormData(prev => ({
+            ...prev,
+            customAiModels: (prev.customAiModels || []).filter(model => model.id !== id),
+            aiModel: prev.aiModel === id ? 'gemini-2.5-flash' : prev.aiModel
         }));
     };
     
@@ -359,6 +386,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                     </button>
                     <button
                         type="button"
+                        onClick={() => setActiveTab('ai_prompts')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex-1 ${activeTab === 'ai_prompts' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        AI Промпты
+                    </button>
+                    <button
+                        type="button"
                         onClick={() => setActiveTab('data')}
                         className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex-1 ${activeTab === 'data' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
                     >
@@ -392,37 +426,64 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                     className={inputClass}
                                 >
                                     <option value="gemini-2.5-flash">Gemini 2.5 Flash (Google API Key)</option>
-                                    <optgroup label="OpenRouter (Платные / Дешевые)">
-                                        <option value="qwen/qwen-2.5-vl-72b-instruct">Qwen 2.5 VL 72B Instruct</option>
-                                        <option value="qwen/qwen-2.5-vl-7b-instruct">Qwen 2.5 VL 7B Instruct</option>
-                                    </optgroup>
-                                    <optgroup label="OpenRouter (Бесплатные)">
-                                        <option value="google/gemini-2.0-flash-thinking-exp:free">Gemini 2.0 Flash Thinking Exp (Free)</option>
-                                        <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash Exp (Free)</option>
-                                    </optgroup>
-                                    <option value="custom">Ввести свой ID модели...</option>
+                                    {formData.customAiModels?.map(model => (
+                                        <option key={model.id} value={model.id}>{model.name}</option>
+                                    ))}
                                 </select>
                             </div>
 
-                            {formData.aiModel === 'custom' && (
-                                <div>
-                                    <label htmlFor="customAiModel" className={labelClass}>
-                                        ID Модели (с OpenRouter)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        id="customAiModel"
-                                        name="customAiModel"
-                                        value={formData.customAiModel || ''}
-                                        onChange={handleChange}
-                                        className={inputClass}
-                                        placeholder="например: google/gemini-2.0-pro-exp-02-05:free"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1">
-                                        Найдите ID модели на <a href="https://openrouter.ai/models?q=free" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">OpenRouter Models</a>.
-                                    </p>
+                            <div className="mt-4 border border-slate-200 rounded-md p-4 bg-slate-50">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h4 className="text-sm font-medium text-slate-700">Свои модели (OpenRouter)</h4>
+                                    <button
+                                        type="button"
+                                        onClick={handleAddCustomModel}
+                                        className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
+                                    >
+                                        + Добавить модель
+                                    </button>
                                 </div>
-                            )}
+                                
+                                {(!formData.customAiModels || formData.customAiModels.length === 0) ? (
+                                    <p className="text-xs text-slate-500 text-center py-2">Нет добавленных моделей</p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {formData.customAiModels.map(model => (
+                                            <div key={model.id} className="flex gap-2 items-start bg-white p-2 border border-slate-200 rounded">
+                                                <div className="flex-grow space-y-2">
+                                                    <input
+                                                        type="text"
+                                                        value={model.name}
+                                                        onChange={(e) => handleUpdateCustomModel(model.id, 'name', e.target.value)}
+                                                        placeholder="Название (например: Qwen 2.5 VL)"
+                                                        className="w-full text-sm px-2 py-1 border border-slate-300 rounded focus:border-blue-500 focus:outline-none"
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        value={model.modelId}
+                                                        onChange={(e) => handleUpdateCustomModel(model.id, 'modelId', e.target.value)}
+                                                        placeholder="ID модели (например: qwen/qwen-2.5-vl-72b-instruct)"
+                                                        className="w-full text-sm px-2 py-1 border border-slate-300 rounded focus:border-blue-500 focus:outline-none font-mono"
+                                                    />
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveCustomModel(model.id)}
+                                                    className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors mt-1"
+                                                    title="Удалить модель"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                <p className="text-xs text-slate-500 mt-3">
+                                    Найдите ID модели на <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">OpenRouter Models</a>.
+                                </p>
+                            </div>
 
                             {(!formData.aiModel || formData.aiModel === 'gemini-2.5-flash') && (
                                 <div>
@@ -602,6 +663,88 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 </div>
                             </SettingToggle>
                             
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'ai_prompts' && (
+                    <div className="space-y-6">
+                        <div className="space-y-4">
+                            <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Промпты для Сертификатов</h3>
+                            <p className="text-xs text-slate-500 mb-4">Настройте инструкции для нейросети при распознавании сертификатов и паспортов качества.</p>
+                            
+                            <div>
+                                <label htmlFor="certificatePromptNumber" className={labelClass}>
+                                    Номер документа
+                                </label>
+                                <textarea
+                                    id="certificatePromptNumber"
+                                    name="certificatePromptNumber"
+                                    value={formData.certificatePromptNumber || ''}
+                                    onChange={handleChange}
+                                    className={`${inputClass} min-h-[60px]`}
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="certificatePromptDate" className={labelClass}>
+                                    Дата документа
+                                </label>
+                                <textarea
+                                    id="certificatePromptDate"
+                                    name="certificatePromptDate"
+                                    value={formData.certificatePromptDate || ''}
+                                    onChange={handleChange}
+                                    className={`${inputClass} min-h-[60px]`}
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="certificatePromptMaterials" className={labelClass}>
+                                    Материалы
+                                </label>
+                                <textarea
+                                    id="certificatePromptMaterials"
+                                    name="certificatePromptMaterials"
+                                    value={formData.certificatePromptMaterials || ''}
+                                    onChange={handleChange}
+                                    className={`${inputClass} min-h-[60px]`}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 pt-4 border-t border-slate-200">
+                            <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Промпт для Людей</h3>
+                            <p className="text-xs text-slate-500 mb-4">Настройте инструкцию для извлечения данных о людях (ФИО, должность, организация).</p>
+                            
+                            <div>
+                                <label htmlFor="personExtractionPrompt" className={labelClass}>
+                                    Промпт (Люди)
+                                </label>
+                                <textarea
+                                    id="personExtractionPrompt"
+                                    name="personExtractionPrompt"
+                                    value={formData.personExtractionPrompt || ''}
+                                    onChange={handleChange}
+                                    className={`${inputClass} min-h-[150px] font-mono text-xs`}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 pt-4 border-t border-slate-200">
+                            <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Промпт для Организаций</h3>
+                            <p className="text-xs text-slate-500 mb-4">Настройте инструкцию для извлечения данных об организациях (название, ИНН, ОГРН, адрес).</p>
+                            
+                            <div>
+                                <label htmlFor="organizationExtractionPrompt" className={labelClass}>
+                                    Промпт (Организации)
+                                </label>
+                                <textarea
+                                    id="organizationExtractionPrompt"
+                                    name="organizationExtractionPrompt"
+                                    value={formData.organizationExtractionPrompt || ''}
+                                    onChange={handleChange}
+                                    className={`${inputClass} min-h-[150px] font-mono text-xs`}
+                                />
+                            </div>
                         </div>
                     </div>
                 )}
