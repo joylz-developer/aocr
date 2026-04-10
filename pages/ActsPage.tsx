@@ -194,7 +194,9 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         setActsPendingDeletion(actsToDelete);
     };
 
-    const isAiConfigured = settings.aiModel === 'gemini-2.5-flash' ? !!settings.geminiApiKey : !!settings.openAiApiKey;
+    const isAiConfigured = settings.activeAiModelId 
+        ? !!settings.aiModels?.find(m => m.id === settings.activeAiModelId)?.apiKey
+        : (settings.aiModel === 'gemini-2.5-flash' ? !!settings.geminiApiKey : !!settings.openAiApiKey);
 
     const handleAiEditClick = () => {
         if (selectedCells.size === 0) {

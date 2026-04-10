@@ -145,6 +145,15 @@ export interface CustomAiModel {
     modelId: string;
 }
 
+export interface AiModelConfig {
+    id: string;
+    name: string;
+    modelId: string;
+    provider: 'gemini' | 'openai';
+    apiKey: string;
+    baseUrl: string;
+}
+
 export interface ProjectSettings {
     // objectName: string; // REMOVED: Now managed via ConstructionObject
     defaultCopiesCount: number;
@@ -153,12 +162,16 @@ export interface ProjectSettings {
     showCopiesCount?: boolean;
     showActDate?: boolean;
     showParticipantDetails?: boolean;
-    geminiApiKey?: string;
     
-    // New AI Settings
+    // New Dynamic AI Settings
+    aiModels?: AiModelConfig[];
+    activeAiModelId?: string;
+
+    // Legacy AI Settings (kept for backward compatibility)
+    geminiApiKey?: string;
     aiModel?: string;
-    customAiModel?: string; // For custom OpenRouter models (legacy)
-    customAiModels?: CustomAiModel[]; // List of user-defined models
+    customAiModel?: string; 
+    customAiModels?: CustomAiModel[]; 
     openAiApiKey?: string;
     openAiBaseUrl?: string;
 

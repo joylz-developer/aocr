@@ -308,30 +308,37 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
         }));
     };
 
-    const handleAddCustomModel = () => {
+    const handleAddAiModel = () => {
         setFormData(prev => ({
             ...prev,
-            customAiModels: [
-                ...(prev.customAiModels || []),
-                { id: crypto.randomUUID(), name: 'Новая модель', modelId: '' }
+            aiModels: [
+                ...(prev.aiModels || []),
+                { 
+                    id: crypto.randomUUID(), 
+                    name: 'Новая модель', 
+                    modelId: '',
+                    provider: 'openai',
+                    apiKey: '',
+                    baseUrl: 'https://openrouter.ai/api/v1'
+                }
             ]
         }));
     };
 
-    const handleUpdateCustomModel = (id: string, field: 'name' | 'modelId', value: string) => {
+    const handleUpdateAiModel = (id: string, field: keyof AiModelConfig, value: string) => {
         setFormData(prev => ({
             ...prev,
-            customAiModels: (prev.customAiModels || []).map(model => 
+            aiModels: (prev.aiModels || []).map(model => 
                 model.id === id ? { ...model, [field]: value } : model
             )
         }));
     };
 
-    const handleRemoveCustomModel = (id: string) => {
+    const handleRemoveAiModel = (id: string) => {
         setFormData(prev => ({
             ...prev,
-            customAiModels: (prev.customAiModels || []).filter(model => model.id !== id),
-            aiModel: prev.aiModel === id ? 'gemini-2.5-flash' : prev.aiModel
+            aiModels: (prev.aiModels || []).filter(model => model.id !== id),
+            activeAiModelId: prev.activeAiModelId === id ? '' : prev.activeAiModelId
         }));
     };
     
@@ -485,77 +492,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 </p>
                             </div>
 
-                            {(!formData.aiModel || formData.aiModel === 'gemini-2.5-flash') && (
-                                <div>
-                                    <label htmlFor="geminiApiKey" className={labelClass}>
-                                        Gemini API Key
-                                    </label>
-                                    <input
-                                        type="password"
-                                        id="geminiApiKey"
-                                        name="geminiApiKey"
-                                        value={formData.geminiApiKey || ''}
-                                        onChange={handleChange}
-                                        className={inputClass}
-                                        placeholder="Введите ваш API ключ"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1">
-                                        Получите ваш ключ в <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Google AI Studio</a>.
-                                        Ключ хранится локально в вашем браузере.
-                                    </p>
-                                </div>
-                            )}
-
-                            {formData.aiModel && formData.aiModel !== 'gemini-2.5-flash' && (
-                                <>
-                                    <div>
-                                        <label htmlFor="openAiApiKey" className={labelClass}>
-                                            OpenRouter API Key
-                                        </label>
-                                        <input
-                                            type="password"
-                                            id="openAiApiKey"
-                                            name="openAiApiKey"
-                                            value={formData.openAiApiKey || ''}
-                                            onChange={handleChange}
-                                            className={inputClass}
-                                            placeholder="sk-or-v1-..."
-                                        />
-                                        <p className="text-xs text-slate-500 mt-1">
-                                            Получите ключ на <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">OpenRouter</a>.
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <label htmlFor="openAiBaseUrl" className={labelClass}>
-                                            OpenAI Base URL (Опционально)
-                                            <div className="relative inline-flex ml-2 group">
-                                                <button type="button" className="text-slate-400 hover:text-blue-600 focus:outline-none" aria-label="Справка">
-                                                    <QuestionMarkCircleIcon className="w-4 h-4" />
-                                                </button>
-                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-80 bg-slate-800 text-white text-xs rounded-lg shadow-lg p-3 z-50 hidden group-hover:block pointer-events-none">
-                                                    <p className="font-semibold mb-1">Базовый адрес API:</p>
-                                                    <ul className="list-disc pl-4 space-y-1 text-slate-300">
-                                                        <li>Оставьте пустым для <strong>OpenRouter</strong> (по умолчанию).</li>
-                                                        <li>Используйте для переключения на других провайдеров (DeepSeek, Together AI).</li>
-                                                        <li>Для локальных нейросетей (Ollama, LM Studio): <code className="text-cyan-300">http://localhost:11434/v1</code></li>
-                                                    </ul>
-                                                    <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-0 h-0 border-l-8 border-l-transparent border-r-8 border-r-transparent border-t-8 border-t-slate-800 -mb-2"></div>
-                                                </div>
-                                            </div>
-                                        </label>
-                                        <input
-                                            type="text"
-                                            id="openAiBaseUrl"
-                                            name="openAiBaseUrl"
-                                            value={formData.openAiBaseUrl || 'https://openrouter.ai/api/v1'}
-                                            onChange={handleChange}
-                                            className={inputClass}
-                                            placeholder="https://openrouter.ai/api/v1"
-                                        />
-                                    </div>
-                                </>
-                            )}
-                            
                             <div className="pt-2">
                                 <button
                                     type="button"

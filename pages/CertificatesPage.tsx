@@ -441,7 +441,9 @@ const CertificateForm: React.FC<{
     const [diffResult, setDiffResult] = useState<DiffItem[] | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const isAiConfigured = settings.aiModel === 'gemini-2.5-flash' ? !!settings.geminiApiKey : !!settings.openAiApiKey;
+    const isAiConfigured = settings.activeAiModelId 
+        ? !!settings.aiModels?.find(m => m.id === settings.activeAiModelId)?.apiKey
+        : (settings.aiModel === 'gemini-2.5-flash' ? !!settings.geminiApiKey : !!settings.openAiApiKey);
 
     useEffect(() => {
         if (formData.files.length > 0 && !activeFileId) {

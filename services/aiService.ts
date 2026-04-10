@@ -13,27 +13,33 @@ export const generateContent = async (
     initialBase64Data?: string,
     jsonMode: boolean = false
 ): Promise<AiResponse> => {
-    let model = settings.aiModel || 'gemini-2.5-flash';
+    const activeModel = settings.aiModels?.find(m => m.id === settings.activeAiModelId);
     
-    // Check if it's a custom model
-    const customModel = settings.customAiModels?.find(m => m.id === model);
-    if (customModel) {
-        model = customModel.modelId;
-    } else if (model === 'custom') {
-        // Fallback for legacy custom model
-        model = settings.customAiModel || 'gemini-2.5-flash';
+    // Fallback for legacy settings
+    let provider = activeModel?.provider || (settings.aiModel === 'gemini-2.5-flash' ? 'gemini' : 'openai');
+    let modelId = activeModel?.modelId || settings.aiModel || 'gemini-2.5-flash';
+    let apiKey = activeModel?.apiKey || (provider === 'gemini' ? settings.geminiApiKey : settings.openAiApiKey);
+    let baseUrl = activeModel?.baseUrl || settings.openAiBaseUrl || 'https://openrouter.ai/api/v1';
+
+    if (!activeModel && settings.customAiModels?.length) {
+         // Try to resolve legacy custom model
+         const legacyCustom = settings.customAiModels.find(m => m.id === settings.aiModel);
+         if (legacyCustom) {
+             modelId = legacyCustom.modelId;
+             provider = 'openai';
+         }
+    }
+
+    if (!apiKey) {
+        throw new Error("API ключ не настроен для выбранной модели. Пожалуйста, проверьте настройки AI.");
     }
     
     // Use local variables to allow modification
     let mimeType = initialMimeType;
     let base64Data = initialBase64Data;
     
-    if (model === 'gemini-2.5-flash') {
-        if (!settings.geminiApiKey) {
-            throw new Error("Gemini API ключ не настроен");
-        }
-        
-        const ai = new GoogleGenAI({ apiKey: settings.geminiApiKey });
+    if (provider === 'gemini') {
+        const ai = new GoogleGenAI({ apiKey: apiKey });
         const parts: any[] = [];
         
         if (mimeType && base64Data) {
@@ -42,7 +48,7 @@ export const generateContent = async (
         parts.push({ text: prompt });
         
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: modelId,
             contents: { parts },
             config: jsonMode ? { responseMimeType: "application/json" } : undefined
         });
@@ -54,10 +60,6 @@ export const generateContent = async (
         return { text: response.text };
     } else {
         // OpenAI Compatible (e.g. OpenRouter, Qwen)
-        if (!settings.openAiApiKey) {
-            throw new Error("OpenRouter API ключ не настроен");
-        }
-
         if (mimeType && mimeType.toLowerCase().includes('pdf')) {
             try {
                 console.log("Converting PDF to image for non-Gemini model...");
@@ -77,7 +79,6 @@ export const generateContent = async (
             }
         }
         
-        const baseUrl = settings.openAiBaseUrl || 'https://openrouter.ai/api/v1';
         const endpoint = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
         
         const messages: any[] = [];
@@ -103,22 +104,22 @@ export const generateContent = async (
         }
         
         const body: any = {
-            model: model,
+            model: modelId,
             messages: messages,
             max_tokens: 4096,
         };
         
-        if (jsonMode && !model.includes('qwen')) {
+        if (jsonMode && !modelId.includes('qwen')) {
             body.response_format = { type: "json_object" };
         }
         
-        console.log(`Sending request to ${endpoint} with model ${model}`);
+        console.log(`Sending request to ${endpoint} with model ${modelId}`);
         
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${settings.openAiApiKey}`,
+                'Authorization': `Bearer ${apiKey}`,
                 'HTTP-Referer': window.location.origin, // Required by OpenRouter
                 'X-Title': 'Acts Generator', // Required by OpenRouter
             },

@@ -55,7 +55,9 @@ const OrganizationForm: React.FC<{
     const [isOcrLoading, setIsOcrLoading] = useState(false);
     const [ocrError, setOcrError] = useState<string | null>(null);
     const ocrInputRef = useRef<HTMLInputElement>(null);
-    const isAiConfigured = settings.aiModel === 'gemini-2.5-flash' ? !!settings.geminiApiKey : !!settings.openAiApiKey;
+    const isAiConfigured = settings.activeAiModelId 
+        ? !!settings.aiModels?.find(m => m.id === settings.activeAiModelId)?.apiKey
+        : (settings.aiModel === 'gemini-2.5-flash' ? !!settings.geminiApiKey : !!settings.openAiApiKey);
 
 
     useEffect(() => {

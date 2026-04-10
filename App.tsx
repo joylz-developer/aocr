@@ -131,6 +131,8 @@ const App: React.FC = () => {
         showCopiesCount: true,
         showActDate: false,
         showParticipantDetails: true,
+        aiModels: [],
+        activeAiModelId: '',
         geminiApiKey: '',
         aiModel: 'gemini-2.5-flash',
         openAiApiKey: '',
