@@ -12,7 +12,7 @@
     "@google/genai": "^1.24.0",
     "docxtemplater": "^3.47.2",
     "file-saver": "^2.0.5",
-    "pdfjs-dist": "^5.4.624",
+    "pdfjs-dist": "^3.11.174",
     "pizzip": "^3.1.7",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

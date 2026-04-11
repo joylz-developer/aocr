@@ -1,7 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
-// Use a CDN for the worker to avoid complex bundler configuration issues in this environment
-// Alternatively, we could use the local worker if we can guarantee the path
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+
+// Используем CDN для воркера версии 3.x (работает безотказно)
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 export const convertPdfToImage = async (base64Pdf: string): Promise<string> => {
     try {
@@ -24,7 +24,7 @@ export const convertPdfToImage = async (base64Pdf: string): Promise<string> => {
         const scale = 3.0;
         const viewport = page.getViewport({ scale });
 
-        // Prepare canvas using OffscreenCanvas if available, or create a canvas element
+        // Prepare canvas 
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         
@@ -44,7 +44,6 @@ export const convertPdfToImage = async (base64Pdf: string): Promise<string> => {
         await page.render(renderContext).promise;
 
         // Convert canvas to base64 JPEG image
-        // Remove the data URL prefix to match the expected format in aiService
         const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
         const base64Image = dataUrl.split(',')[1];
 

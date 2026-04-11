@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ProjectSettings, ROLES } from '../types';
 import { generateContent } from '../services/aiService';
@@ -103,7 +102,6 @@ const CopyableCode: React.FC<{ children: React.ReactNode; textToCopy: string; ti
 const TagGenerator: React.FC = () => {
     const [fieldInput, setFieldInput] = useState('');
     
-    // Updated: Use standard tag for consistency and wrapping support
     const generateListCode = (type: 'sandwich' | 'simple') => {
         const cleanName = fieldInput.trim().replace(/[{}]/g, '') || 'имя_поля';
         if (type === 'sandwich') {
@@ -135,7 +133,6 @@ const TagGenerator: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* RECOMMENDED OPTION */}
                 <div className="bg-white p-5 rounded-lg border-2 border-blue-400 shadow-md relative overflow-hidden">
                     <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] px-3 py-1 rounded-bl-lg font-bold uppercase tracking-widest shadow-sm">
                         Рекомендуем
@@ -149,15 +146,9 @@ const TagGenerator: React.FC = () => {
                     <div className="text-sm text-slate-600 space-y-3 mb-4">
                         <p className="font-medium text-slate-800">Чтобы Word создавал список (1. 2. 3.), теги нужно разнести по строкам:</p>
                         <ol className="list-decimal pl-5 space-y-2 marker:text-blue-500 marker:font-bold">
-                            <li>
-                                Скопируйте блок ниже и вставьте в ячейку таблицы Word.
-                            </li>
-                            <li>
-                                <span className="text-red-600 font-bold">Важно:</span> Выделите <strong>только среднюю строку</strong> (где имя поля) и нажмите кнопку "Нумерованный список" в Word.
-                            </li>
-                            <li>
-                                Верхний и нижний теги должны остаться <strong>без цифр</strong>.
-                            </li>
+                            <li>Скопируйте блок ниже и вставьте в ячейку таблицы Word.</li>
+                            <li><span className="text-red-600 font-bold">Важно:</span> Выделите <strong>только среднюю строку</strong> (где имя поля) и нажмите кнопку "Нумерованный список" в Word.</li>
+                            <li>Верхний и нижний теги должны остаться <strong>без цифр</strong>.</li>
                         </ol>
                     </div>
 
@@ -175,7 +166,6 @@ const TagGenerator: React.FC = () => {
                     </div>
                 </div>
 
-                {/* SIMPLE OPTION */}
                 <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm relative opacity-90 hover:opacity-100 transition-opacity">
                     <h5 className="font-bold text-base text-slate-700 mb-4 flex items-center gap-2">
                         <span className="bg-slate-100 text-slate-500 rounded-full w-6 h-6 flex items-center justify-center text-xs border border-slate-200">2</span>
@@ -185,15 +175,9 @@ const TagGenerator: React.FC = () => {
                     <div className="text-sm text-slate-600 space-y-3 mb-4">
                         <p className="font-medium text-slate-800">Как это работает:</p>
                         <ul className="list-disc pl-5 space-y-2 marker:text-slate-400">
-                            <li>
-                                Весь текст вставляется в одну ячейку.
-                            </li>
-                            <li>
-                                Переносы строк сохраняются, но это не список Word.
-                            </li>
-                            <li>
-                                Подходит, если вы не используете авто-нумерацию Word.
-                            </li>
+                            <li>Весь текст вставляется в одну ячейку.</li>
+                            <li>Переносы строк сохраняются, но это не список Word.</li>
+                            <li>Подходит, если вы не используете авто-нумерацию Word.</li>
                         </ul>
                     </div>
 
@@ -209,7 +193,6 @@ const TagGenerator: React.FC = () => {
 const VariableHelpTooltip: React.FC = () => {
     const [isVisible, setIsVisible] = useState(false);
 
-    // Using unified tags that match Word template usage
     const variables = [
         { name: '{act_number}', desc: 'Номер акта' },
         { name: '{materials}', desc: 'Список материалов' },
@@ -245,7 +228,6 @@ const VariableHelpTooltip: React.FC = () => {
         </div>
     );
 };
-
 
 interface SettingToggleProps {
     id: keyof ProjectSettings;
@@ -339,7 +321,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
             
             const newData = { ...prev, aiModels: newModels };
             
-            // Auto-save to prevent data loss on refresh
             setTimeout(() => onSave(newData), 0);
             return newData;
         });
@@ -460,7 +441,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                     {formData.aiModels?.map(model => (
                                         <option key={model.id} value={model.id}>{model.name} ({model.modelId})</option>
                                     ))}
-                                    {/* Legacy fallback options if no active model is set but legacy settings exist */}
                                     {!formData.activeAiModelId && (formData.geminiApiKey || formData.openAiApiKey) && (
                                         <option value="" disabled>-- Используются устаревшие настройки --</option>
                                     )}
@@ -630,7 +610,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                             </div>
                         </div>
 
-                        <div className="space-y-4 pt-4">
+                        <div className="space-y-4 pt-4 border-t border-slate-200">
                             <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Настройки формы акта</h3>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -734,6 +714,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 <label htmlFor="certificatePromptNumber" className={labelClass}>
                                     Номер документа
                                 </label>
+                                <div className="mb-1 p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600">
+                                    <strong className="text-slate-700">Формат ответа:</strong> Возвращает текст или JSON. Если используете JSON, укажите ключ: <code className="text-blue-600 font-mono">"number"</code>
+                                </div>
                                 <textarea
                                     id="certificatePromptNumber"
                                     name="certificatePromptNumber"
@@ -746,6 +729,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 <label htmlFor="certificatePromptDate" className={labelClass}>
                                     Дата документа
                                 </label>
+                                <div className="mb-1 p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600">
+                                    <strong className="text-slate-700">Формат ответа:</strong> Возвращает текст или JSON. Рекомендуемый ключ: <code className="text-blue-600 font-mono">"validUntil"</code> (формат YYYY-MM-DD)
+                                </div>
                                 <textarea
                                     id="certificatePromptDate"
                                     name="certificatePromptDate"
@@ -758,6 +744,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                 <label htmlFor="certificatePromptMaterials" className={labelClass}>
                                     Материалы
                                 </label>
+                                <div className="mb-1 p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600">
+                                    <strong className="text-slate-700">Формат ответа:</strong> Ожидается JSON-массив строк или объект с ключом: <code className="text-blue-600 font-mono">"materials"</code>
+                                </div>
                                 <textarea
                                     id="certificatePromptMaterials"
                                     name="certificatePromptMaterials"
@@ -770,12 +759,25 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
 
                         <div className="space-y-4 pt-4 border-t border-slate-200">
                             <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Промпт для Людей</h3>
-                            <p className="text-xs text-slate-500 mb-4">Настройте инструкцию для извлечения данных о людях (ФИО, должность, организация).</p>
+                            <p className="text-xs text-slate-500 mb-2">Настройте инструкцию для извлечения данных о людях (ФИО, должность, организация).</p>
                             
                             <div>
                                 <label htmlFor="personExtractionPrompt" className={labelClass}>
                                     Промпт (Люди)
                                 </label>
+                                <div className="mb-2 p-2 bg-slate-50 border border-slate-200 rounded text-xs text-slate-600 leading-relaxed">
+                                    <strong className="text-slate-800 block mb-1">Обязательные ключи JSON:</strong>
+                                    <ul className="list-disc list-inside mb-2">
+                                        <li><code className="text-blue-600 font-mono">"name"</code> — ФИО</li>
+                                        <li><code className="text-blue-600 font-mono">"position"</code> — Должность</li>
+                                    </ul>
+                                    <strong className="text-slate-800 block mb-1">Опциональные ключи JSON:</strong>
+                                    <ul className="list-disc list-inside">
+                                        <li><code className="text-blue-600 font-mono">"organization"</code> — Организация</li>
+                                        <li><code className="text-blue-600 font-mono">"authDoc"</code> — Документ о полномочиях</li>
+                                        <li><code className="text-blue-600 font-mono">"nrs"</code> — Номер НРС</li>
+                                    </ul>
+                                </div>
                                 <textarea
                                     id="personExtractionPrompt"
                                     name="personExtractionPrompt"
@@ -788,12 +790,24 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
 
                         <div className="space-y-4 pt-4 border-t border-slate-200">
                             <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Промпт для Организаций</h3>
-                            <p className="text-xs text-slate-500 mb-4">Настройте инструкцию для извлечения данных об организациях (название, ИНН, ОГРН, адрес).</p>
+                            <p className="text-xs text-slate-500 mb-2">Настройте инструкцию для извлечения данных об организациях.</p>
                             
                             <div>
                                 <label htmlFor="organizationExtractionPrompt" className={labelClass}>
                                     Промпт (Организации)
                                 </label>
+                                <div className="mb-2 p-2 bg-slate-50 border border-slate-200 rounded text-xs text-slate-600 leading-relaxed">
+                                    <strong className="text-slate-800 block mb-1">Доступные ключи JSON:</strong>
+                                    <div className="flex flex-wrap gap-2 mt-1">
+                                        <code className="text-blue-600 font-mono">"name"</code>
+                                        <code className="text-blue-600 font-mono">"inn"</code>
+                                        <code className="text-blue-600 font-mono">"ogrn"</code>
+                                        <code className="text-blue-600 font-mono">"kpp"</code>
+                                        <code className="text-blue-600 font-mono">"address"</code>
+                                        <code className="text-blue-600 font-mono">"phone"</code>
+                                        <code className="text-blue-600 font-mono">"sro"</code>
+                                    </div>
+                                </div>
                                 <textarea
                                     id="organizationExtractionPrompt"
                                     name="organizationExtractionPrompt"

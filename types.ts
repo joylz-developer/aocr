@@ -1,4 +1,3 @@
-
 export interface ConstructionObject {
     id: string;
     name: string; // Full name for documents
@@ -12,6 +11,7 @@ export interface Person {
     position: string;
     organization: string;
     authDoc?: string;
+    nrs?: string; // Новое поле для НРС
     constructionObjectId?: string; // Linked to object
 }
 
@@ -155,7 +155,6 @@ export interface AiModelConfig {
 }
 
 export interface ProjectSettings {
-    // objectName: string; // REMOVED: Now managed via ConstructionObject
     defaultCopiesCount: number;
     showAdditionalInfo: boolean;
     showAttachments: boolean;
