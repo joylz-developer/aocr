@@ -46,6 +46,15 @@ export interface Regulation {
     embeddedChanges?: Regulation[]; 
 }
 
+// ДОБАВЛЕНО: Интерфейс для Исполнительных схем
+export interface ExecutiveScheme {
+    id: string;
+    name: string; // Наименование схемы
+    number: string; // Номер схемы
+    amount: string; // Кол-во листов
+    constructionObjectId?: string; // Привязка к объекту
+}
+
 export interface CertificateFile {
     id: string;
     type: 'pdf' | 'image';
@@ -209,6 +218,7 @@ export interface ImportSettings {
     groups: ImportSettingsCategory;
     regulations?: ImportSettingsCategory;
     certificates?: ImportSettingsCategory;
+    schemes?: ImportSettingsCategory; // ДОБАВЛЕНО
     deletedActs?: ImportSettingsCategory;
     constructionObjects?: ImportSettingsCategory; // New import category
 }
@@ -223,11 +233,11 @@ export interface ExportSettings {
     groups: boolean;
     regulations: boolean;
     certificates: boolean;
+    schemes: boolean; // ДОБАВЛЕНО
     deletedActs: boolean;
     deletedCertificates: boolean;
     constructionObjects?: boolean; // Export objects structure
 }
-
 
 export interface ImportData {
     template?: string | null;
@@ -240,6 +250,7 @@ export interface ImportData {
     groups?: CommissionGroup[];
     regulations?: Regulation[];
     certificates?: Certificate[];
+    schemes?: ExecutiveScheme[]; // ДОБАВЛЕНО
     deletedActs?: DeletedActEntry[];
     deletedCertificates?: DeletedCertificateEntry[];
 }
@@ -251,8 +262,8 @@ export type ActTableColumnKey = Exclude<keyof Act,
     'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'nextWorkActId' | 'constructionObjectId'
 > | 'workDates' | 'commissionGroup';
 
-// Defines the available pages in the application
-export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups' | 'trash' | 'regulations' | 'certificates' | 'objects';
+// Defines the available pages in the application - ДОБАВЛЕНО 'schemes'
+export type Page = 'acts' | 'people' | 'organizations' | 'settings' | 'groups' | 'trash' | 'regulations' | 'certificates' | 'objects' | 'schemes';
 
 export type Coords = { rowIndex: number; colIndex: number };
 

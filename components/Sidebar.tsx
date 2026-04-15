@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { Page, Theme, ConstructionObject } from '../types';
-import { ChevronLeftIcon, ActsIcon, PeopleIcon, OrganizationsIcon, SettingsIcon, GroupsIcon, TrashIcon, BookIcon, CertificateIcon, SunIcon, MoonIcon, EyeIcon, ChevronDownIcon } from './Icons';
+import { ChevronLeftIcon, ActsIcon, PeopleIcon, OrganizationsIcon, SettingsIcon, GroupsIcon, TrashIcon, BookIcon, CertificateIcon, SchemeIcon, SunIcon, MoonIcon, EyeIcon, ChevronDownIcon } from './Icons'; // ДОБАВЛЕНО SchemeIcon
 
 interface SidebarProps {
     isOpen: boolean;
@@ -69,6 +68,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         { page: 'organizations', label: 'Организации', icon: <OrganizationsIcon className="w-5 h-5" /> },
         { page: 'groups', label: 'Группы комиссий', icon: <GroupsIcon className="w-5 h-5" /> },
         { page: 'certificates', label: 'Сертификаты', icon: <CertificateIcon className="w-5 h-5" /> },
+        { page: 'schemes', label: 'Исполнит. схемы', icon: <SchemeIcon className="w-5 h-5" /> }, // ДОБАВЛЕНО
         { page: 'regulations', label: 'Нормативы', icon: <BookIcon className="w-5 h-5" /> },
     ];
 

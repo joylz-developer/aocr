@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
-import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation, Certificate } from '../types';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation, Certificate, ExecutiveScheme } from '../types';
 import Modal from './Modal';
 import { DeleteIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon, CloseIcon, GripVerticalIcon, DownloadIcon, QuestionMarkCircleIcon, ArrowDownCircleIcon, PlusIcon, StarIcon } from './Icons';
 import CustomSelect from './CustomSelect';
@@ -12,6 +12,9 @@ import RegulationDetails from './RegulationDetails';
 import MaterialsInput from './MaterialsInput';
 import MaterialPopover from './MaterialPopover';
 import MaterialsModal from './MaterialsModal';
+import SchemesInput from './SchemesInput';
+import SchemesPopover from './SchemesPopover'; // ДОБАВЛЕНО
+import SchemesModal from './SchemesModal'; // ДОБАВЛЕНО
 
 const AUTO_NEXT_ID = 'AUTO_NEXT';
 const AUTO_NEXT_LABEL = '⬇️ Следующий по списку (Автоматически)';
@@ -23,6 +26,7 @@ interface ActsTableProps {
     groups: CommissionGroup[];
     regulations: Regulation[];
     certificates?: Certificate[];
+    schemes?: ExecutiveScheme[];
     template: string | null;
     registryTemplate: string | null;
     settings: ProjectSettings;
@@ -39,6 +43,7 @@ interface ActsTableProps {
     setCurrentPage: (page: Page) => void;
     createNewAct: () => Act;
     onNavigateToCertificate?: (id: string) => void;
+    onNavigateToScheme?: (id: string) => void; // ДОБАВЛЕНО
 }
 
 interface PinnedColumnInfo {
@@ -321,7 +326,7 @@ const resolvePreviewTemplate = (template: string, act: Act): string => {
     });
 };
 
-const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, certificates = [], template, registryTemplate, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, selectedCells, setSelectedCells, onSave, onRequestDelete, onReorderActs, setCurrentPage, createNewAct, onNavigateToCertificate }) => {
+const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, certificates = [], schemes = [], template, registryTemplate, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, selectedCells, setSelectedCells, onSave, onRequestDelete, onReorderActs, setCurrentPage, createNewAct, onNavigateToCertificate, onNavigateToScheme }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [dateError, setDateError] = useState<string | null>(null);
@@ -382,6 +387,22 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         itemIndex: number;
         initialSearch: string;
         editingMaterialTitle?: string;
+    } | null>(null);
+
+    // ДОБАВЛЕНО ДЛЯ СХЕМ
+    const [schemePopoverState, setSchemePopoverState] = useState<{
+        scheme: ExecutiveScheme;
+        actId: string;
+        itemIndex: number;
+        position: { top: number; left: number };
+    } | null>(null);
+
+    const [linkSchemeModalState, setLinkSchemeModalState] = useState<{
+        isOpen: boolean;
+        actId: string;
+        itemIndex: number;
+        initialSearch: string;
+        editingSchemeTitle?: string;
     } | null>(null);
 
     const [fullRegulationDetails, setFullRegulationDetails] = useState<Regulation | null>(null);
@@ -571,7 +592,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     useEffect(() => {
         if (!editingCell) return;
         const handleClickOutside = (event: MouseEvent) => {
-            if (datePopoverState || regulationsModalOpen || regulationPopoverState || materialPopoverState || starPopoverState) return;
+            // Исключаем закрытие, если открыт один из поповеров/модалок
+            if (datePopoverState || regulationsModalOpen || regulationPopoverState || materialPopoverState || starPopoverState || schemePopoverState || linkSchemeModalState) return;
             if (editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
                 const isModalClick = (event.target as HTMLElement).closest('.fixed.inset-0.z-50');
                 if (isModalClick) return;
@@ -586,7 +608,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             clearTimeout(timerId);
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [editingCell, datePopoverState, handleEditorSave, closeEditor, regulationsModalOpen, regulationPopoverState, materialPopoverState, starPopoverState]);
+    }, [editingCell, datePopoverState, handleEditorSave, closeEditor, regulationsModalOpen, regulationPopoverState, materialPopoverState, starPopoverState, schemePopoverState, linkSchemeModalState]);
 
     useEffect(() => {
         if (editingCell) {
@@ -605,6 +627,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 initialValue = act.regulations || '';
             } else if (col.key === 'materials') {
                 initialValue = act.materials || '';
+            } else if (col.key === 'certs') {
+                initialValue = act.certs || '';
             } else if (col.key === 'nextWork' && act.nextWorkActId === AUTO_NEXT_ID) {
                 const nextAct = acts[rowIndex + 1];
                 initialValue = nextAct ? `Работы по акту №${nextAct.number || 'б/н'} (${nextAct.workName || '...'})` : '';
@@ -614,7 +638,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             }
             setEditorValue(String(initialValue));
             setTimeout(() => {
-                if (col.key !== 'regulations' && col.key !== 'materials') { if (editorRef.current) editorRef.current.focus(); }
+                if (col.key !== 'regulations' && col.key !== 'materials' && col.key !== 'certs') { if (editorRef.current) editorRef.current.focus(); }
                 if (editorRef.current instanceof HTMLTextAreaElement) {
                     const el = editorRef.current;
                     el.style.height = 'auto';
@@ -694,6 +718,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     };
 
+    // ФУНКЦИЯ ДЛЯ ПОИСКА СХЕМЫ ПО ТЕКСТУ В ТАБЛИЦЕ
+    const findSchemeByText = (text: string) => {
+        if (!schemes) return null;
+        return schemes.find(s => text.includes(`№ ${s.number}`) || text.includes(`№${s.number}`) || text.includes(s.name));
+    };
+
     const normalizeSelection = (start: Coords, end: Coords): { minRow: number, maxRow: number, minCol: number, maxCol: number } => {
         const minRow = Math.min(start.rowIndex, end.rowIndex);
         const maxRow = Math.max(start.rowIndex, end.rowIndex);
@@ -722,6 +752,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setMaterialPopoverState(null);
         setNextWorkPopoverState(null);
         setStarPopoverState(null);
+        setSchemePopoverState(null);
         if (e.button === 2) {
              const cellId = getCellId(rowIndex, colIndex);
              if (selectedCells.has(cellId)) return;
@@ -806,6 +837,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setMaterialPopoverState(null);
         setNextWorkPopoverState(null);
         setStarPopoverState(null);
+        setSchemePopoverState(null);
         setSelectedCells(new Set());
         if (col?.key === 'nextWork') {
             const coords = getRelativeCoords(e.currentTarget);
@@ -981,6 +1013,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             setMaterialPopoverState(null);
             setNextWorkPopoverState(null);
             setStarPopoverState(null);
+            setSchemePopoverState(null);
             return;
         }
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -1578,6 +1611,45 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                     })}
                                                 </div>
                                             );
+                                        // БЛОК ДЛЯ ИСПОЛНИТЕЛЬНЫХ СХЕМ (ДОБАВЛЕНА ЛОГИКА ПОДЧЕРКИВАНИЯ И ПОПОВЕРА)
+                                        } else if (col.key === 'certs') { 
+                                            displayContent = (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {(act.certs || '').split(';').map(s => s.trim()).filter(Boolean).map((item, idx) => {
+                                                        const scheme = findSchemeByText(item);
+                                                        const isLinked = !!scheme;
+                                                        const chipClass = isLinked ? "bg-indigo-100 text-indigo-800 border-indigo-200" : "bg-slate-100 text-slate-800 border-slate-200";
+                                                        return (
+                                                            <span 
+                                                                key={idx} 
+                                                                className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs border ${chipClass} cursor-pointer hover:underline max-w-full transition-all`} 
+                                                                title={isLinked ? "Управление привязанной схемой" : "Нажмите, чтобы привязать к схеме из базы"}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (scheme) {
+                                                                        setSchemePopoverState({
+                                                                            scheme,
+                                                                            actId: act.id,
+                                                                            itemIndex: idx,
+                                                                            position: getRelativeCoords(e.currentTarget)
+                                                                        });
+                                                                    } else {
+                                                                        setLinkSchemeModalState({
+                                                                            isOpen: true,
+                                                                            actId: act.id,
+                                                                            itemIndex: idx,
+                                                                            initialSearch: item,
+                                                                            editingSchemeTitle: item
+                                                                        });
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <span className="truncate max-w-[250px] block">{item}</span>
+                                                            </span>
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
                                         } else if (col.key === 'nextWork' && act.nextWorkActId === AUTO_NEXT_ID) {
                                             const nextAct = acts[rowIndex + 1];
                                             if (nextAct) {
@@ -1637,6 +1709,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                             <RegulationsInput value={editorValue} onChange={setEditorValue} regulations={regulations} onOpenDictionary={() => setRegulationsModalOpen(true)} onInfoClick={(des, target) => handleShowRegulationInfo(des, target)} />
                                                         ) : col.key === 'materials' ? (
                                                             <MaterialsInput value={editorValue} onChange={setEditorValue} certificates={certificates} onNavigateToCertificate={onNavigateToCertificate} />
+                                                        ) : col.key === 'certs' ? (
+                                                            <SchemesInput value={editorValue} onChange={setEditorValue} schemes={schemes || []} />
                                                         ) : col.type === 'date' ? (
                                                             <div className="flex items-center w-full gap-1">
                                                                 <input 
@@ -1763,7 +1837,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             {datePopoverState && <DateEditorPopover act={datePopoverState.act} onActChange={(updatedAct) => { handleSaveWithTemplateResolution(updatedAct); setDatePopoverState(prev => prev ? { ...prev, act: updatedAct } : null); }} onClose={() => setDatePopoverState(null)} position={datePopoverState.position} />}
             {regulationPopoverState && <RegulationPopover regulation={regulationPopoverState.regulation} position={regulationPopoverState.position} onClose={() => setRegulationPopoverState(null)} onOpenDetails={() => { setFullRegulationDetails(regulationPopoverState.regulation); setRegulationPopoverState(null); }} />}
             
-            {/* Окно управления материалами сертификата */}
+            {/* Окно управления материалами */}
             {materialPopoverState && (() => {
                 const targetAct = acts.find(a => a.id === materialPopoverState.actId);
                 if (!targetAct) return null;
@@ -1781,7 +1855,55 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 );
             })()}
 
-            {linkMaterialModalState && <MaterialsModal isOpen={linkMaterialModalState.isOpen} onClose={() => setLinkMaterialModalState(null)} certificates={certificates} initialSearch={linkMaterialModalState.initialSearch} editingMaterialTitle={linkMaterialModalState.editingMaterialTitle} onSelect={(text) => { const act = acts.find(a => a.id === linkMaterialModalState.actId); if (act) { const items = act.materials.split(';').map(s => s.trim()); if (items[linkMaterialModalState.itemIndex] !== undefined) { items[linkMaterialModalState.itemIndex] = text; const updatedAct = { ...act, materials: items.join('; ') }; handleSaveWithTemplateResolution(updatedAct); } } setLinkMaterialModalState(null); }} />}
+            {linkMaterialModalState && <MaterialsModal isOpen={linkMaterialModalState.isOpen} onClose={() => setLinkMaterialModalState(null)} certificates={certificates || []} initialSearch={linkMaterialModalState.initialSearch} editingMaterialTitle={linkMaterialModalState.editingMaterialTitle} onSelect={(text) => { const act = acts.find(a => a.id === linkMaterialModalState.actId); if (act) { const items = act.materials.split(';').map(s => s.trim()); if (items[linkMaterialModalState.itemIndex] !== undefined) { items[linkMaterialModalState.itemIndex] = text; const updatedAct = { ...act, materials: items.join('; ') }; handleSaveWithTemplateResolution(updatedAct); } } setLinkMaterialModalState(null); }} />}
+            
+            {/* РЕНДЕР ОКОН ДЛЯ СХЕМ */}
+            {schemePopoverState && (() => {
+                const targetAct = acts.find(a => a.id === schemePopoverState.actId);
+                if (!targetAct) return null;
+                return (
+                    <SchemesPopover
+                        scheme={schemePopoverState.scheme}
+                        act={targetAct}
+                        position={schemePopoverState.position}
+                        onClose={() => setSchemePopoverState(null)}
+                        onNavigate={onNavigateToScheme ? () => { onNavigateToScheme(schemePopoverState.scheme.id); setSchemePopoverState(null); } : undefined}
+                        onReplace={() => {
+                            setLinkSchemeModalState({
+                                isOpen: true,
+                                actId: targetAct.id,
+                                itemIndex: schemePopoverState.itemIndex,
+                                initialSearch: schemePopoverState.scheme.number,
+                                editingSchemeTitle: targetAct.certs.split(';')[schemePopoverState.itemIndex].trim()
+                            });
+                            setSchemePopoverState(null);
+                        }}
+                    />
+                );
+            })()}
+
+            {linkSchemeModalState && (
+                <SchemesModal
+                    isOpen={linkSchemeModalState.isOpen}
+                    onClose={() => setLinkSchemeModalState(null)}
+                    schemes={schemes || []}
+                    initialSearch={linkSchemeModalState.initialSearch}
+                    editingSchemeTitle={linkSchemeModalState.editingSchemeTitle}
+                    onSelect={(newText) => {
+                        const act = acts.find(a => a.id === linkSchemeModalState.actId);
+                        if (act) {
+                            const items = act.certs.split(';').map(s => s.trim());
+                            if (items[linkSchemeModalState.itemIndex] !== undefined) {
+                                items[linkSchemeModalState.itemIndex] = newText;
+                                const updatedAct = { ...act, certs: items.join('; ') };
+                                handleSaveWithTemplateResolution(updatedAct);
+                            }
+                        }
+                        setLinkSchemeModalState(null);
+                    }}
+                />
+            )}
+
             {nextWorkPopoverState && <NextWorkPopover acts={acts} currentActId={acts[nextWorkPopoverState.rowIndex].id} position={nextWorkPopoverState.position} onClose={() => setNextWorkPopoverState(null)} onSelect={(selectedActOrId) => { const sourceAct = acts[nextWorkPopoverState.rowIndex]; if (sourceAct) { const updatedAct = { ...sourceAct }; if (selectedActOrId === AUTO_NEXT_ID) { updatedAct.nextWorkActId = AUTO_NEXT_ID; updatedAct.nextWork = ''; } else if (selectedActOrId && typeof selectedActOrId === 'object') { const selectedAct = selectedActOrId as Act; updatedAct.nextWork = `Работы по акту №${selectedAct.number || 'б/н'} (${selectedAct.workName || '...'})`; updatedAct.nextWorkActId = selectedAct.id; } else if (typeof selectedActOrId === 'string') { updatedAct.nextWork = selectedActOrId; updatedAct.nextWorkActId = undefined; } else { updatedAct.nextWork = ''; updatedAct.nextWorkActId = undefined; } handleSaveWithTemplateResolution(updatedAct); } setNextWorkPopoverState(null); }} />}
             {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}> <MenuItem label="Копировать" shortcut="Ctrl+C" icon={<CopyIcon className="w-4 h-4" />} onClick={() => { handleCopy(); setContextMenu(null); }} disabled={selectedCells.size === 0} /> <MenuItem label="Вставить" shortcut="Ctrl+V" icon={<PasteIcon className="w-4 h-4" />} onClick={() => { handlePaste(); setContextMenu(null); }} /> <MenuSeparator /> <MenuItem label="Очистить ячейки" shortcut="Del" onClick={() => { handleClearCells(); setContextMenu(null); }} disabled={selectedCells.size === 0} /> <MenuSeparator /> <MenuItem label="Вставить строку выше" icon={<RowAboveIcon className="w-4 h-4" />} onClick={() => { const newAct = applyPinsToNewAct(createNewAct()); onSave(newAct, contextMenu.rowIndex); setContextMenu(null); }} /> <MenuItem label="Вставить строку ниже" icon={<RowBelowIcon className="w-4 h-4" />} onClick={() => { const newAct = applyPinsToNewAct(createNewAct()); onSave(newAct, contextMenu.rowIndex + 1); setContextMenu(null); }} /> <MenuSeparator /> <MenuItem label="Удалить акт(ы)" icon={<DeleteIcon className="w-4 h-4 text-red-600" />} className="text-red-600 hover:bg-red-50" onClick={() => { const rowIndices = Array.from(affectedRowsFromSelection); const indicesToDelete = rowIndices.includes(contextMenu.rowIndex) ? rowIndices : [contextMenu.rowIndex]; const idsToDelete = indicesToDelete.map(idx => acts[idx].id); onRequestDelete(idsToDelete); setContextMenu(null); }} /> </ContextMenu>}
             {regulationsModalOpen && <RegulationsModal isOpen={regulationsModalOpen} onClose={() => setRegulationsModalOpen(false)} regulations={regulations} onSelect={handleRegulationsSelect} />}

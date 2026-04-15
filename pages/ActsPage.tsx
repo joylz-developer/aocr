@@ -1,6 +1,5 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation, Certificate } from '../types';
+import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation, Certificate, ExecutiveScheme } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import Modal from '../components/Modal';
 import { ColumnsIcon, SparklesIcon } from '../components/Icons';
@@ -16,6 +15,7 @@ interface ActsPageProps {
     groups: CommissionGroup[];
     regulations: Regulation[];
     certificates: Certificate[];
+    schemes: ExecutiveScheme[];
     template: string | null;
     registryTemplate: string | null;
     settings: ProjectSettings;
@@ -27,6 +27,7 @@ interface ActsPageProps {
     onUndo?: () => void;
     onRedo?: () => void;
     onNavigateToCertificate?: (id: string) => void;
+    onNavigateToScheme?: (id: string) => void; // ДОБАВЛЕНО
 }
 
 const ColumnPicker: React.FC<{
@@ -98,15 +99,13 @@ const ColumnPicker: React.FC<{
     );
 };
 
-
-const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, regulations, certificates, template, registryTemplate, settings, onSave, onMoveToTrash, onPermanentlyDelete, onReorderActs, setCurrentPage, onUndo, onRedo, onNavigateToCertificate }) => {
+const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups, regulations, certificates, schemes, template, registryTemplate, settings, onSave, onMoveToTrash, onPermanentlyDelete, onReorderActs, setCurrentPage, onUndo, onRedo, onNavigateToCertificate, onNavigateToScheme }) => {
     const [activeCell, setActiveCell] = useState<Coords | null>(null);
     const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
     const [visibleColumns, setVisibleColumns] = useLocalStorage<Set<string>>(
         'acts_table_visible_columns_v4', 
         new Set(ALL_COLUMNS.filter(c => c.key !== 'id').map(c => c.key))
     );
-    // New state for column order
     const [columnOrder, setColumnOrder] = useLocalStorage<string[]>(
         'acts_table_column_order',
         ALL_COLUMNS.map(c => c.key)
@@ -130,10 +129,8 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         });
     }, [settings]);
 
-    // Handle Global Undo/Redo Shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            // Ignore if focus is in an input or textarea (native undo/redo takes precedence)
             const target = e.target as HTMLElement;
             if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
                 return;
@@ -150,7 +147,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     onUndo?.();
                 }
             } else if (isCtrlKey && e.code === 'KeyY' && !isMac) {
-                // Windows standard Redo: Ctrl+Y
                 e.preventDefault();
                 onRedo?.();
             }
@@ -180,8 +176,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
             workEndDate: '', 
             regulations: '', 
             nextWork: '', 
-            // We set these to empty to allow the "Default if empty" logic in docGenerator to work.
-            // If we pre-fill them, changing settings later won't update existing acts.
             additionalInfo: '', 
             copiesCount: String(settings.defaultCopiesCount), 
             attachments: '', 
@@ -216,7 +210,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
         setAiLoading(true);
 
         try {
-            // Reconstruct visible columns logic to map colIndex to key
             const colMap = new Map(ALL_COLUMNS.map(col => [col.key, col]));
             const orderedCols = columnOrder
                 .filter(key => colMap.has(key as any) && visibleColumns.has(key))
@@ -230,7 +223,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                 return true;
             });
 
-            // Track unique columns involved in the selection to tailor the prompt
             const involvedFieldKeys = new Set<string>();
 
             const cellsToUpdate = Array.from(selectedCells).map(cellId => {
@@ -241,14 +233,11 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                 
                 involvedFieldKeys.add(col.key);
 
-                // Special handling for calculated/virtual fields if needed, 
-                // but for editing we mainly care about direct properties
                 let value = '';
                  if (col.key === 'workDates') {
                      value = `${act.workStartDate} - ${act.workEndDate}`;
                  } else {
-                     // @ts-ignore
-                     value = act[col.key] || '';
+                     value = (act as any)[col.key] || '';
                  }
                 
                 return {
@@ -260,7 +249,6 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
 
             if (cellsToUpdate.length === 0) return;
             
-            // Define data formats for specific columns
             const columnRules: Record<string, string> = {
                 number: "String/Number. Act number (e.g. '1', '14-A').",
                 date: "Date (YYYY-MM-DD). Date of the act signing.",
@@ -324,8 +312,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                              newAct.workStartDate = parts[0] || '';
                              newAct.workEndDate = parts[1] || parts[0] || '';
                          } else {
-                             // @ts-ignore
-                             newAct[update.field] = update.value;
+                             (newAct as any)[update.field] = update.value;
                          }
                          onSave(newAct);
                     }
@@ -374,6 +361,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     groups={groups}
                     regulations={regulations}
                     certificates={certificates}
+                    schemes={schemes}
                     template={template}
                     registryTemplate={registryTemplate}
                     settings={settings}
@@ -390,6 +378,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     onReorderActs={onReorderActs}
                     setCurrentPage={setCurrentPage}
                     onNavigateToCertificate={onNavigateToCertificate}
+                    onNavigateToScheme={onNavigateToScheme} // ДОБАВЛЕНО
                 />
             </div>
             

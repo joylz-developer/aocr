@@ -1,11 +1,10 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry, ExportSettings, CertificateFile, ConstructionObject } from './types';
+import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry, ExportSettings, CertificateFile, ConstructionObject, ExecutiveScheme } from './types';
 import TemplateUploader from './components/TemplateUploader';
 import ImportModal from './components/ImportModal';
 import ExportModal from './components/ExportModal';
 import ConfirmationModal from './components/ConfirmationModal';
-import RestoreGroupConfirmationModal from './components/RestoreGroupConfirmationModal';
 import ActsPage from './pages/ActsPage';
 import PeoplePage from './pages/PeoplePage';
 import OrganizationsPage from './pages/OrganizationsPage';
@@ -14,6 +13,7 @@ import GroupsPage from './pages/GroupsPage';
 import TrashPage from './pages/TrashPage';
 import RegulationsPage from './pages/RegulationsPage';
 import CertificatesPage from './pages/CertificatesPage';
+import SchemesPage from './pages/SchemesPage';
 import ObjectsPage from './pages/ObjectsPage';
 import Sidebar from './components/Sidebar';
 import { saveAs } from 'file-saver';
@@ -26,7 +26,6 @@ const fileToBase64 = (file: File): Promise<string> =>
         reader.readAsDataURL(file);
         reader.onload = () => {
             if (typeof reader.result === 'string') {
-                // Return only the base64 part
                 resolve(reader.result.split(',')[1]);
             } else {
                 reject(new Error('Failed to read file as base64 string.'));
@@ -50,11 +49,6 @@ const base64ToBlob = (base64: string, mimeType: string = 'application/vnd.openxm
     }
 
     return new Blob(byteArrays, { type: mimeType });
-};
-
-// Helper to reconstruct Base64 from binary string (PizZip output)
-const binaryStringToBase64 = (binary: string): string => {
-    return window.btoa(binary);
 };
 
 const DEFAULT_PROMPT_NUMBER = "Тип документа (обязательно укажи 'Паспорт качества', 'Сертификат соответствия' или другой тип) + Номер документа. Пример: 'Паспорт качества № 123'";
@@ -120,6 +114,7 @@ const App: React.FC = () => {
     const [groups, setGroups] = useLocalStorage<CommissionGroup[]>('commission_groups', []);
     const [regulations, setRegulations] = useLocalStorage<Regulation[]>('regulations_data', []);
     const [certificates, setCertificates] = useLocalStorage<Certificate[]>('certificates_data', []);
+    const [schemes, setSchemes] = useLocalStorage<ExecutiveScheme[]>('schemes_data', []);
     const [deletedCertificates, setDeletedCertificates] = useLocalStorage<DeletedCertificateEntry[]>('deleted_certificates', []);
     
     // Settings
@@ -147,24 +142,20 @@ const App: React.FC = () => {
         customAiModels: []
     });
     
-    // Notification State
     const [notification, setNotification] = useState<string | null>(null);
 
     // --- MIGRATION LOGIC for Construction Objects ---
     useEffect(() => {
-        // Check if we have data but no objects (Legacy Mode)
         const hasData = acts.length > 0 || people.length > 0 || certificates.length > 0 || organizations.length > 0;
         const hasObjects = constructionObjects.length > 0;
 
         if (hasData && !hasObjects) {
-            // Create a default object using the old objectName setting if available
             const legacyName = (settings as any).objectName || 'Мой объект';
             const newObj: ConstructionObject = { id: crypto.randomUUID(), name: legacyName, shortName: legacyName };
             
             setConstructionObjects([newObj]);
             setCurrentObjectId(newObj.id);
 
-            // Function to migrate array items
             const migrate = (items: any[]) => items.map(i => ({ 
                 ...i, 
                 constructionObjectId: i.constructionObjectId || newObj.id 
@@ -176,21 +167,19 @@ const App: React.FC = () => {
             setRegulations(prev => migrate(prev));
             setCertificates(prev => migrate(prev));
             setOrganizations(prev => migrate(prev));
+            setSchemes(prev => migrate(prev));
             
-            // Clean up old settings
             const newSettings = { ...settings };
             delete (newSettings as any).objectName;
             setSettings(newSettings);
         } else if (!hasData && !hasObjects) {
-             // Fresh start
              const newObj: ConstructionObject = { id: crypto.randomUUID(), name: 'Основной объект', shortName: 'Основной' };
              setConstructionObjects([newObj]);
              setCurrentObjectId(newObj.id);
         } else if (hasObjects && !currentObjectId) {
-            // If objects exist but none selected, select first
             setCurrentObjectId(constructionObjects[0].id);
         }
-    }, []); // Run once on mount
+    }, []);
 
     // --- Computed Data for Current Object ---
     const currentActs = useMemo(() => acts.filter(a => a.constructionObjectId === currentObjectId), [acts, currentObjectId]);
@@ -199,7 +188,8 @@ const App: React.FC = () => {
     const currentGroups = useMemo(() => groups.filter(g => g.constructionObjectId === currentObjectId), [groups, currentObjectId]);
     const currentRegulations = useMemo(() => regulations.filter(r => r.constructionObjectId === currentObjectId), [regulations, currentObjectId]);
     const currentCertificates = useMemo(() => certificates.filter(c => c.constructionObjectId === currentObjectId), [certificates, currentObjectId]);
-    // Trash is filtered to display only items from the current object
+    const currentSchemes = useMemo(() => schemes.filter(s => s.constructionObjectId === currentObjectId), [schemes, currentObjectId]);
+    
     const currentDeletedActs = useMemo(() => deletedActs.filter(d => d.act.constructionObjectId === currentObjectId), [deletedActs, currentObjectId]);
     const currentDeletedCertificates = useMemo(() => deletedCertificates.filter(d => d.certificate.constructionObjectId === currentObjectId), [deletedCertificates, currentObjectId]);
 
@@ -226,16 +216,11 @@ const App: React.FC = () => {
     const [showExportModal, setShowExportModal] = useState(false);
     const [confirmationRequest, setConfirmationRequest] = useState<{ title: string, message: React.ReactNode, onConfirm: () => void } | null>(null);
 
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
     // --- Handlers for Construction Objects ---
     const handleAddObject = (name: string, shortName: string, cloneFromId?: string, cloneCategories?: string[]) => {
         const newObj: ConstructionObject = { id: crypto.randomUUID(), name, shortName };
-        
-        // 1. Create the object
         setConstructionObjects(prev => [...prev, newObj]);
         
-        // 2. Clone data if requested
         if (cloneFromId && cloneCategories && cloneCategories.length > 0) {
             const shouldClone = (cat: string) => cloneCategories.includes(cat);
             
@@ -244,20 +229,18 @@ const App: React.FC = () => {
                 const newOrgs = sourceOrgs.map(o => ({ ...o, id: crypto.randomUUID(), constructionObjectId: newObj.id }));
                 setOrganizations(prev => [...prev, ...newOrgs]);
             }
-            
             if (shouldClone('people')) {
                 const sourcePeople = people.filter(p => p.constructionObjectId === cloneFromId);
                 const newPeople = sourcePeople.map(p => ({ ...p, id: crypto.randomUUID(), constructionObjectId: newObj.id }));
                 setPeople(prev => [...prev, ...newPeople]);
             }
-            
             if (shouldClone('groups')) {
                 const sourceGroups = groups.filter(g => g.constructionObjectId === cloneFromId);
                 const newGroups = sourceGroups.map(g => ({ 
                     ...g, 
                     id: crypto.randomUUID(), 
                     constructionObjectId: newObj.id,
-                    representatives: {}, // Reset relations on simple copy to avoid confusion
+                    representatives: {}, 
                     builderOrgId: '',
                     contractorOrgId: '',
                     designerOrgId: '',
@@ -265,17 +248,20 @@ const App: React.FC = () => {
                 }));
                 setGroups(prev => [...prev, ...newGroups]);
             }
-            
             if (shouldClone('certificates')) {
                 const sourceCerts = certificates.filter(c => c.constructionObjectId === cloneFromId);
                 const newCerts = sourceCerts.map(c => ({ ...c, id: crypto.randomUUID(), constructionObjectId: newObj.id }));
                 setCertificates(prev => [...prev, ...newCerts]);
             }
-            
             if (shouldClone('regulations')) {
                 const sourceRegs = regulations.filter(r => r.constructionObjectId === cloneFromId);
                 const newRegs = sourceRegs.map(r => ({ ...r, id: crypto.randomUUID(), constructionObjectId: newObj.id }));
                 setRegulations(prev => [...prev, ...newRegs]);
+            }
+            if (shouldClone('schemes')) {
+                const sourceSchemes = schemes.filter(s => s.constructionObjectId === cloneFromId);
+                const newSchemes = sourceSchemes.map(s => ({ ...s, id: crypto.randomUUID(), constructionObjectId: newObj.id }));
+                setSchemes(prev => [...prev, ...newSchemes]);
             }
         }
 
@@ -287,22 +273,17 @@ const App: React.FC = () => {
     };
 
     const handleDeleteObject = (id: string) => {
-        // 1. Remove the object itself
         setConstructionObjects(prev => prev.filter(o => o.id !== id));
-
-        // 2. Remove all related data
         setActs(prev => prev.filter(a => a.constructionObjectId !== id));
         setPeople(prev => prev.filter(p => p.constructionObjectId !== id));
         setOrganizations(prev => prev.filter(o => o.constructionObjectId !== id));
         setGroups(prev => prev.filter(g => g.constructionObjectId !== id));
         setRegulations(prev => prev.filter(r => r.constructionObjectId !== id));
         setCertificates(prev => prev.filter(c => c.constructionObjectId !== id));
-        
-        // 3. Remove from trash
+        setSchemes(prev => prev.filter(s => s.constructionObjectId !== id));
         setDeletedActs(prev => prev.filter(d => d.act.constructionObjectId !== id));
         setDeletedCertificates(prev => prev.filter(d => d.certificate.constructionObjectId !== id));
 
-        // 4. Handle Active Object Switch
         if (currentObjectId === id) {
             setConstructionObjects(currentList => {
                 const remaining = currentList.filter(o => o.id !== id);
@@ -328,10 +309,8 @@ const App: React.FC = () => {
             shortName: sourceObj.shortName ? `${sourceObj.shortName} (Копия)` : undefined
         };
 
-        // --- DEEP COPY LOGIC WITH REFERENCE MAPPING ---
         const idMap = new Map<string, string>();
 
-        // 1. Copy Organizations
         const sourceOrgs = organizations.filter(o => o.constructionObjectId === sourceId);
         const newOrgs = sourceOrgs.map(o => {
             const newId = crypto.randomUUID();
@@ -339,7 +318,6 @@ const App: React.FC = () => {
             return { ...o, id: newId, constructionObjectId: newObj.id };
         });
 
-        // 2. Copy People
         const sourcePeople = people.filter(p => p.constructionObjectId === sourceId);
         const newPeople = sourcePeople.map(p => {
             const newId = crypto.randomUUID();
@@ -347,7 +325,6 @@ const App: React.FC = () => {
             return { ...p, id: newId, constructionObjectId: newObj.id };
         });
 
-        // 3. Copy Groups (and update Org/Person refs)
         const sourceGroups = groups.filter(g => g.constructionObjectId === sourceId);
         const newGroups = sourceGroups.map(g => {
             const newGroupId = crypto.randomUUID();
@@ -372,11 +349,9 @@ const App: React.FC = () => {
             };
         });
 
-        // 4. Copy Acts (and update Org/Group/Rep refs)
         const sourceActs = acts.filter(a => a.constructionObjectId === sourceId);
         const newActs = sourceActs.map(a => {
             const newActId = crypto.randomUUID();
-            
             const newReps: { [key: string]: string } = {};
             Object.entries(a.representatives).forEach(([role, personId]) => {
                 if (personId && idMap.has(personId)) {
@@ -388,25 +363,26 @@ const App: React.FC = () => {
                 ...a,
                 id: newActId,
                 constructionObjectId: newObj.id,
-                objectName: newObj.name, // Update object name snapshot
+                objectName: newObj.name, 
                 representatives: newReps,
                 commissionGroupId: idMap.get(a.commissionGroupId || '') || undefined,
                 builderOrgId: idMap.get(a.builderOrgId || '') || undefined,
                 contractorOrgId: idMap.get(a.contractorOrgId || '') || undefined,
                 designerOrgId: idMap.get(a.designerOrgId || '') || undefined,
                 workPerformerOrgId: idMap.get(a.workPerformerOrgId || '') || undefined,
-                nextWorkActId: undefined // Break chains to avoid pointing to old acts
+                nextWorkActId: undefined 
             };
         });
 
-        // 5. Copy Regulations & Certificates (No ID mapping needed usually)
         const sourceRegs = regulations.filter(r => r.constructionObjectId === sourceId);
         const newRegs = sourceRegs.map(r => ({ ...r, id: crypto.randomUUID(), constructionObjectId: newObj.id }));
 
         const sourceCerts = certificates.filter(c => c.constructionObjectId === sourceId);
         const newCerts = sourceCerts.map(c => ({ ...c, id: crypto.randomUUID(), constructionObjectId: newObj.id }));
+        
+        const sourceSchemes = schemes.filter(s => s.constructionObjectId === sourceId);
+        const newSchemes = sourceSchemes.map(s => ({ ...s, id: crypto.randomUUID(), constructionObjectId: newObj.id }));
 
-        // Update State
         setConstructionObjects(prev => [...prev, newObj]);
         setOrganizations(prev => [...prev, ...newOrgs]);
         setPeople(prev => [...prev, ...newPeople]);
@@ -414,12 +390,12 @@ const App: React.FC = () => {
         setActs(prev => [...prev, ...newActs]);
         setRegulations(prev => [...prev, ...newRegs]);
         setCertificates(prev => [...prev, ...newCerts]);
+        setSchemes(prev => [...prev, ...newSchemes]);
 
         setCurrentObjectId(newObj.id);
         setNotification(`Объект "${sourceObj.name}" успешно склонирован!`);
     };
 
-    // --- Template Handlers ---
     const handleTemplateUpload = (file: File) => {
         fileToBase64(file).then(base64 => {
             setTemplate(base64);
@@ -449,16 +425,9 @@ const App: React.FC = () => {
         }
     };
 
-    // --- Data Handlers (Scoped to Current Object) ---
-
-    // 1. Acts
     const handleSaveAct = (act: Act, insertAtIndex?: number) => {
         if (!currentObjectId) { alert("Выберите объект строительства"); return; }
-        
-        // Ensure act belongs to current object
         const actToSave = { ...act, constructionObjectId: currentObjectId };
-        
-        // Update object name snapshot from current object (for templates)
         const currentObj = constructionObjects.find(o => o.id === currentObjectId);
         if (currentObj) actToSave.objectName = currentObj.name;
 
@@ -479,7 +448,6 @@ const App: React.FC = () => {
         });
     };
 
-    // 2. People
     const handleSavePerson = (person: Person) => {
         if (!currentObjectId) return;
         const personToSave = { ...person, constructionObjectId: currentObjectId };
@@ -498,7 +466,6 @@ const App: React.FC = () => {
         setPeople(prev => prev.filter(p => p.id !== id));
     };
 
-    // 3. Organizations (Now Local)
     const handleSaveOrganization = (org: Organization) => {
         if (!currentObjectId) return;
         const orgToSave = { ...org, constructionObjectId: currentObjectId };
@@ -517,7 +484,6 @@ const App: React.FC = () => {
         setOrganizations(prev => prev.filter(o => o.id !== id));
     };
 
-    // 4. Groups
     const handleSaveGroup = (group: CommissionGroup) => {
         if (!currentObjectId) return;
         const groupToSave = { ...group, constructionObjectId: currentObjectId };
@@ -536,7 +502,6 @@ const App: React.FC = () => {
         setGroups(prev => prev.filter(g => g.id !== id));
     };
 
-    // 5. Regulations
     const handleSaveRegulations = (newRegulations: Regulation[]) => {
         if (!currentObjectId) return;
         const regsToSave = newRegulations.map(r => ({ ...r, constructionObjectId: currentObjectId }));
@@ -546,7 +511,6 @@ const App: React.FC = () => {
         });
     };
 
-    // 6. Certificates
     const handleSaveCertificate = (cert: Certificate) => {
         if (!currentObjectId) return;
         const certToSave = { ...cert, constructionObjectId: currentObjectId };
@@ -564,7 +528,6 @@ const App: React.FC = () => {
     const handleDeleteCertificate = (id: string) => {
         const certToDelete = certificates.find(c => c.id === id);
         if (certToDelete) {
-            // Move to trash
             setDeletedCertificates(prev => [
                 { certificate: certToDelete, deletedOn: new Date().toISOString() }, 
                 ...prev
@@ -573,6 +536,53 @@ const App: React.FC = () => {
         }
     };
     
+    // --- ЛОГИКА СОХРАНЕНИЯ СХЕМ И СИНХРОНИЗАЦИИ С АКТАМИ ---
+    const handleSaveScheme = (scheme: ExecutiveScheme) => {
+        if (!currentObjectId) return;
+        const schemeToSave = { ...scheme, constructionObjectId: currentObjectId };
+        
+        const existingIndex = schemes.findIndex(s => s.id === schemeToSave.id);
+        
+        if (existingIndex >= 0) {
+            const oldScheme = schemes[existingIndex];
+            
+            // Если данные поменялись, ищем их в актах и заменяем
+            if (oldScheme.name !== schemeToSave.name || oldScheme.number !== schemeToSave.number || oldScheme.amount !== schemeToSave.amount) {
+                setActs(prevActs => prevActs.map(act => {
+                    if (act.constructionObjectId !== currentObjectId || !act.certs) return act;
+                    
+                    const chunks = act.certs.split(';').map(s => s.trim()).filter(Boolean);
+                    let hasChanges = false;
+                    
+                    const newChunks = chunks.map(chunk => {
+                        if (chunk.includes(oldScheme.number) && chunk.includes(oldScheme.name)) {
+                            hasChanges = true;
+                            return `${schemeToSave.name} № ${schemeToSave.number} (${schemeToSave.amount} л.)`;
+                        }
+                        return chunk;
+                    });
+                    
+                    if (hasChanges) {
+                        return { ...act, certs: newChunks.join('; ') };
+                    }
+                    return act;
+                }));
+            }
+
+            setSchemes(prev => {
+                const newArr = [...prev];
+                newArr[existingIndex] = schemeToSave;
+                return newArr;
+            });
+        } else {
+            setSchemes(prev => [...prev, schemeToSave]);
+        }
+    };
+
+    const handleDeleteScheme = (id: string) => {
+        setSchemes(prev => prev.filter(s => s.id !== id));
+    };
+
     const handleUnlinkCertificate = (cert: Certificate, mode: 'remove_entry' | 'remove_reference') => {
         const searchStr = `(сертификат № ${cert.number}`;
         setActs(prevActs => prevActs.map(act => {
@@ -593,20 +603,18 @@ const App: React.FC = () => {
         }));
     };
 
-    // --- Complex Copy/Import Logic ---
-    const handleImportFromObject = (items: (Person | Organization | Certificate)[]) => {
+    const handleImportFromObject = (items: (Person | Organization | Certificate | ExecutiveScheme)[]) => {
         if (!currentObjectId || items.length === 0) return;
 
-        // Determine type based on first item
         const isPerson = (i: any): i is Person => 'position' in i;
         const isOrg = (i: any): i is Organization => 'inn' in i;
+        const isScheme = (i: any): i is ExecutiveScheme => 'amount' in i && !('validUntil' in i);
         
         if (isOrg(items[0])) {
             const orgsToImport = items as Organization[];
             const newOrgs: Organization[] = [];
             
             orgsToImport.forEach(srcOrg => {
-                // Check dupes in current object by INN
                 const exists = currentOrganizations.some(curr => curr.inn === srcOrg.inn);
                 if (!exists) {
                     newOrgs.push({
@@ -627,19 +635,16 @@ const App: React.FC = () => {
         else if (isPerson(items[0])) {
             const peopleToImport = items as Person[];
             const newPeople: Person[] = [];
-            const newOrgs: Organization[] = []; // Potential dependencies
+            const newOrgs: Organization[] = []; 
             
             peopleToImport.forEach(srcPerson => {
-                // 1. Resolve Organization Dependency
                 const sourceOrg = organizations.find(o => o.name === srcPerson.organization && o.constructionObjectId === srcPerson.constructionObjectId);
                 
                 if (srcPerson.organization) {
                     let targetOrg = currentOrganizations.find(o => o.name === srcPerson.organization);
-                    
                     if (!targetOrg && sourceOrg) {
                         targetOrg = currentOrganizations.find(o => o.inn === sourceOrg.inn);
                     }
-                    
                     if (!targetOrg && sourceOrg) {
                         const newOrg = { ...sourceOrg, id: crypto.randomUUID(), constructionObjectId: currentObjectId };
                         if (!newOrgs.some(no => no.inn === newOrg.inn)) {
@@ -658,8 +663,18 @@ const App: React.FC = () => {
             if (newOrgs.length > 0) setOrganizations(prev => [...prev, ...newOrgs]);
             if (newPeople.length > 0) setPeople(prev => [...prev, ...newPeople]);
             setNotification(`Скопировано ${newPeople.length} участников и ${newOrgs.length} связанных организаций.`);
-        } else {
-             // Certificates
+        } 
+        else if (isScheme(items[0])) {
+             const schemesToImport = items as ExecutiveScheme[];
+             const newSchemes = schemesToImport.map(s => ({
+                 ...s,
+                 id: crypto.randomUUID(),
+                 constructionObjectId: currentObjectId
+             }));
+             setSchemes(prev => [...prev, ...newSchemes]);
+             setNotification(`Скопировано ${newSchemes.length} схем.`);
+        }
+        else {
              const certsToImport = items as Certificate[];
              const newCerts = certsToImport.map(c => ({
                  ...c,
@@ -673,13 +688,11 @@ const App: React.FC = () => {
 
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-    // Helpers for Global Import
     const handleGlobalImport = (importSettings: ImportSettings) => {
         if (!importData) return;
         
         let targetObjectId = currentObjectId;
 
-        // Ensure we have a target object for legacy data
         if (importData.projectSettings && (importData.projectSettings as any).objectName) {
             const legacyName = (importData.projectSettings as any).objectName;
             let existingObj = constructionObjects.find(o => o.name === legacyName);
@@ -785,6 +798,7 @@ const App: React.FC = () => {
         processImport(importSettings.groups, importData.groups, setGroups);
         processImport(importSettings.regulations, importData.regulations, setRegulations);
         processImport(importSettings.certificates, importData.certificates, setCertificates);
+        processImport(importSettings.schemes, importData.schemes, setSchemes);
         
         processDeletedActsImport(importSettings.deletedActs, importData.deletedActs, setDeletedActs);
 
@@ -831,6 +845,7 @@ const App: React.FC = () => {
                                 groups={currentGroups}
                                 regulations={currentRegulations}
                                 certificates={currentCertificates}
+                                schemes={currentSchemes}
                                 template={template}
                                 registryTemplate={registryTemplate}
                                 settings={settings}
@@ -858,6 +873,7 @@ const App: React.FC = () => {
                                     setOpenCertificateId(id);
                                     setCurrentPage('certificates');
                                 }}
+                                onNavigateToScheme={() => setCurrentPage('schemes')}
                             />
                         )}
                         {currentPage === 'people' && (
@@ -916,6 +932,14 @@ const App: React.FC = () => {
                                 onClearInitialOpenId={() => setOpenCertificateId(null)}
                             />
                         )}
+                        {currentPage === 'schemes' && (
+                            <SchemesPage
+                                schemes={currentSchemes}
+                                acts={currentActs}
+                                onSave={handleSaveScheme}
+                                onDelete={handleDeleteScheme}
+                            />
+                        )}
                         {currentPage === 'settings' && (
                             <SettingsPage
                                 settings={settings}
@@ -935,12 +959,10 @@ const App: React.FC = () => {
                                                         const zip = new PizZip(ev.target?.result as ArrayBuffer);
                                                         let json: any = null;
                                                         
-                                                        // 1. Try backup.json or backup_restore.json
                                                         const backupFile = zip.file('backup.json') || zip.file('backup_restore.json');
                                                         if (backupFile) {
                                                             json = JSON.parse(backupFile.asText());
                                                         } else {
-                                                            // 2. Try to reconstruct from split files
                                                             const actsFile = zip.file('acts.json');
                                                             const peopleFile = zip.file('people.json');
                                                             const orgsFile = zip.file('organizations.json');
@@ -948,6 +970,7 @@ const App: React.FC = () => {
                                                             const settingsFile = zip.file('settings.json');
                                                             const regsFile = zip.file('regulations.json');
                                                             const objectsFile = zip.file('constructionObjects.json');
+                                                            const schemesFile = zip.file('schemes.json');
                                                             
                                                             if (actsFile || peopleFile || settingsFile || groupsFile) {
                                                                 json = {};
@@ -958,13 +981,13 @@ const App: React.FC = () => {
                                                                 if (settingsFile) json.projectSettings = JSON.parse(settingsFile.asText());
                                                                 if (regsFile) json.regulations = JSON.parse(regsFile.asText());
                                                                 if (objectsFile) json.constructionObjects = JSON.parse(objectsFile.asText());
+                                                                if (schemesFile) json.schemes = JSON.parse(schemesFile.asText());
                                                                 
                                                                 const templateFile = zip.file('template.docx');
                                                                 if (templateFile) {
                                                                     json.template = window.btoa(templateFile.asBinary());
                                                                 }
                                                             } else {
-                                                                // 3. Fallback to any .json that looks like an ImportData object
                                                                 const jsonFileNames = Object.keys(zip.files).filter(name => name.endsWith('.json'));
                                                                 for (const name of jsonFileNames) {
                                                                     try {
@@ -1113,6 +1136,7 @@ const App: React.FC = () => {
                             organizations: exportConfig.organizations ? filterByObj(organizations) : undefined,
                             groups: exportConfig.groups ? filterByObj(groups) : undefined,
                             regulations: exportConfig.regulations ? filterByObj(regulations) : undefined,
+                            schemes: exportConfig.schemes ? filterByObj(schemes) : undefined,
                             certificates: exportConfig.certificates ? filterByObj(certificates).map(c => ({...c, files: [], fileData: undefined})) : undefined,
                             deletedActs: exportConfig.deletedActs ? deletedActs.filter(d => !currentObjectId || !d.act.constructionObjectId || d.act.constructionObjectId === currentObjectId) : undefined,
                             deletedCertificates: exportConfig.deletedCertificates ? deletedCertificates.filter(d => !currentObjectId || !d.certificate.constructionObjectId || d.certificate.constructionObjectId === currentObjectId) : undefined,
@@ -1120,12 +1144,12 @@ const App: React.FC = () => {
                         const zip = new PizZip();
                         zip.file('backup.json', JSON.stringify(exportData, null, 2));
                         
-                        // Write separate files for backward compatibility and user preference
                         if (exportData.acts) zip.file('acts.json', JSON.stringify(exportData.acts, null, 2));
                         if (exportData.people) zip.file('people.json', JSON.stringify(exportData.people, null, 2));
                         if (exportData.organizations) zip.file('organizations.json', JSON.stringify(exportData.organizations, null, 2));
                         if (exportData.groups) zip.file('groups.json', JSON.stringify(exportData.groups, null, 2));
                         if (exportData.regulations) zip.file('regulations.json', JSON.stringify(exportData.regulations, null, 2));
+                        if (exportData.schemes) zip.file('schemes.json', JSON.stringify(exportData.schemes, null, 2));
                         if (exportData.projectSettings) zip.file('settings.json', JSON.stringify(exportData.projectSettings, null, 2));
                         if (exportData.constructionObjects) zip.file('constructionObjects.json', JSON.stringify(exportData.constructionObjects, null, 2));
                         
@@ -1181,6 +1205,7 @@ const App: React.FC = () => {
                         groups: currentGroups.length,
                         regulations: currentRegulations.length,
                         certificates: currentCertificates.length,
+                        schemes: currentSchemes.length,
                         deletedActs: currentDeletedActs.length,
                         deletedCertificates: currentDeletedCertificates.length,
                         hasTemplate: !!template,
