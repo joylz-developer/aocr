@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { Act, Person, Organization, ProjectSettings, ROLES, CommissionGroup, Page, Coords, Regulation, Certificate } from '../types';
 import Modal from './Modal';
-import { DeleteIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon, CloseIcon, GripVerticalIcon, DownloadIcon, QuestionMarkCircleIcon, ArrowDownCircleIcon, PlusIcon } from './Icons';
+import { DeleteIcon, CalendarIcon, LinkIcon, EditIcon, CopyIcon, PasteIcon, SparklesIcon, RowAboveIcon, RowBelowIcon, BookIcon, CloseIcon, GripVerticalIcon, DownloadIcon, QuestionMarkCircleIcon, ArrowDownCircleIcon, PlusIcon, StarIcon } from './Icons';
 import CustomSelect from './CustomSelect';
 import { generateDocument } from '../services/docGenerator';
 import { ALL_COLUMNS } from './ActsTableConfig';
@@ -12,12 +11,11 @@ import RegulationsInput from './RegulationsInput';
 import RegulationDetails from './RegulationDetails';
 import MaterialsInput from './MaterialsInput';
 import MaterialPopover from './MaterialPopover';
-import MaterialsModal from './MaterialsModal'; // Import for linking
+import MaterialsModal from './MaterialsModal';
 
 const AUTO_NEXT_ID = 'AUTO_NEXT';
 const AUTO_NEXT_LABEL = '⬇️ Следующий по списку (Автоматически)';
 
-// Props for the main table component
 interface ActsTableProps {
     acts: Act[];
     people: Person[];
@@ -33,19 +31,23 @@ interface ActsTableProps {
     onColumnOrderChange: (newOrder: string[]) => void;
     activeCell: Coords | null;
     setActiveCell: (cell: Coords | null) => void;
-    // Lifted state
     selectedCells: Set<string>;
     setSelectedCells: (cells: Set<string>) => void;
-    
     onSave: (act: Act, insertAtIndex?: number) => void;
     onRequestDelete: (ids: string[]) => void;
     onReorderActs: (newActs: Act[]) => void;
     setCurrentPage: (page: Page) => void;
-    createNewAct: () => Act; // Factory for context menu insertions
-    onNavigateToCertificate?: (id: string) => void; // Callback for navigating to cert page
+    createNewAct: () => Act;
+    onNavigateToCertificate?: (id: string) => void;
 }
 
-// ... [Keep formatDateForDisplay, parseDisplayDate, DateEditorPopover, RegulationPopover, NextWorkPopover unchanged] ...
+// Интерфейс для закрепленного столбца
+interface PinnedColumnInfo {
+    rowIndexDisplay: number;
+    previewText: string;
+    payload: any; // Фактические данные для копирования (строка или объект)
+}
+
 const formatDateForDisplay = (dateString: string): string => {
     if (!dateString) return '';
     const dateParts = dateString.split('-');
@@ -270,7 +272,7 @@ const NextWorkPopover: React.FC<{
     );
 };
 
-// Rich Tooltip Component
+// Tooltip Component
 const RichHeaderTooltip: React.FC<{ 
     column: typeof ALL_COLUMNS[0], 
     position: { top: number, left: number } | null 
@@ -302,7 +304,6 @@ const RichHeaderTooltip: React.FC<{
     );
 };
 
-// Helper for live preview resolution
 const resolvePreviewTemplate = (template: string, act: Act): string => {
     return template.replace(/\{(\w+)\}/g, (_, key) => {
         switch(key) {
@@ -322,26 +323,25 @@ const resolvePreviewTemplate = (template: string, act: Act): string => {
     });
 };
 
-
-// Main Table Component
 const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, certificates = [], template, registryTemplate, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, selectedCells, setSelectedCells, onSave, onRequestDelete, onReorderActs, setCurrentPage, createNewAct, onNavigateToCertificate }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
     const [dateError, setDateError] = useState<string | null>(null);
-    // REMOVED local selectedCells state, using props
     const [copiedCells, setCopiedCells] = useState<Set<string> | null>(null);
     const [isDraggingSelection, setIsDraggingSelection] = useState(false);
     const [isFilling, setIsFilling] = useState(false);
     const [fillTargetArea, setFillTargetArea] = useState<{ start: Coords, end: Coords } | null>(null);
     
+    // Новые состояния для закрепления значений
+    const [pinnedColumns, setPinnedColumns] = useState<Record<string, PinnedColumnInfo>>({});
+    const [starPopoverState, setStarPopoverState] = useState<{colKey: string, position: {top: number, left: number}} | null>(null);
+
     const [datePopoverState, setDatePopoverState] = useState<{ act: Act; position: { top: number, left: number, width: number } } | null>(null);
     const [fillHandleCoords, setFillHandleCoords] = useState<{top: number, left: number} | null>(null);
 
-    // Header Tooltip State
     const [hoveredHeaderKey, setHoveredHeaderKey] = useState<string | null>(null);
     const [hoveredHeaderPos, setHoveredHeaderPos] = useState<{top: number, left: number} | null>(null);
 
-    // Drag Indicator State (for visual feedback)
     const [dragIndicator, setDragIndicator] = useState<{
         type: 'row' | 'col';
         x: number;
@@ -350,17 +350,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         height: number;
     } | null>(null);
 
-    // Row Drag States
     const [draggedRowIndices, setDraggedRowIndices] = useState<number[] | null>(null);
     const [dropTargetRowIndex, setDropTargetRowIndex] = useState<number | null>(null);
     const [dropPosition, setDropPosition] = useState<'top' | 'bottom' | null>(null);
     const dragHandlePressedRef = useRef(false);
 
-    // Column Drag States
     const [draggedColKey, setDraggedColKey] = useState<string | null>(null);
     const [dropTargetColKey, setDropTargetColKey] = useState<string | null>(null);
     const [dropColPosition, setDropColPosition] = useState<'left' | 'right' | null>(null);
-
 
     const [nextWorkPopoverState, setNextWorkPopoverState] = useState<{
         rowIndex: number;
@@ -371,20 +368,17 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [actPickerState, setActPickerState] = useState<{ sourceRowIndex: number } | null>(null);
     const [regulationsModalOpen, setRegulationsModalOpen] = useState(false);
     
-    // New state for Regulation Popover and Details
     const [regulationPopoverState, setRegulationPopoverState] = useState<{
         regulation: Regulation;
         position: { top: number; left: number };
     } | null>(null);
     
-    // NEW state for Material Popover
     const [materialPopoverState, setMaterialPopoverState] = useState<{
         certificate: Certificate;
         materialName: string;
         position: { top: number; left: number };
     } | null>(null);
     
-    // New state for linking material via modal
     const [linkMaterialModalState, setLinkMaterialModalState] = useState<{
         isOpen: boolean;
         actId: string;
@@ -393,12 +387,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         editingMaterialTitle?: string;
     } | null>(null);
 
-    
     const [fullRegulationDetails, setFullRegulationDetails] = useState<Regulation | null>(null);
-
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; rowIndex: number; colIndex: number } | null>(null);
-    
-    // Add multiple acts state
     const [numRowsToAdd, setNumRowsToAdd] = useState(1);
 
     const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -407,13 +397,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const editorRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
     const editorContainerRef = useRef<HTMLDivElement>(null);
 
-    // Auto-scroll refs
     const mousePosRef = useRef<{x: number, y: number} | null>(null);
     const autoScrollRaf = useRef<number | null>(null);
-
-    const actsById = useMemo(() => {
-        return new Map(acts.map(a => [a.id, a]));
-    }, [acts]);
 
     const columns = useMemo(() => {
         const colMap = new Map(ALL_COLUMNS.map(col => [col.key, col]));
@@ -448,7 +433,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         };
     };
 
-    // ... [Selection logic, template application, bulk updates, org details helper, group change logic unchanged] ...
     const selectedRows = useMemo(() => {
         const rowsFullySelected = new Set<number>();
         if (selectedCells.size === 0 || columns.length === 0) {
@@ -496,13 +480,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
 
     const applyTemplatesToAct = useCallback((act: Act) => {
-        // This function is for "Hard Save" of values if needed, but UI uses dynamic resolution.
-        // For date, we prefer dynamic unless manually set.
         return act; 
     }, [settings]);
 
     const handleSaveWithTemplateResolution = useCallback((actToSave: Act) => {
-        // We pass acts directly now, letting empty fields be resolved dynamically
         onSave(actToSave);
     }, [onSave]);
     
@@ -552,7 +533,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setDateError(null);
     }, []);
     
-    // ... [handleEditorSave, editor effects, handleEditorChange, handleEditorKeyDown same as before] ...
     const handleEditorSave = useCallback(() => {
         if (!editingCell) return true;
         const { rowIndex, colIndex } = editingCell;
@@ -594,7 +574,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     useEffect(() => {
         if (!editingCell) return;
         const handleClickOutside = (event: MouseEvent) => {
-            if (datePopoverState || regulationsModalOpen || regulationPopoverState || materialPopoverState) return;
+            if (datePopoverState || regulationsModalOpen || regulationPopoverState || materialPopoverState || starPopoverState) return;
             if (editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
                 const isModalClick = (event.target as HTMLElement).closest('.fixed.inset-0.z-50');
                 if (isModalClick) return;
@@ -609,7 +589,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             clearTimeout(timerId);
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [editingCell, datePopoverState, handleEditorSave, closeEditor, regulationsModalOpen, regulationPopoverState, materialPopoverState]);
+    }, [editingCell, datePopoverState, handleEditorSave, closeEditor, regulationsModalOpen, regulationPopoverState, materialPopoverState, starPopoverState]);
 
     useEffect(() => {
         if (editingCell) {
@@ -622,7 +602,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 const end = formatDateForDisplay(act.workEndDate);
                 initialValue = (start && end && start !== end) ? `${start} - ${end}` : (start || '');
             } else if (col.type === 'date') {
-                // For date editor, we use YYYY-MM-DD format for input[type="date"]
                 const columnKey = col.key as keyof Act;
                 initialValue = act[columnKey] as string || '';
             } else if (col.key === 'regulations') {
@@ -645,7 +624,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     el.style.height = `${el.scrollHeight}px`;
                     el.selectionStart = el.selectionEnd = el.value.length;
                 } else if (editorRef.current instanceof HTMLInputElement) {
-                    // Do not select for date inputs to avoid clearing immediately on type
                     if(col.type !== 'date') editorRef.current.select();
                 }
             }, 0);
@@ -672,7 +650,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     };
     
-    // ... [handleRegulationsSelect, handleShowRegulationInfo, findCertByText, handleShowMaterialInfo, selection logic...] ...
     const handleRegulationsSelect = (selectedRegs: Regulation[]) => {
         if (!editingCell) return;
         const newText = selectedRegs.map(reg => reg.designation).join('; ');
@@ -747,6 +724,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setRegulationPopoverState(null);
         setMaterialPopoverState(null);
         setNextWorkPopoverState(null);
+        setStarPopoverState(null);
         if (e.button === 2) {
              const cellId = getCellId(rowIndex, colIndex);
              if (selectedCells.has(cellId)) return;
@@ -772,8 +750,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             setIsDraggingSelection(true);
         }
     };
-    
-    // ... [Rest of ActsTable.tsx component code remains unchanged] ...
     
     const handleRowHeaderMouseDown = (e: React.MouseEvent, rowIndex: number) => {
         dragHandlePressedRef.current = true;
@@ -832,6 +808,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setRegulationPopoverState(null);
         setMaterialPopoverState(null);
         setNextWorkPopoverState(null);
+        setStarPopoverState(null);
         setSelectedCells(new Set());
         if (col?.key === 'nextWork') {
             const coords = getRelativeCoords(e.currentTarget);
@@ -842,7 +819,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setEditingCell({ rowIndex, colIndex });
     };
 
-    // ... [handleCopy, handlePaste, handleClearCells, handleBulkDownload, handleKeyDown, effects, drag/drop, fill handle... unchanged] ...
     const handleCopy = useCallback(async () => {
         if (selectedCells.size === 0) return;
         try {
@@ -984,15 +960,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 const actToGenerate = { ...act };
                 if (act.nextWorkActId === AUTO_NEXT_ID) {
                     const nextAct = acts[rowIndex + 1];
-                    // Logic to avoid "Act #n/a" if next act is empty
                     if (nextAct && (nextAct.number || nextAct.workName)) { 
                         actToGenerate.nextWork = `Работы по акту №${nextAct.number || 'б/н'} (${nextAct.workName || '...'})`; 
                     } else { 
-                        // If no next act or it's empty, clear the field so it doesn't show garbage
                         actToGenerate.nextWork = ''; 
                     }
                 }
-                // We pass the full settings object so docGenerator can use defaults for empty fields
                 generateDocument(template, registryTemplate, actToGenerate, people, settings, certificates); 
             }
         });
@@ -1010,6 +983,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             setRegulationPopoverState(null);
             setMaterialPopoverState(null);
             setNextWorkPopoverState(null);
+            setStarPopoverState(null);
             return;
         }
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -1040,7 +1014,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     }, [editingCell, selectedCells, handleClearCells, handleCopy, handlePaste, activeCell, setActiveCell, acts.length, columns.length, setSelectedCells]);
 
-    // ... [Auto scroll, mouse move, filling effects unchanged] ...
     useEffect(() => {
         const scrollContainer = scrollContainerRef.current;
         if (!isDraggingSelection || !scrollContainer) return;
@@ -1137,7 +1110,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
     }, [isFilling, selectedCells, fillTargetArea, acts, columns, groups, performBulkUpdate]);
 
-    // ... [Drag handlers, fill handle update, etc. unchanged] ...
     const handleRowDragStart = (e: React.DragEvent<HTMLTableRowElement>, rowIndex: number) => {
         if (editingCell) { e.preventDefault(); return; }
         if (!dragHandlePressedRef.current) { e.preventDefault(); return; }
@@ -1292,10 +1264,101 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setContextMenu({ x: e.clientX, y: e.clientY, rowIndex, colIndex });
     };
 
+    // ФУНКЦИИ ЗАКРЕПЛЕНИЯ ЗНАЧЕНИЙ
+    const handleStarClick = (e: React.MouseEvent, colKey: string, colIndex: number) => {
+        e.stopPropagation(); // Предотвращаем выделение всего столбца
+        
+        if (pinnedColumns[colKey]) {
+            // Если уже закреплено, открываем окно управления
+            const coords = getRelativeCoords(e.currentTarget as HTMLElement);
+            setStarPopoverState({ colKey, position: { top: coords.top + 20, left: coords.left - 100 } });
+        } else {
+            // Если не закреплено, берем значение из выделенной в этом столбце ячейки
+            if (activeCell && activeCell.colIndex === colIndex) {
+                const act = acts[activeCell.rowIndex];
+                let preview = '';
+                let payload: any;
+                
+                if (colKey === 'workDates') {
+                    preview = `${formatDateForDisplay(act.workStartDate)} - ${formatDateForDisplay(act.workEndDate)}`;
+                    payload = { start: act.workStartDate, end: act.workEndDate };
+                } else if (colKey === 'commissionGroup') {
+                    const group = groups.find(g => g.id === act.commissionGroupId);
+                    preview = group?.name || 'Группа комиссий';
+                    payload = {
+                        id: act.commissionGroupId,
+                        representatives: act.representatives,
+                        builderOrgId: act.builderOrgId,
+                        contractorOrgId: act.contractorOrgId,
+                        designerOrgId: act.designerOrgId,
+                        workPerformerOrgId: act.workPerformerOrgId,
+                        builderDetails: act.builderDetails,
+                        contractorDetails: act.contractorDetails,
+                        designerDetails: act.designerDetails,
+                        workPerformer: act.workPerformer
+                    };
+                } else {
+                    preview = String((act as any)[colKey] || '');
+                    payload = (act as any)[colKey];
+                }
+
+                setPinnedColumns(prev => ({
+                    ...prev,
+                    [colKey]: {
+                        rowIndexDisplay: activeCell.rowIndex + 1,
+                        previewText: preview.length > 40 ? preview.substring(0, 40) + '...' : preview,
+                        payload
+                    }
+                }));
+            }
+        }
+    };
+
+    const handleUnpin = (colKey: string) => {
+        setPinnedColumns(prev => {
+            const newObj = { ...prev };
+            delete newObj[colKey];
+            return newObj;
+        });
+        setStarPopoverState(null);
+    };
+
+    // Применение закрепленных значений к новому акту
+    const applyPinsToNewAct = (act: Act): Act => {
+        if (Object.keys(pinnedColumns).length === 0) return act;
+        const updated = { ...act };
+        Object.entries(pinnedColumns).forEach(([colKey, pinInfo]) => {
+            if (colKey === 'workDates') {
+                updated.workStartDate = pinInfo.payload.start;
+                updated.workEndDate = pinInfo.payload.end;
+                updated.date = pinInfo.payload.end;
+            } else if (colKey === 'commissionGroup') {
+                if (pinInfo.payload.id) {
+                    updated.commissionGroupId = pinInfo.payload.id;
+                    updated.representatives = { ...pinInfo.payload.representatives };
+                    updated.builderOrgId = pinInfo.payload.builderOrgId;
+                    updated.contractorOrgId = pinInfo.payload.contractorOrgId;
+                    updated.designerOrgId = pinInfo.payload.designerOrgId;
+                    updated.workPerformerOrgId = pinInfo.payload.workPerformerOrgId;
+                    updated.builderDetails = pinInfo.payload.builderDetails;
+                    updated.contractorDetails = pinInfo.payload.contractorDetails;
+                    updated.designerDetails = pinInfo.payload.designerDetails;
+                    updated.workPerformer = pinInfo.payload.workPerformer;
+                }
+            } else {
+                (updated as any)[colKey] = pinInfo.payload;
+            }
+        });
+        return updated;
+    };
+
     const handleAddRows = (count: number) => {
         if (count <= 0) return;
         const newActsToAdd = [];
-        for (let i = 0; i < count; i++) { newActsToAdd.push(createNewAct()); }
+        for (let i = 0; i < count; i++) { 
+            // Применяем закрепленные значения при создании
+            newActsToAdd.push(applyPinsToNewAct(createNewAct())); 
+        }
         const finalizedNewActs = newActsToAdd.map(act => applyTemplatesToAct(act));
         const updatedActs = [...acts, ...finalizedNewActs];
         onReorderActs(updatedActs);
@@ -1303,36 +1366,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setTimeout(() => { if (scrollContainerRef.current) { scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight; } }, 100);
     };
 
-    // Tooltip Handlers
     const handleHeaderMouseEnter = (e: React.MouseEvent, key: string) => {
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        // Since headers can be scrolled, we need fixed coords relative to viewport
         setHoveredHeaderPos({ top: rect.bottom, left: rect.left });
         setHoveredHeaderKey(key);
     };
 
     const handleHeaderMouseLeave = () => {
         setHoveredHeaderKey(null);
-    };
-
-    // Helper for live preview resolution
-    const resolvePreviewTemplate = (template: string, act: Act): string => {
-        return template.replace(/\{(\w+)\}/g, (_, key) => {
-            switch(key) {
-                case 'act_number': return act.number;
-                case 'object_name': return act.objectName;
-                case 'work_name': return act.workName;
-                case 'project_docs': return act.projectDocs;
-                case 'work_start_date': return formatDateForDisplay(act.workStartDate);
-                case 'work_end_date': return formatDateForDisplay(act.workEndDate);
-                case 'materials': return act.materials;
-                case 'materials_raw': return act.materials;
-                case 'certs': return act.certs;
-                case 'regulations': return act.regulations;
-                case 'next_work': return act.nextWork;
-                default: return '';
-            }
-        });
     };
 
     return (
@@ -1358,7 +1399,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 />
             )}
 
-            {/* Rich Header Tooltip */}
             {hoveredHeaderKey && hoveredHeaderPos && (
                 <RichHeaderTooltip 
                     column={ALL_COLUMNS.find(c => c.key === hoveredHeaderKey)!} 
@@ -1374,37 +1414,53 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                     <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                         <tr>
                             <th className="w-12 border border-slate-300 px-2 py-2 font-medium text-slate-500 text-center select-none bg-slate-100">#</th>
-                            {columns.map((col, index) => (
-                                <th
-                                    key={col.key}
-                                    className={`
-                                        border border-slate-300 px-2 py-2 font-medium text-slate-600 text-left select-none relative
-                                        ${col.widthClass}
-                                        ${selectedColumns.has(index) ? 'bg-blue-100' : ''}
-                                        ${draggedColKey === col.key ? 'opacity-50' : ''}
-                                        grabbable group/th
-                                    `}
-                                    draggable={!editingCell}
-                                    onDragStart={(e) => handleColumnDragStart(e, col.key)}
-                                    onDragOver={(e) => handleColumnDragOver(e, col.key)}
-                                    onDrop={handleColumnDrop}
-                                    onDragEnd={handleDragEnd}
-                                    onClick={(e) => handleColumnHeaderClick(e, index)}
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <span>{col.label}</span>
-                                        {(col.description) && (
-                                            <span 
-                                                className="text-slate-400 hover:text-blue-600 cursor-help ml-2 opacity-50 group-hover/th:opacity-100 transition-opacity"
-                                                onMouseEnter={(e) => handleHeaderMouseEnter(e, col.key)}
-                                                onMouseLeave={handleHeaderMouseLeave}
-                                            >
-                                                <QuestionMarkCircleIcon className="w-4 h-4" />
-                                            </span>
-                                        )}
-                                    </div>
-                                </th>
-                            ))}
+                            {columns.map((col, index) => {
+                                const isActiveColumn = activeCell?.colIndex === index;
+                                const isPinned = !!pinnedColumns[col.key];
+
+                                return (
+                                    <th
+                                        key={col.key}
+                                        className={`
+                                            border border-slate-300 px-2 py-2 font-medium text-slate-600 text-left select-none relative
+                                            ${col.widthClass}
+                                            ${selectedColumns.has(index) ? 'bg-blue-100' : ''}
+                                            ${draggedColKey === col.key ? 'opacity-50' : ''}
+                                            grabbable group/th
+                                        `}
+                                        draggable={!editingCell}
+                                        onDragStart={(e) => handleColumnDragStart(e, col.key)}
+                                        onDragOver={(e) => handleColumnDragOver(e, col.key)}
+                                        onDrop={handleColumnDrop}
+                                        onDragEnd={handleDragEnd}
+                                        onClick={(e) => handleColumnHeaderClick(e, index)}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <span>{col.label}</span>
+                                            <div className="flex items-center gap-1 ml-2">
+                                                {(isPinned || isActiveColumn) && (
+                                                    <span 
+                                                        className={`cursor-pointer transition-opacity flex-shrink-0 ${isPinned ? 'text-yellow-500 opacity-100 hover:text-yellow-600' : 'text-slate-300 opacity-50 group-hover/th:opacity-100 hover:text-yellow-400'}`}
+                                                        onClick={(e) => handleStarClick(e, col.key, index)}
+                                                        title={isPinned ? "Управление закреплением" : "Закрепить текущее значение ячейки для новых актов"}
+                                                    >
+                                                        <StarIcon className="w-4 h-4" filled={isPinned} />
+                                                    </span>
+                                                )}
+                                                {(col.description) && (
+                                                    <span 
+                                                        className="text-slate-400 hover:text-blue-600 cursor-help opacity-50 group-hover/th:opacity-100 transition-opacity flex-shrink-0"
+                                                        onMouseEnter={(e) => handleHeaderMouseEnter(e, col.key)}
+                                                        onMouseLeave={handleHeaderMouseLeave}
+                                                    >
+                                                        <QuestionMarkCircleIcon className="w-4 h-4" />
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </th>
+                                );
+                            })}
                         </tr>
                     </thead>
                     <tbody>
@@ -1459,12 +1515,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                             displayContent = groups.find(g => g.id === act.commissionGroupId)?.name || <span className="text-slate-300 italic">Не выбрано</span>;
                                         } else if (col.type === 'date') {
                                             const val = act[col.key as keyof Act] as string;
-                                            
-                                            // Handle automatic default date
                                             if (!val && col.key === 'date' && settings.defaultActDate) {
-                                                // Resolve default value for display
                                                 const defaultResolved = resolvePreviewTemplate(settings.defaultActDate, act);
-                                                
                                                 const parsedDefault = parseDisplayDate(defaultResolved);
                                                 
                                                 if (parsedDefault) {
@@ -1594,13 +1646,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                                     onKeyDown={handleEditorKeyDown} 
                                                                     className="w-full h-full bg-transparent outline-none p-1 text-sm rounded border border-blue-300 focus:ring-1 focus:ring-blue-500" 
                                                                 />
-                                                                {/* Show clear button if manually set to allow reverting to default */}
                                                                 {editorValue && (
                                                                     <button 
                                                                         onMouseDown={(e) => {
-                                                                            e.preventDefault(); // Prevent blur
-                                                                            setEditorValue(''); // Clear to empty -> reverts to default logic
-                                                                            // Trigger save immediately for UX
+                                                                            e.preventDefault(); 
+                                                                            setEditorValue(''); 
                                                                             const updatedAct = { ...act, [col.key]: '' };
                                                                             handleSaveWithTemplateResolution(updatedAct);
                                                                             closeEditor();
@@ -1615,7 +1665,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                         ) : (
                                                             <div className="w-full h-full relative">
                                                                 <textarea ref={editorRef as React.RefObject<HTMLTextAreaElement>} value={editorValue} onChange={handleEditorChange} onKeyDown={handleEditorKeyDown} className="w-full h-full resize-none bg-transparent outline-none overflow-hidden pr-6" rows={1} placeholder={col.key === 'workDates' ? 'ДД.ММ.ГГГГ - ДД.ММ.ГГГГ' : ''} />
-                                                                {/* Generic Clear Button for Textareas if they have defaults */}
                                                                 {editorValue && ((col.key === 'additionalInfo' && settings.defaultAdditionalInfo) || (col.key === 'attachments' && settings.defaultAttachments)) && (
                                                                     <button 
                                                                         onMouseDown={(e) => {
@@ -1689,12 +1738,34 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 </div>
             )}
 
+            {/* Окно информации о закреплении (пине) */}
+            {starPopoverState && pinnedColumns[starPopoverState.colKey] && (
+                <div className="absolute z-50 bg-white border border-yellow-300 shadow-xl rounded-lg p-3 w-64 animate-fade-in-up"
+                     style={{ top: starPopoverState.position.top, left: starPopoverState.position.left }}
+                     onMouseDown={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs font-bold text-yellow-700 uppercase">Закреплено</span>
+                        <StarIcon className="w-4 h-4 text-yellow-500" filled />
+                    </div>
+                    <p className="text-sm text-slate-700 mb-1">
+                        Оригинальная строка: <strong>{pinnedColumns[starPopoverState.colKey].rowIndexDisplay}</strong>
+                    </p>
+                    <div className="bg-slate-50 p-2 rounded border border-slate-100 text-xs text-slate-600 mb-3 italic break-words">
+                        "{pinnedColumns[starPopoverState.colKey].previewText || '(Пусто)'}"
+                    </div>
+                    <button onClick={() => handleUnpin(starPopoverState.colKey)}
+                            className="w-full py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded text-sm font-medium transition-colors border border-red-100">
+                        Отменить привязку
+                    </button>
+                </div>
+            )}
+
             {datePopoverState && <DateEditorPopover act={datePopoverState.act} onActChange={(updatedAct) => { handleSaveWithTemplateResolution(updatedAct); setDatePopoverState(prev => prev ? { ...prev, act: updatedAct } : null); }} onClose={() => setDatePopoverState(null)} position={datePopoverState.position} />}
             {regulationPopoverState && <RegulationPopover regulation={regulationPopoverState.regulation} position={regulationPopoverState.position} onClose={() => setRegulationPopoverState(null)} onOpenDetails={() => { setFullRegulationDetails(regulationPopoverState.regulation); setRegulationPopoverState(null); }} />}
             {materialPopoverState && <MaterialPopover certificate={materialPopoverState.certificate} materialName={materialPopoverState.materialName} position={materialPopoverState.position} onClose={() => setMaterialPopoverState(null)} onNavigate={(certId) => { onNavigateToCertificate?.(certId); setMaterialPopoverState(null); }} />}
             {linkMaterialModalState && <MaterialsModal isOpen={linkMaterialModalState.isOpen} onClose={() => setLinkMaterialModalState(null)} certificates={certificates} initialSearch={linkMaterialModalState.initialSearch} editingMaterialTitle={linkMaterialModalState.editingMaterialTitle} onSelect={(text) => { const act = acts.find(a => a.id === linkMaterialModalState.actId); if (act) { const items = act.materials.split(';').map(s => s.trim()); if (items[linkMaterialModalState.itemIndex] !== undefined) { items[linkMaterialModalState.itemIndex] = text; const updatedAct = { ...act, materials: items.join('; ') }; handleSaveWithTemplateResolution(updatedAct); } } setLinkMaterialModalState(null); }} />}
             {nextWorkPopoverState && <NextWorkPopover acts={acts} currentActId={acts[nextWorkPopoverState.rowIndex].id} position={nextWorkPopoverState.position} onClose={() => setNextWorkPopoverState(null)} onSelect={(selectedActOrId) => { const sourceAct = acts[nextWorkPopoverState.rowIndex]; if (sourceAct) { const updatedAct = { ...sourceAct }; if (selectedActOrId === AUTO_NEXT_ID) { updatedAct.nextWorkActId = AUTO_NEXT_ID; updatedAct.nextWork = ''; } else if (selectedActOrId && typeof selectedActOrId === 'object') { const selectedAct = selectedActOrId as Act; updatedAct.nextWork = `Работы по акту №${selectedAct.number || 'б/н'} (${selectedAct.workName || '...'})`; updatedAct.nextWorkActId = selectedAct.id; } else if (typeof selectedActOrId === 'string') { updatedAct.nextWork = selectedActOrId; updatedAct.nextWorkActId = undefined; } else { updatedAct.nextWork = ''; updatedAct.nextWorkActId = undefined; } handleSaveWithTemplateResolution(updatedAct); } setNextWorkPopoverState(null); }} />}
-            {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}> <MenuItem label="Копировать" shortcut="Ctrl+C" icon={<CopyIcon className="w-4 h-4" />} onClick={() => { handleCopy(); setContextMenu(null); }} disabled={selectedCells.size === 0} /> <MenuItem label="Вставить" shortcut="Ctrl+V" icon={<PasteIcon className="w-4 h-4" />} onClick={() => { handlePaste(); setContextMenu(null); }} /> <MenuSeparator /> <MenuItem label="Очистить ячейки" shortcut="Del" onClick={() => { handleClearCells(); setContextMenu(null); }} disabled={selectedCells.size === 0} /> <MenuSeparator /> <MenuItem label="Вставить строку выше" icon={<RowAboveIcon className="w-4 h-4" />} onClick={() => { const newAct = createNewAct(); onSave(newAct, contextMenu.rowIndex); setContextMenu(null); }} /> <MenuItem label="Вставить строку ниже" icon={<RowBelowIcon className="w-4 h-4" />} onClick={() => { const newAct = createNewAct(); onSave(newAct, contextMenu.rowIndex + 1); setContextMenu(null); }} /> <MenuSeparator /> <MenuItem label="Удалить акт(ы)" icon={<DeleteIcon className="w-4 h-4 text-red-600" />} className="text-red-600 hover:bg-red-50" onClick={() => { const rowIndices = Array.from(affectedRowsFromSelection); const indicesToDelete = rowIndices.includes(contextMenu.rowIndex) ? rowIndices : [contextMenu.rowIndex]; const idsToDelete = indicesToDelete.map(idx => acts[idx].id); onRequestDelete(idsToDelete); setContextMenu(null); }} /> </ContextMenu>}
+            {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}> <MenuItem label="Копировать" shortcut="Ctrl+C" icon={<CopyIcon className="w-4 h-4" />} onClick={() => { handleCopy(); setContextMenu(null); }} disabled={selectedCells.size === 0} /> <MenuItem label="Вставить" shortcut="Ctrl+V" icon={<PasteIcon className="w-4 h-4" />} onClick={() => { handlePaste(); setContextMenu(null); }} /> <MenuSeparator /> <MenuItem label="Очистить ячейки" shortcut="Del" onClick={() => { handleClearCells(); setContextMenu(null); }} disabled={selectedCells.size === 0} /> <MenuSeparator /> <MenuItem label="Вставить строку выше" icon={<RowAboveIcon className="w-4 h-4" />} onClick={() => { const newAct = applyPinsToNewAct(createNewAct()); onSave(newAct, contextMenu.rowIndex); setContextMenu(null); }} /> <MenuItem label="Вставить строку ниже" icon={<RowBelowIcon className="w-4 h-4" />} onClick={() => { const newAct = applyPinsToNewAct(createNewAct()); onSave(newAct, contextMenu.rowIndex + 1); setContextMenu(null); }} /> <MenuSeparator /> <MenuItem label="Удалить акт(ы)" icon={<DeleteIcon className="w-4 h-4 text-red-600" />} className="text-red-600 hover:bg-red-50" onClick={() => { const rowIndices = Array.from(affectedRowsFromSelection); const indicesToDelete = rowIndices.includes(contextMenu.rowIndex) ? rowIndices : [contextMenu.rowIndex]; const idsToDelete = indicesToDelete.map(idx => acts[idx].id); onRequestDelete(idsToDelete); setContextMenu(null); }} /> </ContextMenu>}
             {regulationsModalOpen && <RegulationsModal isOpen={regulationsModalOpen} onClose={() => setRegulationsModalOpen(false)} regulations={regulations} onSelect={handleRegulationsSelect} />}
             {fullRegulationDetails && <Modal isOpen={!!fullRegulationDetails} onClose={() => setFullRegulationDetails(null)} title="" hideHeader={true}> <RegulationDetails regulation={fullRegulationDetails} onClose={() => setFullRegulationDetails(null)} /> </Modal>}
         </div>
