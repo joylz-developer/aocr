@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import Modal from './Modal';
 import { Certificate } from '../types';
@@ -134,7 +133,6 @@ const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certif
 
     const filteredData: FilteredData[] = useMemo(() => {
         if (!searchTerm.trim()) {
-            // Return all, mapped to structure
             return certificates.map(cert => ({
                 cert,
                 materials: cert.materials.map(m => ({ name: m, score: 0 })),
@@ -161,19 +159,16 @@ const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certif
                     let tokenMatched = false;
                     let bestTokenScore = 1000;
 
-                    // 1. Exact/Substring in Material Name
                     if (lowerMat.includes(token)) {
                         tokenMatched = true;
                         bestTokenScore = 0;
-                        if (lowerMat.indexOf(token) === 0) bestTokenScore = -10; // Boost prefix
+                        if (lowerMat.indexOf(token) === 0) bestTokenScore = -10; 
                     }
-                    // 2. Exact/Substring in Certificate Number (Context)
                     else if (certNumLower.includes(token)) {
                         tokenMatched = true;
-                        bestTokenScore = 5; // Good, but material match is better
+                        bestTokenScore = 5; 
                     }
                     else {
-                        // 3. Fuzzy Match against Material words
                         const threshold = token.length < 3 ? 0 : Math.floor(token.length / 3);
                         for (const word of matWords) {
                             if (Math.abs(word.length - token.length) <= 3) {
@@ -200,7 +195,6 @@ const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certif
             });
 
             if (matchedMaterials.length > 0) {
-                // Sort materials by score
                 matchedMaterials.sort((a, b) => a.score - b.score);
                 results.push({
                     cert,
@@ -210,15 +204,13 @@ const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certif
             }
         });
 
-        // Sort certificates by best score
         results.sort((a, b) => a.bestScore - b.bestScore);
         return results;
     }, [certificates, searchTerm]);
 
     const handleSelectMaterial = (cert: Certificate, materialName: string) => {
-        const dateObj = new Date(cert.validUntil);
-        const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString('ru-RU') : cert.validUntil;
-        const resultString = `${materialName} (сертификат № ${cert.number}, действителен до ${dateStr})`;
+        // Формат должен быть ИДЕНТИЧНЫМ тому, что ждет MaterialPopover
+        const resultString = `${materialName} (сертификат № ${cert.number})`;
         onSelect(resultString);
     };
 
@@ -231,10 +223,11 @@ const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certif
     };
 
     const handleNavigate = (e: React.MouseEvent, certId: string) => {
+        e.preventDefault();
         e.stopPropagation();
         if (onNavigateToCertificate) {
             onNavigateToCertificate(certId);
-            onClose(); // Close modal on navigation
+            onClose();
         }
     };
 
@@ -269,7 +262,6 @@ const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certif
 
                 <div className="flex-grow overflow-y-auto border border-slate-200 rounded-md bg-slate-50 p-2 space-y-2">
                     {filteredData.length > 0 ? filteredData.map(({ cert, materials }) => {
-                        // Auto-expand if searching, otherwise use manual state
                         const isSearching = searchTerm.length > 0;
                         const isExpanded = isSearching ? true : expandedCertId === cert.id;
                         
@@ -277,7 +269,10 @@ const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certif
                             <div key={cert.id} className="bg-white border border-slate-200 rounded-md overflow-hidden">
                                 <div 
                                     className="p-3 bg-slate-50 hover:bg-slate-100 cursor-pointer flex justify-between items-center"
-                                    onClick={() => toggleExpand(cert.id)}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleExpand(cert.id);
+                                    }}
                                 >
                                     <div className="flex items-center gap-3 overflow-hidden">
                                         <CertificateIcon className="w-5 h-5 text-slate-500 flex-shrink-0" />
@@ -313,7 +308,12 @@ const MaterialsModal: React.FC<MaterialsModalProps> = ({ isOpen, onClose, certif
                                                 <button
                                                     key={`${idx}-${mat.name}`}
                                                     className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700 border-b border-slate-50 last:border-0 flex items-center group"
-                                                    onClick={() => handleSelectMaterial(cert, mat.name)}
+                                                    onMouseDown={(e) => {
+                                                        // ПРЕДОТВРАЩАЕМ перехват клика ячейкой таблицы
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleSelectMaterial(cert, mat.name);
+                                                    }}
                                                 >
                                                     <PlusIcon className="w-3 h-3 mr-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                                                     <span className="truncate">

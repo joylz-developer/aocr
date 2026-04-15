@@ -41,11 +41,10 @@ interface ActsTableProps {
     onNavigateToCertificate?: (id: string) => void;
 }
 
-// Интерфейс для закрепленного столбца
 interface PinnedColumnInfo {
     rowIndexDisplay: number;
     previewText: string;
-    payload: any; // Фактические данные для копирования (строка или объект)
+    payload: any; 
 }
 
 const formatDateForDisplay = (dateString: string): string => {
@@ -272,7 +271,6 @@ const NextWorkPopover: React.FC<{
     );
 };
 
-// Tooltip Component
 const RichHeaderTooltip: React.FC<{ 
     column: typeof ALL_COLUMNS[0], 
     position: { top: number, left: number } | null 
@@ -332,7 +330,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [isFilling, setIsFilling] = useState(false);
     const [fillTargetArea, setFillTargetArea] = useState<{ start: Coords, end: Coords } | null>(null);
     
-    // Новые состояния для закрепления значений
     const [pinnedColumns, setPinnedColumns] = useState<Record<string, PinnedColumnInfo>>({});
     const [starPopoverState, setStarPopoverState] = useState<{colKey: string, position: {top: number, left: number}} | null>(null);
 
@@ -375,7 +372,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     
     const [materialPopoverState, setMaterialPopoverState] = useState<{
         certificate: Certificate;
-        materialName: string;
+        actId: string;
         position: { top: number; left: number };
     } | null>(null);
     
@@ -677,7 +674,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     };
 
     const findCertByText = (text: string) => {
-        const match = text.match(/№\s*([^\s,]+)/);
+        const match = text.match(/№\s*([^\s,)]+)/);
         if (match) {
             const certNum = match[1];
             return certificates?.find(c => c.number.includes(certNum));
@@ -685,13 +682,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         return null;
     };
 
-    const handleShowMaterialInfo = (text: string, target: HTMLElement) => {
+    const handleShowMaterialInfo = (text: string, target: HTMLElement, actId: string) => {
         const cert = findCertByText(text);
         if (cert) {
             const coords = getRelativeCoords(target);
             setMaterialPopoverState({ 
                 certificate: cert, 
-                materialName: text,
+                actId: actId,
                 position: { top: coords.top, left: coords.left } 
             });
         }
@@ -1264,16 +1261,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setContextMenu({ x: e.clientX, y: e.clientY, rowIndex, colIndex });
     };
 
-    // ФУНКЦИИ ЗАКРЕПЛЕНИЯ ЗНАЧЕНИЙ
     const handleStarClick = (e: React.MouseEvent, colKey: string, colIndex: number) => {
-        e.stopPropagation(); // Предотвращаем выделение всего столбца
+        e.stopPropagation(); 
         
         if (pinnedColumns[colKey]) {
-            // Если уже закреплено, открываем окно управления
             const coords = getRelativeCoords(e.currentTarget as HTMLElement);
             setStarPopoverState({ colKey, position: { top: coords.top + 20, left: coords.left - 100 } });
         } else {
-            // Если не закреплено, берем значение из выделенной в этом столбце ячейки
             if (activeCell && activeCell.colIndex === colIndex) {
                 const act = acts[activeCell.rowIndex];
                 let preview = '';
@@ -1323,7 +1317,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setStarPopoverState(null);
     };
 
-    // Применение закрепленных значений к новому акту
     const applyPinsToNewAct = (act: Act): Act => {
         if (Object.keys(pinnedColumns).length === 0) return act;
         const updated = { ...act };
@@ -1356,7 +1349,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (count <= 0) return;
         const newActsToAdd = [];
         for (let i = 0; i < count; i++) { 
-            // Применяем закрепленные значения при создании
             newActsToAdd.push(applyPinsToNewAct(createNewAct())); 
         }
         const finalizedNewActs = newActsToAdd.map(act => applyTemplatesToAct(act));
@@ -1556,22 +1548,31 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 </div>
                                             );
                                         } else if (col.key === 'materials') {
+                                            const mappings = (act as any).materialMappings || {};
+                                            
                                             displayContent = (
                                                 <div className="flex flex-wrap gap-1">
                                                     {(act.materials || '').split(';').map(s => s.trim()).filter(Boolean).map((item, idx) => {
                                                         const cert = findCertByText(item);
                                                         const chipClass = cert ? "bg-green-100 text-green-800 border-green-200" : "bg-red-100 text-red-800 border-red-200";
+                                                        
+                                                        const displayTitle = item.split('(')[0].trim();
+
                                                         return (
                                                             <span 
                                                                 key={idx} 
                                                                 className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs border ${chipClass} cursor-pointer hover:underline max-w-full`}
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    if (cert) { handleShowMaterialInfo(item, e.currentTarget); } else { setLinkMaterialModalState({ isOpen: true, actId: act.id, itemIndex: idx, initialSearch: item, editingMaterialTitle: item }); }
+                                                                    if (cert) { 
+                                                                        handleShowMaterialInfo(item, e.currentTarget, act.id); 
+                                                                    } else { 
+                                                                        setLinkMaterialModalState({ isOpen: true, actId: act.id, itemIndex: idx, initialSearch: item, editingMaterialTitle: item }); 
+                                                                    }
                                                                 }}
-                                                                title={cert ? item : "Нажмите, чтобы выбрать сертификат из базы"}
+                                                                title={cert ? "Редактировать материалы сертификата в этом акте" : "Нажмите, чтобы выбрать сертификат из базы"}
                                                             >
-                                                                <span className="truncate max-w-[200px] block">{item.split('(')[0]}</span>
+                                                                <span className="truncate max-w-[200px] block">{displayTitle}</span>
                                                             </span>
                                                         );
                                                     })}
@@ -1738,7 +1739,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 </div>
             )}
 
-            {/* Окно информации о закреплении (пине) */}
             {starPopoverState && pinnedColumns[starPopoverState.colKey] && (
                 <div className="absolute z-50 bg-white border border-yellow-300 shadow-xl rounded-lg p-3 w-64 animate-fade-in-up"
                      style={{ top: starPopoverState.position.top, left: starPopoverState.position.left }}
@@ -1762,7 +1762,25 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
             {datePopoverState && <DateEditorPopover act={datePopoverState.act} onActChange={(updatedAct) => { handleSaveWithTemplateResolution(updatedAct); setDatePopoverState(prev => prev ? { ...prev, act: updatedAct } : null); }} onClose={() => setDatePopoverState(null)} position={datePopoverState.position} />}
             {regulationPopoverState && <RegulationPopover regulation={regulationPopoverState.regulation} position={regulationPopoverState.position} onClose={() => setRegulationPopoverState(null)} onOpenDetails={() => { setFullRegulationDetails(regulationPopoverState.regulation); setRegulationPopoverState(null); }} />}
-            {materialPopoverState && <MaterialPopover certificate={materialPopoverState.certificate} materialName={materialPopoverState.materialName} position={materialPopoverState.position} onClose={() => setMaterialPopoverState(null)} onNavigate={(certId) => { onNavigateToCertificate?.(certId); setMaterialPopoverState(null); }} />}
+            
+            {/* Окно управления материалами сертификата */}
+            {materialPopoverState && (() => {
+                const targetAct = acts.find(a => a.id === materialPopoverState.actId);
+                if (!targetAct) return null;
+                return (
+                    <MaterialPopover 
+                        certificate={materialPopoverState.certificate} 
+                        act={targetAct}
+                        position={materialPopoverState.position} 
+                        onClose={() => setMaterialPopoverState(null)} 
+                        onNavigate={onNavigateToCertificate ? (id) => { onNavigateToCertificate(id); setMaterialPopoverState(null); } : undefined} 
+                        onUpdateAct={(updatedAct) => {
+                            handleSaveWithTemplateResolution(updatedAct);
+                        }}
+                    />
+                );
+            })()}
+
             {linkMaterialModalState && <MaterialsModal isOpen={linkMaterialModalState.isOpen} onClose={() => setLinkMaterialModalState(null)} certificates={certificates} initialSearch={linkMaterialModalState.initialSearch} editingMaterialTitle={linkMaterialModalState.editingMaterialTitle} onSelect={(text) => { const act = acts.find(a => a.id === linkMaterialModalState.actId); if (act) { const items = act.materials.split(';').map(s => s.trim()); if (items[linkMaterialModalState.itemIndex] !== undefined) { items[linkMaterialModalState.itemIndex] = text; const updatedAct = { ...act, materials: items.join('; ') }; handleSaveWithTemplateResolution(updatedAct); } } setLinkMaterialModalState(null); }} />}
             {nextWorkPopoverState && <NextWorkPopover acts={acts} currentActId={acts[nextWorkPopoverState.rowIndex].id} position={nextWorkPopoverState.position} onClose={() => setNextWorkPopoverState(null)} onSelect={(selectedActOrId) => { const sourceAct = acts[nextWorkPopoverState.rowIndex]; if (sourceAct) { const updatedAct = { ...sourceAct }; if (selectedActOrId === AUTO_NEXT_ID) { updatedAct.nextWorkActId = AUTO_NEXT_ID; updatedAct.nextWork = ''; } else if (selectedActOrId && typeof selectedActOrId === 'object') { const selectedAct = selectedActOrId as Act; updatedAct.nextWork = `Работы по акту №${selectedAct.number || 'б/н'} (${selectedAct.workName || '...'})`; updatedAct.nextWorkActId = selectedAct.id; } else if (typeof selectedActOrId === 'string') { updatedAct.nextWork = selectedActOrId; updatedAct.nextWorkActId = undefined; } else { updatedAct.nextWork = ''; updatedAct.nextWorkActId = undefined; } handleSaveWithTemplateResolution(updatedAct); } setNextWorkPopoverState(null); }} />}
             {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}> <MenuItem label="Копировать" shortcut="Ctrl+C" icon={<CopyIcon className="w-4 h-4" />} onClick={() => { handleCopy(); setContextMenu(null); }} disabled={selectedCells.size === 0} /> <MenuItem label="Вставить" shortcut="Ctrl+V" icon={<PasteIcon className="w-4 h-4" />} onClick={() => { handlePaste(); setContextMenu(null); }} /> <MenuSeparator /> <MenuItem label="Очистить ячейки" shortcut="Del" onClick={() => { handleClearCells(); setContextMenu(null); }} disabled={selectedCells.size === 0} /> <MenuSeparator /> <MenuItem label="Вставить строку выше" icon={<RowAboveIcon className="w-4 h-4" />} onClick={() => { const newAct = applyPinsToNewAct(createNewAct()); onSave(newAct, contextMenu.rowIndex); setContextMenu(null); }} /> <MenuItem label="Вставить строку ниже" icon={<RowBelowIcon className="w-4 h-4" />} onClick={() => { const newAct = applyPinsToNewAct(createNewAct()); onSave(newAct, contextMenu.rowIndex + 1); setContextMenu(null); }} /> <MenuSeparator /> <MenuItem label="Удалить акт(ы)" icon={<DeleteIcon className="w-4 h-4 text-red-600" />} className="text-red-600 hover:bg-red-50" onClick={() => { const rowIndices = Array.from(affectedRowsFromSelection); const indicesToDelete = rowIndices.includes(contextMenu.rowIndex) ? rowIndices : [contextMenu.rowIndex]; const idsToDelete = indicesToDelete.map(idx => acts[idx].id); onRequestDelete(idsToDelete); setContextMenu(null); }} /> </ContextMenu>}

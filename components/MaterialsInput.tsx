@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Certificate } from '../types';
 import { CertificateIcon, CloseIcon, PlusIcon, LinkIcon } from './Icons';
@@ -126,7 +125,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
     const [inputValue, setInputValue] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
-    const [usingKeyboard, setUsingKeyboard] = useState(false); // Track if user is navigating with keyboard
+    const [usingKeyboard, setUsingKeyboard] = useState(false);
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editIndex, setEditIndex] = useState<number | null>(null);
@@ -140,8 +139,6 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
         return value.split(';').map(s => s.trim()).filter(Boolean);
     }, [value]);
 
-    // 1. Calculate matching items
-    // 2. Group by Certificate
     const { groupedSuggestions, flatSuggestions } = useMemo(() => {
         if (!inputValue.trim()) return { groupedSuggestions: [], flatSuggestions: [] };
         
@@ -204,9 +201,8 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                 }
 
                 if (allTokensMatch) {
-                    const dateObj = new Date(cert.validUntil);
-                    const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString('ru-RU') : cert.validUntil;
-                    const fullString = `${mat} (сертификат № ${cert.number}, до ${dateStr})`;
+                    // Важно: Строка должна точно соответствовать тому, что ожидает MaterialPopover!
+                    const fullString = `${mat} (сертификат № ${cert.number})`;
                     
                     matches.push({
                         label: mat,
@@ -219,7 +215,6 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             });
 
             if (matches.length > 0) {
-                // Sort matches within the certificate by score
                 matches.sort((a, b) => a.score - b.score);
                 tempGroups.set(cert.id, {
                     cert,
@@ -229,12 +224,10 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             }
         });
 
-        // Convert map to array and sort groups by best match score
         const sortedGroups = Array.from(tempGroups.values())
             .sort((a, b) => a.bestScore - b.bestScore)
-            .slice(0, 10); // Limit number of groups shown
+            .slice(0, 10);
 
-        // Create a flat list for keyboard navigation
         const flat = sortedGroups.flatMap(g => g.items);
 
         return { groupedSuggestions: sortedGroups, flatSuggestions: flat };
@@ -302,9 +295,6 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             setItemToDeleteIndex(null);
         } else if (e.key === 'Enter') {
             e.preventDefault();
-            // Only select suggestion if it was highlighted AND we are using keyboard navigation
-            // OR if the user explicitly clicked (handled by onClick), but here we handle Enter.
-            // If the user just typed and pressed Enter, we want the typed text unless they arrowed down.
             if (showSuggestions && highlightedIndex >= 0 && flatSuggestions[highlightedIndex] && usingKeyboard) {
                 handleAddItem(flatSuggestions[highlightedIndex].fullString);
             } else if (inputValue.trim()) {
@@ -342,6 +332,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
     };
 
     const handleNavigate = (e: React.MouseEvent, certId: string) => {
+        e.preventDefault();
         e.stopPropagation();
         if (onNavigateToCertificate) {
             onNavigateToCertificate(certId);
@@ -373,7 +364,8 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                             <span 
                                 className="px-2 py-0.5 truncate max-w-[200px] cursor-pointer hover:underline" 
                                 title={cert ? item : "Нажмите, чтобы выбрать сертификат"}
-                                onClick={(e) => {
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
                                     e.stopPropagation();
                                     setEditIndex(index);
                                     setIsModalOpen(true);
@@ -383,7 +375,11 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                             </span>
                             <button
                                 type="button"
-                                onClick={(e) => { e.stopPropagation(); handleRemoveItem(index); }}
+                                onMouseDown={(e) => { 
+                                    e.preventDefault();
+                                    e.stopPropagation(); 
+                                    handleRemoveItem(index); 
+                                }}
                                 className="pr-1 pl-0.5 text-current opacity-60 hover:opacity-100 focus:outline-none border-l border-current/20 hover:bg-black/5 h-full rounded-r"
                             >
                                 <CloseIcon className="w-3 h-3" />
@@ -399,7 +395,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                         setInputValue(e.target.value);
                         setShowSuggestions(true);
                         setItemToDeleteIndex(null);
-                        setUsingKeyboard(false); // Reset keyboard state on typing
+                        setUsingKeyboard(false); 
                     }}
                     onKeyDown={handleKeyDown}
                     onPaste={handlePaste}
@@ -416,7 +412,9 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                 type="button"
                 className="absolute top-0 right-0 p-1 text-slate-400 hover:text-blue-600 bg-white/50 hover:bg-white rounded shadow-sm z-10"
                 title="Добавить из базы сертификатов"
-                onClick={() => {
+                onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     setEditIndex(null);
                     setIsModalOpen(true);
                 }}
@@ -427,7 +425,7 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
             {showSuggestions && groupedSuggestions.length > 0 && (
                 <div 
                     className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-60 overflow-y-auto w-[150%] min-w-[300px]"
-                    onMouseMove={() => setUsingKeyboard(false)} // Disable keyboard selection mode if mouse is moved over list
+                    onMouseMove={() => setUsingKeyboard(false)}
                 >
                     {groupedSuggestions.map((group) => (
                         <div key={group.cert.id} className="border-b border-slate-100 last:border-0">
@@ -455,7 +453,12 @@ const MaterialsInput: React.FC<MaterialsInputProps> = ({ value, onChange, certif
                                     <div
                                         key={globalIndex}
                                         className={`px-3 py-2 cursor-pointer text-sm flex flex-col ${isHighlighted ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : 'hover:bg-white'}`}
-                                        onClick={() => handleAddItem(item.fullString)}
+                                        onMouseDown={(e) => {
+                                            // ПРЕДОТВРАЩАЕМ перехват клика ячейкой таблицы
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleAddItem(item.fullString);
+                                        }}
                                         onMouseEnter={() => setHighlightedIndex(globalIndex)}
                                     >
                                         <div className="flex justify-between items-start gap-2">

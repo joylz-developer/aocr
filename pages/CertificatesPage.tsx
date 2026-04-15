@@ -9,8 +9,8 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 import ObjectResourceImporter from '../components/ObjectResourceImporter';
 
 interface CertificatesPageProps {
-    certificates: Certificate[]; // Current object's
-    allCertificates: Certificate[]; // All certs for copying
+    certificates: Certificate[]; 
+    allCertificates: Certificate[]; 
     acts: Act[];
     constructionObjects: ConstructionObject[];
     currentObjectId: string | null;
@@ -23,31 +23,26 @@ interface CertificatesPageProps {
     onClearInitialOpenId?: () => void;
 }
 
-// Updated Type for AI Suggestions to support multiple options
 interface AiSuggestions {
     numbers?: string[];
     dates?: string[];
     materials?: string[];
 }
 
-// Diff Types
 type DiffStatus = 'unchanged' | 'modified' | 'added' | 'removed';
 
 interface DiffItem {
-    id: string; // Unique ID for keying
+    id: string; 
     status: DiffStatus;
     original?: string;
     new?: string;
-    selected: boolean; // Whether the user accepts this change
+    selected: boolean; 
 }
 
 type ViewMode = 'card' | 'list';
 type ColumnCount = 1 | 2 | 3;
 type UsageFilter = 'all' | 'linked' | 'unlinked';
 
-// --- Helper Functions ---
-
-// Basic Levenshtein distance for fuzzy matching
 const levenshteinDistance = (a: string, b: string): number => {
     const matrix = [];
     for (let i = 0; i <= b.length; i++) matrix[i] = [i];
@@ -72,12 +67,11 @@ const levenshteinDistance = (a: string, b: string): number => {
 const countPdfPages = (base64Data: string): number => {
     try {
         const header = base64Data.split(',')[0];
-        if (!header.includes('pdf')) return 1; // Not a PDF, count as 1 file/sheet
+        if (!header.includes('pdf')) return 1; 
 
         const base64 = base64Data.split(',')[1];
         const binaryString = window.atob(base64);
         
-        // Count /Type /Page occurrences. 
         const matches = binaryString.match(/\/Type\s*\/Page\b/g);
         return matches ? matches.length : 1;
     } catch (e) {
@@ -878,6 +872,9 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
     const [editingCert, setEditingCert] = useState<Certificate | null>(null);
     const [previewFile, setPreviewFile] = useState<{ type: 'pdf' | 'image', data: string } | null>(null);
     
+    // ДОБАВЛЕНО: Состояние для окна копирования
+    const [copyModalState, setCopyModalState] = useState<{ cert: Certificate, selectedMaterials: Set<string> } | null>(null);
+    
     const [searchQuery, setSearchQuery] = useLocalStorage<string>('cert_search_query', '');
     const [viewMode, setViewMode] = useLocalStorage<ViewMode>('cert_view_mode', 'card');
     const [columnCount, setColumnCount] = useLocalStorage<ColumnCount>('cert_column_count', 3);
@@ -1138,7 +1135,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
                         className="flex items-center bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 px-3 py-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
                         title="Копировать из другого объекта"
                     >
-                        <CopyIcon className="w-5 h-5 mr-1" /> Копировать
+                        <CopyIcon className="w-5 h-5 mr-1" /> Скопировать
                     </button>
                     <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 whitespace-nowrap transition-colors">
                         <PlusIcon /> Добавить сертификат
@@ -1190,7 +1187,10 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
                                     <div className="p-2 bg-slate-100 dark:bg-slate-700 rounded text-slate-500 dark:text-slate-400 cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePreview(cert); }}><CertificateIcon className="w-6 h-6" /></div>
                                     <div className="flex-grow min-w-0"><h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate"><HighlightMatch text={cert.number} query={searchQuery} /></h3><p className="text-xs text-slate-500 dark:text-slate-400">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p></div>
                                     <div className="text-xs text-slate-500 dark:text-slate-400 truncate w-1/4">{cert.materials.map((m, i) => ( <span key={i}>{i > 0 && ', '}<HighlightMatch text={m} query={searchQuery} /></span> ))}</div>
-                                    <div className="flex items-center gap-1 flex-shrink-0">{linkCount > 0 && ( <button className="flex items-center gap-1 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-full text-xs font-medium border border-blue-100 dark:border-blue-800/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all mr-1" onClick={(e) => handleManageLinks(e, cert)} title="Управление связями"><LinkIcon className="w-3 h-3" /> {linkCount}</button> )}</div>
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                        <button className="text-slate-400 hover:text-blue-600 p-1.5 rounded hover:bg-blue-50 transition-colors" onClick={(e) => { e.stopPropagation(); setCopyModalState({ cert, selectedMaterials: new Set(cert.materials) }); }} title="Копировать сертификат"><CopyIcon className="w-4 h-4" /></button>
+                                        {linkCount > 0 && ( <button className="flex items-center gap-1 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-full text-xs font-medium border border-blue-100 dark:border-blue-800/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all mr-1" onClick={(e) => handleManageLinks(e, cert)} title="Управление связями"><LinkIcon className="w-3 h-3" /> {linkCount}</button> )}
+                                    </div>
                                 </div>
                             );
                         }
@@ -1203,7 +1203,13 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
                                 {!isSelectionMode && ( <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-10 dark:hover:bg-opacity-30 transition-opacity flex items-center justify-center pointer-events-none"><span className="opacity-0 group-hover:opacity-100 bg-white/90 dark:bg-slate-800/90 dark:text-slate-200 px-3 py-1 rounded-full text-xs font-medium shadow-sm">Редактировать</span></div> )}
                             </div>
                             <div className="p-4 flex flex-col flex-grow">
-                                <div className="flex justify-between items-start mb-2"><div><h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight mb-1"><HighlightMatch text={cert.number} query={searchQuery} /></h3><p className="text-xs text-slate-500 dark:text-slate-400">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p></div><div className="flex items-center gap-1 ml-2">{linkCount > 0 && ( <button className="flex items-center gap-1 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-full text-xs font-medium border border-blue-100 dark:border-blue-800/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all mr-1" onClick={(e) => handleManageLinks(e, cert)} title={`Используется в ${linkCount} актах`}><LinkIcon className="w-3 h-3" /> {linkCount}</button> )}</div></div>
+                                <div className="flex justify-between items-start mb-2">
+                                    <div><h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight mb-1"><HighlightMatch text={cert.number} query={searchQuery} /></h3><p className="text-xs text-slate-500 dark:text-slate-400">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p></div>
+                                    <div className="flex items-center gap-1 ml-2">
+                                        <button className="text-slate-400 hover:text-blue-600 p-1.5 rounded hover:bg-blue-50 transition-colors" onClick={(e) => { e.stopPropagation(); setCopyModalState({ cert, selectedMaterials: new Set(cert.materials) }); }} title="Копировать сертификат для вставки в Акт"><CopyIcon className="w-4 h-4" /></button>
+                                        {linkCount > 0 && ( <button className="flex items-center gap-1 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-full text-xs font-medium border border-blue-100 dark:border-blue-800/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all mr-1" onClick={(e) => handleManageLinks(e, cert)} title={`Используется в ${linkCount} актах`}><LinkIcon className="w-3 h-3" /> {linkCount}</button> )}
+                                    </div>
+                                </div>
                                 <div className="flex-grow cursor-pointer group/materials hover:bg-blue-50 dark:hover:bg-slate-700/50 hover:shadow-sm rounded-md transition-all duration-200 p-1 -m-1" onClick={(e) => toggleMaterialsExpand(e, cert.id)} title="Нажмите, чтобы развернуть/свернуть список материалов"><p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1 flex justify-between items-center group-hover/materials:text-blue-500 dark:group-hover/materials:text-blue-400 transition-colors">Материалы:<ChevronDownIcon className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} /></p><ul className="text-xs text-slate-700 dark:text-slate-300 space-y-1">{(isExpanded ? cert.materials : cert.materials.slice(0, 3)).map((m, i) => ( <li key={i} className="truncate border-l-2 border-blue-100 dark:border-slate-600 pl-2 group-hover/materials:border-blue-300 dark:group-hover/materials:border-blue-500"><HighlightMatch text={m} query={searchQuery} /></li> ))}{!isExpanded && cert.materials.length > 3 && ( <li className="text-slate-400 dark:text-slate-500 pl-2 italic">...и еще {cert.materials.length - 3}</li> )}{cert.materials.length === 0 && <li className="text-slate-400 dark:text-slate-500 italic pl-2">Список пуст</li>}</ul></div>
                             </div>
                         </div>
@@ -1229,6 +1235,55 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
                 <CertificateForm certificate={editingCert} settings={settings} onSave={onSave} onClose={handleCloseModal} />
             </Modal>
             
+            {/* МОДАЛЬНОЕ ОКНО КОПИРОВАНИЯ СЕРТИФИКАТА */}
+            {copyModalState && (
+                <Modal isOpen={true} onClose={() => setCopyModalState(null)} title={`Копирование сертификата № ${copyModalState.cert.number}`}>
+                    <div className="p-4 bg-white dark:bg-slate-800">
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">Выберите материалы, которые хотите скопировать для вставки в таблицу Актов:</p>
+                        
+                        <div className="max-h-60 overflow-y-auto space-y-1 border border-slate-200 dark:border-slate-700 rounded-md p-2 mb-6 bg-slate-50 dark:bg-slate-900/50">
+                            {copyModalState.cert.materials.length === 0 && (
+                                <p className="text-xs italic text-slate-500 p-2">В сертификате нет добавленных материалов.</p>
+                            )}
+                            {copyModalState.cert.materials.map(mat => (
+                                <label key={mat} className="flex items-start gap-3 text-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 p-2 rounded transition-colors">
+                                    <input 
+                                        type="checkbox" 
+                                        className="form-checkbox-custom w-4 h-4 mt-0.5 flex-shrink-0"
+                                        checked={copyModalState.selectedMaterials.has(mat)}
+                                        onChange={(e) => {
+                                            const newSet = new Set(copyModalState.selectedMaterials);
+                                            if (e.target.checked) newSet.add(mat);
+                                            else newSet.delete(mat);
+                                            setCopyModalState({ ...copyModalState, selectedMaterials: newSet });
+                                        }}
+                                    />
+                                    <span className="break-words text-slate-800 dark:text-slate-200">{mat}</span>
+                                </label>
+                            ))}
+                        </div>
+                        
+                        <div className="flex justify-end gap-3 pt-2 border-t border-slate-200 dark:border-slate-700">
+                            <button onClick={() => setCopyModalState(null)} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors font-medium">Отмена</button>
+                            <button 
+                                onClick={() => {
+                                    const selected = copyModalState.cert.materials.filter(m => copyModalState.selectedMaterials.has(m));
+                                    const strToCopy = selected.map(m => `${m} (сертификат № ${copyModalState.cert.number})`).join('; ');
+                                    navigator.clipboard.writeText(strToCopy).then(() => {
+                                        alert('Текст успешно скопирован в буфер обмена! Теперь вставьте его в поле Материалы на странице актов (Ctrl+V).');
+                                        setCopyModalState(null);
+                                    }).catch(err => alert('Ошибка при копировании: ' + err));
+                                }} 
+                                className="px-5 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={copyModalState.selectedMaterials.size === 0}
+                            >
+                                Скопировать выбранное
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
             {deleteWarning && ( <Modal isOpen={true} onClose={() => setDeleteWarning(null)} title="Удаление сертификата"><div className="space-y-4"><p className="text-slate-700 dark:text-slate-300">Сертификат <strong>{deleteWarning.cert.number}</strong> используется в <strong>{deleteWarning.usedInActs.length}</strong> актах.</p><p className="text-sm text-slate-600 dark:text-slate-400">Если вы удалите сертификат, ссылки на него в актах могут стать некорректными. Выберите действие:</p><div className="flex flex-col gap-3 pt-2"><button onClick={() => handleConfirmDelete('remove_materials')} className="w-full flex items-start gap-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800/50 p-3 rounded-md hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors text-left"><DeleteIcon className="w-5 h-5 flex-shrink-0 mt-0.5" /><div><div className="font-semibold text-sm">Удалить Сертификат и Строки материалов</div><div className="text-xs opacity-75">Строки с упоминанием этого сертификата будут полностью удалены из всех актов.</div></div></button><button onClick={() => handleConfirmDelete('clean')} className="w-full flex items-start gap-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 p-3 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"><div className="p-0.5 bg-slate-200 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300"><CloseIcon className="w-4 h-4" /></div><div><div className="font-semibold text-sm text-slate-800 dark:text-slate-200">Удалить Сертификат и Ссылки</div><div className="text-xs text-slate-500 dark:text-slate-400">Сертификат удаляется. В актах останутся названия материалов, но исчезнет текст "(сертификат №...)".</div></div></button><button onClick={() => handleConfirmDelete('default')} className="w-full flex items-start gap-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 p-3 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"><div className="p-0.5 bg-slate-200 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300"><CheckIcon className="w-4 h-4" /></div><div><div className="font-semibold text-sm text-slate-800 dark:text-slate-200">Удалить Сертификат, Оставить текст</div><div className="text-xs text-slate-500 dark:text-slate-400">Сертификат удаляется из базы. Текст в актах не меняется (останется как "мертвый" текст).</div></div></button><button onClick={() => setDeleteWarning(null)} className="w-full text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 text-sm py-2 mt-2 transition-colors">Отмена</button></div></div></Modal> )}
 
             {bulkDeleteWarning && ( <Modal isOpen={true} onClose={() => setBulkDeleteWarning(null)} title="Массовое удаление"><div className="space-y-4"><p className="text-slate-700 dark:text-slate-300">Вы выбрали для удаления <strong>{bulkDeleteWarning.totalCount}</strong> сертификатов.</p><div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded text-sm text-amber-800 dark:text-amber-300"><strong>Внимание:</strong> {bulkDeleteWarning.linkedCount} из них используются в актах.</div><p className="text-sm text-slate-600 dark:text-slate-400">Выберите, как поступить с сертификатами, которые имеют связи:</p><div className="flex flex-col gap-3 pt-2"><button onClick={() => handleConfirmBulkDelete('remove_materials')} className="w-full flex items-start gap-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800/50 p-3 rounded-md hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors text-left"><DeleteIcon className="w-5 h-5 flex-shrink-0 mt-0.5" /><div><div className="font-semibold text-sm">Удалить Сертификаты и Строки материалов</div><div className="text-xs opacity-75">Строки материалов, ссылающиеся на удаляемые сертификаты, будут удалены из актов.</div></div></button><button onClick={() => handleConfirmBulkDelete('clean')} className="w-full flex items-start gap-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 p-3 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"><div className="p-0.5 bg-slate-200 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300"><CloseIcon className="w-4 h-4" /></div><div><div className="font-semibold text-sm text-slate-800 dark:text-slate-200">Удалить Сертификаты и Ссылки</div><div className="text-xs text-slate-500 dark:text-slate-400">Сертификаты удаляются. Из актов удаляется только текст "(сертификат №...)", название материала остается.</div></div></button><button onClick={() => handleConfirmBulkDelete('default')} className="w-full flex items-start gap-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 p-3 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"><div className="p-0.5 bg-slate-200 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300"><CheckIcon className="w-4 h-4" /></div><div><div className="font-semibold text-sm text-slate-800 dark:text-slate-200">Удалить Сертификаты, Оставить текст</div><div className="text-xs text-slate-500 dark:text-slate-400">Сертификаты удаляются из базы. Текст в актах не меняется.</div></div></button><button onClick={() => setBulkDeleteWarning(null)} className="w-full text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 text-sm py-2 mt-2 transition-colors">Отмена</button></div></div></Modal> )}

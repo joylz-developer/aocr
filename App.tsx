@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry, ExportSettings, CertificateFile, ConstructionObject } from './types';
@@ -222,6 +221,7 @@ const App: React.FC = () => {
     };
 
     const [currentPage, setCurrentPage] = useState<Page>('acts');
+    const [openCertificateId, setOpenCertificateId] = useState<string | null>(null);
     const [importData, setImportData] = useState<ImportData | null>(null);
     const [showExportModal, setShowExportModal] = useState(false);
     const [confirmationRequest, setConfirmationRequest] = useState<{ title: string, message: React.ReactNode, onConfirm: () => void } | null>(null);
@@ -855,6 +855,7 @@ const App: React.FC = () => {
                                 }}
                                 setCurrentPage={setCurrentPage}
                                 onNavigateToCertificate={(id) => {
+                                    setOpenCertificateId(id);
                                     setCurrentPage('certificates');
                                 }}
                             />
@@ -911,6 +912,8 @@ const App: React.FC = () => {
                                 onDelete={handleDeleteCertificate}
                                 onUnlink={handleUnlinkCertificate}
                                 onImport={handleImportFromObject}
+                                initialOpenId={openCertificateId}
+                                onClearInitialOpenId={() => setOpenCertificateId(null)}
                             />
                         )}
                         {currentPage === 'settings' && (
