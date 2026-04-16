@@ -134,7 +134,7 @@ const HighlightMatch: React.FC<{ text: string; query: string }> = ({ text, query
                 const chunk = text.substring(lastIdx, k);
                 elements.push(
                     isHighlighting 
-                        ? <span key={lastIdx} className="font-extrabold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 rounded-[1px] px-0">{chunk}</span>
+                        ? <span key={lastIdx} className="font-extrabold text-blue-600 bg-blue-50 rounded-[1px] px-0">{chunk}</span>
                         : <span key={lastIdx}>{chunk}</span>
                 );
             }
@@ -147,7 +147,7 @@ const HighlightMatch: React.FC<{ text: string; query: string }> = ({ text, query
         const chunk = text.substring(lastIdx);
         elements.push(
             isHighlighting 
-                ? <span key={lastIdx} className="font-extrabold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 rounded-[1px] px-0">{chunk}</span>
+                ? <span key={lastIdx} className="font-extrabold text-blue-600 bg-blue-50 rounded-[1px] px-0">{chunk}</span>
                 : <span key={lastIdx}>{chunk}</span>
         );
     }
@@ -246,7 +246,7 @@ const FilterPicker: React.FC<{
         <div className="relative flex-shrink-0" ref={pickerRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`flex items-center gap-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 transition-colors whitespace-nowrap ${value !== 'all' ? 'ring-2 ring-blue-100 dark:ring-blue-900 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400' : ''}`}
+                className={`flex items-center gap-2 bg-white text-slate-700 px-4 py-2 rounded-md hover:bg-slate-100 border border-slate-300 transition-colors whitespace-nowrap ${value !== 'all' ? 'ring-2 ring-blue-100 border-blue-300 text-blue-700' : ''}`}
                 title="Фильтр по использованию"
             >
                 <LinkIcon className="w-5 h-5" />
@@ -254,7 +254,7 @@ const FilterPicker: React.FC<{
                 <ChevronDownIcon className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
             </button>
             {isOpen && (
-                <div className="absolute left-0 mt-2 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md shadow-lg z-50 p-2 animate-fade-in-up">
+                <div className="absolute left-0 mt-2 w-64 bg-white border border-slate-200 rounded-md shadow-lg z-50 p-2 animate-fade-in-up">
                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 mb-1">
                         Фильтрация
                     </div>
@@ -263,11 +263,11 @@ const FilterPicker: React.FC<{
                             key={opt.val}
                             onClick={() => { onChange(opt.val); setIsOpen(false); }}
                             className={`w-full text-left px-3 py-2 text-sm rounded-md flex items-center justify-between group transition-colors
-                                ${value === opt.val ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}
+                                ${value === opt.val ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700 hover:bg-slate-50'}
                             `}
                         >
                             <span>{opt.label}</span>
-                            {value === opt.val && <CheckIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
+                            {value === opt.val && <CheckIcon className="w-4 h-4 text-blue-600" />}
                         </button>
                     ))}
                 </div>
@@ -344,7 +344,7 @@ const ImageViewer: React.FC<{ src: string; alt: string }> = ({ src, alt }) => {
     const zoomOut = () => setScale(s => Math.max(0.5, s - 0.5));
 
     return (
-        <div className="relative w-full h-full overflow-hidden bg-slate-800 rounded-lg group select-none">
+        <div className="relative w-full h-full overflow-hidden bg-slate-100 rounded-lg group select-none">
             <div 
                 ref={imgRef}
                 className="w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing"
@@ -679,42 +679,42 @@ Do not include any markdown formatting or additional text. Just the JSON.
         onClose();
     };
 
-    const inputClass = "mt-1 block w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 dark:text-slate-100 disabled:bg-slate-100 dark:disabled:bg-slate-900 disabled:text-slate-500 dark:disabled:text-slate-500 text-sm";
-    const labelClass = "block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1";
+    const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 disabled:bg-slate-100 disabled:text-slate-500 text-sm";
+    const labelClass = "block text-sm font-medium text-slate-700 mb-1";
 
     return (
         <div onClick={handleModalClick} className="h-full">
             <form onSubmit={handleSubmit} className="flex flex-col h-[75vh]">
                 <div className="flex flex-row gap-6 h-full min-h-0 relative">
                     <div className={`flex flex-col h-full min-h-0 gap-2 transition-all duration-300 ease-in-out relative ${isGalleryCollapsed ? 'w-12' : 'w-full md:w-3/5'}`}>
-                        <button type="button" onClick={() => setIsGalleryCollapsed(!isGalleryCollapsed)} className="absolute -right-3 top-2 z-30 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-full p-1 shadow-md hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300">
+                        <button type="button" onClick={() => setIsGalleryCollapsed(!isGalleryCollapsed)} className="absolute -right-3 top-2 z-30 bg-white border border-slate-300 rounded-full p-1 shadow-md hover:bg-slate-50 text-slate-600">
                             {isGalleryCollapsed ? <MaximizeIcon className="w-4 h-4"/> : <MinimizeIcon className="w-4 h-4"/>}
                         </button>
                         {!isGalleryCollapsed ? (
                             <>
                                 <div className="flex justify-between items-center mb-2 px-1 min-h-[1.75rem]">
-                                    <span className="font-semibold text-slate-700 dark:text-slate-200 truncate pr-2" title={activeFile ? activeFile.name : ''}>{activeFile ? activeFile.name : 'Нет файла'}</span>
+                                    <span className="font-semibold text-slate-700 truncate pr-2" title={activeFile ? activeFile.name : ''}>{activeFile ? activeFile.name : 'Нет файла'}</span>
                                 </div>
-                                <div className={`flex-grow flex flex-col bg-slate-50 dark:bg-slate-900 rounded-lg border-2 transition-colors relative overflow-hidden ${isDragging ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700'}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
-                                    <div className="flex-grow overflow-hidden relative flex items-center justify-center p-2 bg-slate-800">
+                                <div className={`flex-grow flex flex-col bg-slate-50 rounded-lg border-2 transition-colors relative overflow-hidden ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+                                    <div className="flex-grow overflow-hidden relative flex items-center justify-center p-2 bg-slate-100">
                                         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,image/*" multiple />
-                                        {activeFile ? ( activeFile.type === 'image' ? ( <ImageViewer src={activeFile.data} alt="Preview" /> ) : ( <object data={activeFile.data} type="application/pdf" className="w-full h-full rounded-md shadow-inner bg-white dark:bg-slate-800"><div className="flex flex-col items-center justify-center h-full text-slate-400"><p>PDF Preview не поддерживается.</p></div></object> ) ) : ( <div className="text-center p-6 pointer-events-none flex flex-col items-center"><CloudUploadIcon className="w-16 h-16 text-slate-600 dark:text-slate-400 mx-auto mb-4" /><p className="text-lg text-slate-400 dark:text-slate-500 font-medium">Перетащите файлы сюда</p></div> )}
-                                        {isDragging && ( <div className="absolute inset-0 bg-blue-100/90 dark:bg-blue-900/90 flex flex-col items-center justify-center z-20 border-2 border-blue-500 border-dashed rounded-lg animate-fade-in-up"><CloudUploadIcon className="w-16 h-16 text-blue-600 dark:text-blue-400 mb-2" /><span className="text-lg font-bold text-blue-700 dark:text-blue-300">Отпустите, чтобы добавить файлы</span></div> )}
+                                        {activeFile ? ( activeFile.type === 'image' ? ( <ImageViewer src={activeFile.data} alt="Preview" /> ) : ( <object data={activeFile.data} type="application/pdf" className="w-full h-full rounded-md shadow-inner bg-white"><div className="flex flex-col items-center justify-center h-full text-slate-400"><p>PDF Preview не поддерживается.</p></div></object> ) ) : ( <div className="text-center p-6 pointer-events-none flex flex-col items-center"><CloudUploadIcon className="w-16 h-16 text-slate-600 mx-auto mb-4" /><p className="text-lg text-slate-400 font-medium">Перетащите файлы сюда</p></div> )}
+                                        {isDragging && ( <div className="absolute inset-0 bg-blue-100/90 flex flex-col items-center justify-center z-20 border-2 border-blue-500 border-dashed rounded-lg animate-fade-in-up"><CloudUploadIcon className="w-16 h-16 text-blue-600 mb-2" /><span className="text-lg font-bold text-blue-700">Отпустите, чтобы добавить файлы</span></div> )}
                                     </div>
                                 </div>
-                                <div className="h-24 flex-shrink-0 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-2 overflow-x-auto flex gap-2 items-center">
+                                <div className="h-24 flex-shrink-0 bg-slate-100 rounded-lg border border-slate-200 p-2 overflow-x-auto flex gap-2 items-center">
                                     {formData.files.map(file => (
-                                        <div key={file.id} onClick={() => setActiveFileId(file.id)} className={`relative h-20 w-20 min-w-[5rem] rounded-md border-2 overflow-hidden cursor-pointer group flex-shrink-0 ${activeFileId === file.id ? 'border-blue-600 ring-2 ring-blue-200 dark:ring-blue-900' : 'border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-500'}`}>
-                                            {file.type === 'image' ? ( <img src={file.data} alt="thumb" className="w-full h-full object-cover" /> ) : ( <div className="w-full h-full bg-white dark:bg-slate-700 flex flex-col items-center justify-center p-1"><CertificateIcon className="w-8 h-8 text-red-500 dark:text-red-400" /><span className="text-[8px] text-slate-600 dark:text-slate-300 truncate w-full text-center mt-1">{file.name}</span></div> )}
+                                        <div key={file.id} onClick={() => setActiveFileId(file.id)} className={`relative h-20 w-20 min-w-[5rem] rounded-md border-2 overflow-hidden cursor-pointer group flex-shrink-0 ${activeFileId === file.id ? 'border-blue-600 ring-2 ring-blue-100' : 'border-slate-300 hover:border-slate-400'}`}>
+                                            {file.type === 'image' ? ( <img src={file.data} alt="thumb" className="w-full h-full object-cover" /> ) : ( <div className="w-full h-full bg-white flex flex-col items-center justify-center p-1"><CertificateIcon className="w-8 h-8 text-red-500" /><span className="text-[8px] text-slate-600 truncate w-full text-center mt-1">{file.name}</span></div> )}
                                             <div className="absolute top-0 right-0 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"><button type="button" onClick={(e) => handleDeleteFileClick(e, file.id)} className="bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600"><CloseIcon className="w-3 h-3" /></button></div>
                                         </div>
                                     ))}
-                                    <button type="button" onClick={() => fileInputRef.current?.click()} className="h-20 w-20 min-w-[5rem] rounded-md border-2 border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"><PlusIcon className="w-6 h-6 mb-1" /><span className="text-xs font-medium">Добавить</span></button>
+                                    <button type="button" onClick={() => fileInputRef.current?.click()} className="h-20 w-20 min-w-[5rem] rounded-md border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-colors"><PlusIcon className="w-6 h-6 mb-1" /><span className="text-xs font-medium">Добавить</span></button>
                                 </div>
                             </>
                         ) : (
-                            <div className="h-full bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 flex flex-col items-center pt-8 gap-4 overflow-hidden">
-                                {activeFile && ( <div className="w-8 h-8 rounded overflow-hidden shadow border border-white dark:border-slate-600" title={activeFile.name}>{activeFile.type === 'image' ? ( <img src={activeFile.data} className="w-full h-full object-cover"/> ) : ( <CertificateIcon className="w-full h-full text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-700 p-1"/> )}</div> )}
+                            <div className="h-full bg-slate-100 rounded-lg border border-slate-200 flex flex-col items-center pt-8 gap-4 overflow-hidden">
+                                {activeFile && ( <div className="w-8 h-8 rounded overflow-hidden shadow border border-white" title={activeFile.name}>{activeFile.type === 'image' ? ( <img src={activeFile.data} className="w-full h-full object-cover"/> ) : ( <CertificateIcon className="w-full h-full text-slate-400 bg-white p-1"/> )}</div> )}
                                 <span className="vertical-rl text-xs text-slate-400 font-medium tracking-wider uppercase" style={{writingMode: 'vertical-rl'}}>Превью скрыто</span>
                             </div>
                         )}
@@ -732,9 +732,9 @@ Do not include any markdown formatting or additional text. Just the JSON.
                                 <input type="text" name="number" value={formData.number} onChange={handleChange} className={inputClass} required placeholder="Паспорт качества № 123" disabled={isPreviewMode} />
                                 {aiSuggestions?.numbers && aiSuggestions.numbers.length > 0 && !isPreviewMode && (
                                     <div className="mt-2 flex flex-wrap gap-2">
-                                        <span className="text-xs text-violet-600 dark:text-violet-400 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
+                                        <span className="text-xs text-violet-600 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
                                         {aiSuggestions.numbers.map((suggestion, idx) => ( 
-                                            <button key={idx} type="button" onClick={() => applyAiSuggestion('number', suggestion)} className={`text-xs px-2 py-1 rounded border transition-colors max-w-full truncate ${formData.number === suggestion ? 'bg-violet-100 dark:bg-violet-900/50 text-violet-800 dark:text-violet-200 border-violet-300 dark:border-violet-700 ring-1 ring-violet-200 dark:ring-violet-700' : 'bg-violet-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-violet-100 dark:border-slate-600 hover:bg-violet-200 dark:hover:bg-violet-900/30 hover:border-violet-300 dark:hover:border-violet-600' } `} title={`Нажмите, чтобы выбрать: ${suggestion}`}>{suggestion}</button> 
+                                            <button key={idx} type="button" onClick={() => applyAiSuggestion('number', suggestion)} className={`text-xs px-2 py-1 rounded border transition-colors max-w-full truncate ${formData.number === suggestion ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300' } `} title={`Нажмите, чтобы выбрать: ${suggestion}`}>{suggestion}</button> 
                                         ))}
                                     </div>
                                 )}
@@ -745,11 +745,11 @@ Do not include any markdown formatting or additional text. Just the JSON.
                                     <input type="date" name="validUntil" value={formData.validUntil} onChange={handleChange} className={inputClass} required disabled={isPreviewMode} />
                                     {aiSuggestions?.dates && aiSuggestions.dates.length > 0 && !isPreviewMode && (
                                         <div className="mt-2 flex flex-wrap gap-2">
-                                            <span className="text-xs text-violet-600 dark:text-violet-400 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
+                                            <span className="text-xs text-violet-600 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
                                             {aiSuggestions.dates.map((dateStr, idx) => { 
                                                 const formatted = new Date(dateStr).toLocaleDateString(); 
                                                 return ( 
-                                                    <button key={idx} type="button" onClick={() => applyAiSuggestion('validUntil', dateStr)} className={`text-xs px-2 py-1 rounded border transition-colors ${formData.validUntil === dateStr ? 'bg-violet-100 dark:bg-violet-900/50 text-violet-800 dark:text-violet-200 border-violet-300 dark:border-violet-700 ring-1 ring-violet-200 dark:ring-violet-700' : 'bg-violet-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-violet-100 dark:border-slate-600 hover:bg-violet-200 dark:hover:bg-violet-900/30 hover:border-violet-300 dark:hover:border-violet-600' } `} title={`Нажмите, чтобы выбрать: ${formatted}`}>{formatted}</button> 
+                                                    <button key={idx} type="button" onClick={() => applyAiSuggestion('validUntil', dateStr)} className={`text-xs px-2 py-1 rounded border transition-colors ${formData.validUntil === dateStr ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300' } `} title={`Нажмите, чтобы выбрать: ${formatted}`}>{formatted}</button> 
                                                 ); 
                                             })}
                                         </div>
@@ -760,28 +760,28 @@ Do not include any markdown formatting or additional text. Just the JSON.
                                     <input type="number" name="amount" value={formData.amount} onChange={handleChange} className={inputClass} min="1" disabled={isPreviewMode} />
                                 </div>
                             </div>
-                            <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                            <div className="border-t border-slate-200 pt-4">
                                 <div className="flex justify-between items-center mb-1">
                                     <label className={labelClass}>Материалы ({formData.materials.length})</label>
-                                    {formData.materials.length > 0 && !isPreviewMode && ( <button type="button" onClick={handleRemoveAllMaterials} className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 underline">Удалить все</button> )}
+                                    {formData.materials.length > 0 && !isPreviewMode && ( <button type="button" onClick={handleRemoveAllMaterials} className="text-xs text-red-500 hover:text-red-700 underline">Удалить все</button> )}
                                 </div>
                                 {aiSuggestions?.materials && aiSuggestions.materials.length > 0 && !isPreviewMode && (
-                                    <div className="mb-4 bg-violet-50 dark:bg-violet-900/10 border border-violet-100 dark:border-violet-800/50 rounded-md p-3">
+                                    <div className="mb-4 bg-violet-50 border border-violet-100 rounded-md p-3">
                                         <div className="flex justify-between items-center mb-2 cursor-pointer select-none" onClick={() => setShowAiMaterials(!showAiMaterials)}>
-                                            <p className="text-xs text-violet-700 dark:text-violet-400 font-bold flex items-center"><SparklesIcon className="w-3 h-3 mr-1"/> Найдено в документе ({aiSuggestions.materials.length})</p>
-                                            <div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 text-violet-500 dark:text-violet-400 transition-transform ${showAiMaterials ? 'rotate-180' : ''}`} /></div>
+                                            <p className="text-xs text-violet-700 font-bold flex items-center"><SparklesIcon className="w-3 h-3 mr-1"/> Найдено в документе ({aiSuggestions.materials.length})</p>
+                                            <div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 text-violet-500 transition-transform ${showAiMaterials ? 'rotate-180' : ''}`} /></div>
                                         </div>
                                         {showAiMaterials && (
                                             <div className="animate-fade-in-up">
-                                                <div className="flex gap-2 mb-3 justify-end border-b border-violet-100 dark:border-violet-800/50 pb-2">
-                                                    <button type="button" onClick={() => { if (aiSuggestions.materials) { setFormData(prev => ({...prev, materials: [...aiSuggestions.materials!]})); } }} className="text-xs bg-white dark:bg-slate-800 border border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300 px-2 py-1 rounded hover:bg-violet-50 dark:hover:bg-violet-900/50 transition-colors">Заменить все</button>
+                                                <div className="flex gap-2 mb-3 justify-end border-b border-violet-100 pb-2">
+                                                    <button type="button" onClick={() => { if (aiSuggestions.materials) { setFormData(prev => ({...prev, materials: [...aiSuggestions.materials!]})); } }} className="text-xs bg-white border border-violet-200 text-violet-700 px-2 py-1 rounded hover:bg-violet-50 transition-colors">Заменить все</button>
                                                     <button type="button" onClick={() => { if (aiSuggestions.materials) { const unique = aiSuggestions.materials.filter(m => !formData.materials.includes(m)); setFormData(prev => ({...prev, materials: [...prev.materials, ...unique]})); } }} className="text-xs bg-violet-600 text-white px-2 py-1 rounded hover:bg-violet-700 transition-colors">Добавить уникальные</button>
                                                 </div>
                                                 <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
                                                     {aiSuggestions.materials.map((mat, idx) => { 
                                                         const isDuplicate = formData.materials.includes(mat); 
                                                         return ( 
-                                                            <button key={idx} type="button" onClick={() => !isDuplicate && handleAddMaterial(mat)} disabled={isDuplicate} className={`text-xs border px-2 py-1 rounded-full text-left max-w-full truncate transition-colors ${isDuplicate ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 cursor-default line-through' : 'bg-white dark:bg-slate-800 border-violet-200 dark:border-violet-700 text-slate-700 dark:text-slate-300 hover:border-violet-400 dark:hover:border-violet-500 hover:text-violet-700 dark:hover:text-violet-400' } `} title={isDuplicate ? "Уже добавлено" : "Нажмите, чтобы добавить"}>{isDuplicate ? '' : '+ '}{mat}</button> 
+                                                            <button key={idx} type="button" onClick={() => !isDuplicate && handleAddMaterial(mat)} disabled={isDuplicate} className={`text-xs border px-2 py-1 rounded-full text-left max-w-full truncate transition-colors ${isDuplicate ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-default line-through' : 'bg-white border-violet-200 text-slate-700 hover:border-violet-400 hover:text-violet-700' } `} title={isDuplicate ? "Уже добавлено" : "Нажмите, чтобы добавить"}>{isDuplicate ? '' : '+ '}{mat}</button> 
                                                         ); 
                                                     })}
                                                 </div>
@@ -792,61 +792,61 @@ Do not include any markdown formatting or additional text. Just the JSON.
                                 {!isPreviewMode && (
                                     <div className="flex gap-2 mt-1 mb-3">
                                         <input type="text" value={newMaterial} onChange={e => setNewMaterial(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleManualAddMaterial())} className={inputClass} placeholder="Введите название и нажмите Enter" />
-                                        <button type="button" onClick={handleManualAddMaterial} className="mt-1 px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"><PlusIcon className="w-5 h-5"/></button>
+                                        <button type="button" onClick={handleManualAddMaterial} className="mt-1 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-300 rounded-md hover:bg-slate-200 transition-colors"><PlusIcon className="w-5 h-5"/></button>
                                     </div>
                                 )}
-                                {lastDeletedMaterial && !isPreviewMode && ( <div className="mb-2 p-2 bg-slate-100 dark:bg-slate-800 text-xs flex justify-between items-center rounded border border-slate-200 dark:border-slate-700 animate-fade-in-up"><span className="text-slate-600 dark:text-slate-300 truncate mr-2">Удалено: "{lastDeletedMaterial.value}"</span><button type="button" onClick={handleUndoDelete} className="text-blue-600 dark:text-blue-400 font-medium hover:underline flex items-center gap-1 whitespace-nowrap"><RestoreIcon className="w-3 h-3" /> Вернуть</button></div> )}
+                                {lastDeletedMaterial && !isPreviewMode && ( <div className="mb-2 p-2 bg-slate-100 text-xs flex justify-between items-center rounded border border-slate-200 animate-fade-in-up"><span className="text-slate-600 truncate mr-2">Удалено: "{lastDeletedMaterial.value}"</span><button type="button" onClick={handleUndoDelete} className="text-blue-600 font-medium hover:underline flex items-center gap-1 whitespace-nowrap"><RestoreIcon className="w-3 h-3" /> Вернуть</button></div> )}
                                 <div className="flex flex-col gap-1">
-                                    {formData.materials.length === 0 && !isPreviewMode && <p className="text-xs text-slate-400 dark:text-slate-500 text-center py-4 border border-dashed border-slate-200 dark:border-slate-700 rounded">Список материалов пуст</p>}
+                                    {formData.materials.length === 0 && !isPreviewMode && <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded">Список материалов пуст</p>}
                                     {!isPreviewMode && formData.materials.map((item, idx) => ( 
-                                        <div key={idx} className={`flex items-start gap-1 group py-1 px-1 rounded transition-colors ${hoveredDeleteIndex === idx ? 'bg-red-50 dark:bg-red-900/20' : ''}`}>
-                                            <AutoResizeTextarea value={item} onChange={(e) => handleEditMaterial(idx, e.target.value)} className="block w-full text-sm border-slate-200 dark:border-slate-700 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded focus:bg-white dark:focus:bg-slate-800 transition-colors py-1 px-2 bg-slate-50 dark:bg-slate-900/50 text-slate-900 dark:text-slate-100" />
-                                            <button type="button" onClick={() => handleRemoveMaterial(idx)} onMouseEnter={() => setHoveredDeleteIndex(idx)} onMouseLeave={() => setHoveredDeleteIndex(null)} className="text-slate-400 hover:text-red-500 dark:hover:text-red-400 p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 mt-0.5 transition-colors" title="Удалить строку"><CloseIcon className="w-4 h-4" /></button>
+                                        <div key={idx} className={`flex items-start gap-1 group py-1 px-1 rounded transition-colors ${hoveredDeleteIndex === idx ? 'bg-red-50' : ''}`}>
+                                            <AutoResizeTextarea value={item} onChange={(e) => handleEditMaterial(idx, e.target.value)} className="block w-full text-sm border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded focus:bg-white transition-colors py-1 px-2 bg-slate-50 text-slate-900" />
+                                            <button type="button" onClick={() => handleRemoveMaterial(idx)} onMouseEnter={() => setHoveredDeleteIndex(idx)} onMouseLeave={() => setHoveredDeleteIndex(null)} className="text-slate-400 hover:text-red-500 p-1.5 rounded hover:bg-red-100 mt-0.5 transition-colors" title="Удалить строку"><CloseIcon className="w-4 h-4" /></button>
                                         </div> 
                                     ))}
                                 </div>
                                 {formData.materials.length > 0 && isAiConfigured && (
-                                    <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                    <div className="mt-6 pt-4 border-t border-slate-200">
                                         {!diffResult ? (
                                             <div className="flex gap-2">
-                                                <input type="text" value={massEditPrompt} onChange={e => setMassEditPrompt(e.target.value)} placeholder="AI: 'Удали размеры', 'Исправь...', 'Очистить'..." className="flex-grow text-sm border border-violet-200 dark:border-violet-700/50 rounded-md px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-500" onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAiMassEdit())} />
+                                                <input type="text" value={massEditPrompt} onChange={e => setMassEditPrompt(e.target.value)} placeholder="AI: 'Удали размеры', 'Исправь...', 'Очистить'..." className="flex-grow text-sm border border-violet-200 rounded-md px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-violet-500" onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAiMassEdit())} />
                                                 <button type="button" onClick={handleAiMassEdit} disabled={isMassEditing || !massEditPrompt.trim()} className="bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-3 py-2 rounded-md hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-50 text-sm whitespace-nowrap flex items-center transition-all">{isMassEditing ? '...' : <SparklesIcon className="w-4 h-4" />}</button>
                                             </div>
                                         ) : (
-                                            <div className="bg-violet-50 dark:bg-violet-900/10 p-3 rounded-md border border-violet-100 dark:border-violet-800/50 animate-fade-in-up">
-                                                <div className="flex justify-between items-center mb-2 pb-2 border-b border-violet-200 dark:border-violet-800/50">
-                                                    <p className="text-xs text-violet-800 dark:text-violet-300 font-medium">Проверьте изменения:</p>
+                                            <div className="bg-violet-50 p-3 rounded-md border border-violet-100 animate-fade-in-up">
+                                                <div className="flex justify-between items-center mb-2 pb-2 border-b border-violet-200">
+                                                    <p className="text-xs text-violet-800 font-medium">Проверьте изменения:</p>
                                                     <div className="flex gap-3">
-                                                        <button type="button" onClick={() => handleSelectAllDiffs(true)} className="text-[10px] font-medium text-violet-600 dark:text-violet-400 hover:underline">Выбрать все</button>
-                                                        <button type="button" onClick={() => handleSelectAllDiffs(false)} className="text-[10px] font-medium text-slate-500 dark:text-slate-400 hover:underline">Снять все</button>
+                                                        <button type="button" onClick={() => handleSelectAllDiffs(true)} className="text-[10px] font-medium text-violet-600 hover:underline">Выбрать все</button>
+                                                        <button type="button" onClick={() => handleSelectAllDiffs(false)} className="text-[10px] font-medium text-slate-500 hover:underline">Снять все</button>
                                                     </div>
                                                 </div>
                                                 <div className="mb-3 space-y-2 pr-1">
                                                     {diffResult.length === 0 && <p className="text-xs text-slate-500 italic">Нет изменений</p>}
                                                     {diffResult.map((item) => ( 
-                                                        <div key={item.id} className="flex items-start gap-2 text-xs bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700 shadow-sm">
+                                                        <div key={item.id} className="flex items-start gap-2 text-xs bg-white p-2 rounded border border-slate-200 shadow-sm">
                                                             <input type="checkbox" checked={item.selected} onChange={() => handleToggleDiffSelection(item.id)} className="h-4 w-4 form-checkbox-custom flex-shrink-0 mt-0.5" />
                                                             <div className="flex-grow min-w-0">
                                                                 {item.status === 'modified' && ( 
                                                                     <div className="flex flex-col md:flex-row items-start md:items-stretch gap-2 w-full">
-                                                                        <div className="flex-1 w-full md:w-auto p-1.5 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/50 rounded text-red-900 dark:text-red-300 text-xs break-words">{item.original}</div>
+                                                                        <div className="flex-1 w-full md:w-auto p-1.5 bg-red-50 border border-red-100 rounded text-red-900 text-xs break-words">{item.original}</div>
                                                                         <div className="flex-shrink-0 self-center"><ArrowRightIcon className="w-3 h-3 text-slate-400 hidden md:block" /><ArrowRightIcon className="w-3 h-3 text-slate-400 md:hidden rotate-90" /></div>
-                                                                        <div className="flex-1 w-full md:w-auto p-1.5 bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800/50 rounded text-green-900 dark:text-green-300 text-xs font-medium break-words">{item.new}</div>
+                                                                        <div className="flex-1 w-full md:w-auto p-1.5 bg-green-50 border border-green-100 rounded text-green-900 text-xs font-medium break-words">{item.new}</div>
                                                                     </div> 
                                                                 )}
-                                                                {item.status === 'added' && ( <div className="text-green-700 dark:text-green-400 font-medium flex items-start gap-1 p-1.5 bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800/50 rounded"><PlusIcon className="w-3 h-3 flex-shrink-0 mt-0.5" /><span className="break-words">{item.new}</span></div> )}
-                                                                {item.status === 'removed' && ( <div className="text-red-700 dark:text-red-400 p-1.5 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/50 rounded flex items-start gap-1 opacity-80"><span className="line-through decoration-red-400 dark:decoration-red-600 break-words">{item.original}</span></div> )}
-                                                                {item.status === 'unchanged' && ( <div className="text-slate-500 dark:text-slate-400 break-words pt-0.5" title="Без изменений">{item.original}</div> )}
+                                                                {item.status === 'added' && ( <div className="text-green-700 font-medium flex items-start gap-1 p-1.5 bg-green-50 border border-green-100 rounded"><PlusIcon className="w-3 h-3 flex-shrink-0 mt-0.5" /><span className="break-words">{item.new}</span></div> )}
+                                                                {item.status === 'removed' && ( <div className="text-red-700 p-1.5 bg-red-50 border border-red-100 rounded flex items-start gap-1 opacity-80"><span className="line-through decoration-red-400 break-words">{item.original}</span></div> )}
+                                                                {item.status === 'unchanged' && ( <div className="text-slate-500 break-words pt-0.5" title="Без изменений">{item.original}</div> )}
                                                             </div>
-                                                            <div className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded mt-0.5 ${item.status === 'modified' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : ''} ${item.status === 'added' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : ''} ${item.status === 'removed' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' : ''} ${item.status === 'unchanged' ? 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400' : ''} `}>
+                                                            <div className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded mt-0.5 ${item.status === 'modified' ? 'bg-amber-100 text-amber-700' : ''} ${item.status === 'added' ? 'bg-green-100 text-green-700' : ''} ${item.status === 'removed' ? 'bg-red-100 text-red-700' : ''} ${item.status === 'unchanged' ? 'bg-slate-100 text-slate-500' : ''} `}>
                                                                 {item.status === 'modified' ? 'ИЗМ' : item.status === 'added' ? 'НОВ' : item.status === 'removed' ? 'УДЛ' : 'ОК'}
                                                             </div>
                                                         </div> 
                                                     ))}
                                                 </div>
-                                                <div className="flex gap-2 sticky bottom-0 bg-violet-50 dark:bg-slate-800 pt-2 border-t border-violet-100 dark:border-violet-800/50">
+                                                <div className="flex gap-2 sticky bottom-0 bg-violet-50 pt-2 border-t border-violet-100">
                                                     <button type="button" onClick={handleCommitMassEdit} className="flex-1 bg-violet-600 text-white text-xs py-2 rounded hover:bg-violet-700 transition-colors font-medium">Применить выбранное</button>
-                                                    <button type="button" onClick={handleCancelMassEdit} className="flex-1 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-xs py-2 rounded hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors font-medium">Отменить</button>
+                                                    <button type="button" onClick={handleCancelMassEdit} className="flex-1 bg-white border border-slate-300 text-slate-700 text-xs py-2 rounded hover:bg-slate-50 transition-colors font-medium">Отменить</button>
                                                 </div>
                                             </div>
                                         )}
@@ -854,8 +854,8 @@ Do not include any markdown formatting or additional text. Just the JSON.
                                 )}
                             </div>
                         </div>
-                        <div className="flex justify-end space-x-3 pt-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 mt-auto">
-                            <button type="button" onClick={onClose} className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-4 py-2 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Отмена</button>
+                        <div className="flex justify-end space-x-3 pt-4 border-t border-slate-200 bg-white mt-auto">
+                            <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-md hover:bg-slate-300 transition-colors">Отмена</button>
                             <button type="submit" disabled={isPreviewMode} className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed">Сохранить</button>
                         </div>
                     </div>
@@ -872,7 +872,6 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
     const [editingCert, setEditingCert] = useState<Certificate | null>(null);
     const [previewFile, setPreviewFile] = useState<{ type: 'pdf' | 'image', data: string } | null>(null);
     
-    // ДОБАВЛЕНО: Состояние для окна копирования
     const [copyModalState, setCopyModalState] = useState<{ cert: Certificate, selectedMaterials: Set<string> } | null>(null);
     
     const [searchQuery, setSearchQuery] = useLocalStorage<string>('cert_search_query', '');
@@ -1126,13 +1125,13 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
     const gridColsClass = columnCount === 1 ? 'grid-cols-1' : columnCount === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
 
     return (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md h-full flex flex-col relative" onClick={() => setContextMenu(null)}>
+        <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col relative" onClick={() => setContextMenu(null)}>
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0 gap-4">
-                <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Сертификаты и Паспорта</h1>
+                <h1 className="text-2xl font-bold text-slate-800">Сертификаты и Паспорта</h1>
                 <div className="flex gap-2">
                     <button 
                         onClick={() => setIsImportModalOpen(true)}
-                        className="flex items-center bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 px-3 py-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                        className="flex items-center bg-slate-100 text-slate-700 border border-slate-300 px-3 py-2 rounded-md hover:bg-slate-200 transition-colors"
                         title="Копировать из другого объекта"
                     >
                         <CopyIcon className="w-5 h-5 mr-1" /> Скопировать
@@ -1143,27 +1142,27 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
                 </div>
             </div>
 
-            <div className="flex flex-col lg:flex-row gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-700 items-center justify-between">
+            <div className="flex flex-col lg:flex-row gap-4 mb-4 pb-4 border-b border-slate-100 items-center justify-between">
                 <div className="flex gap-2 w-full lg:w-auto flex-1">
-                    <input type="text" placeholder="Поиск по номеру, материалам..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full lg:max-w-md px-4 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" placeholder="Поиск по номеру, материалам..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full lg:max-w-md px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     <FilterPicker value={filterUsage} onChange={setFilterUsage} />
                 </div>
-                <div className="flex items-center gap-4 text-slate-500 dark:text-slate-400 flex-shrink-0">
-                    <div className="flex items-center gap-1 border border-slate-200 dark:border-slate-600 rounded-md p-0.5">
-                         <button onClick={() => setViewMode('card')} className={`p-1.5 rounded transition-colors ${viewMode === 'card' ? 'bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`} title="Карточки"><LayoutGridIcon className="w-5 h-5"/></button>
-                         <button onClick={() => setViewMode('list')} className={`p-1.5 rounded transition-colors ${viewMode === 'list' ? 'bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`} title="Список"><LayoutListIcon className="w-5 h-5"/></button>
+                <div className="flex items-center gap-4 text-slate-500 flex-shrink-0">
+                    <div className="flex items-center gap-1 border border-slate-200 rounded-md p-0.5">
+                         <button onClick={() => setViewMode('card')} className={`p-1.5 rounded transition-colors ${viewMode === 'card' ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-100'}`} title="Карточки"><LayoutGridIcon className="w-5 h-5"/></button>
+                         <button onClick={() => setViewMode('list')} className={`p-1.5 rounded transition-colors ${viewMode === 'list' ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-100'}`} title="Список"><LayoutListIcon className="w-5 h-5"/></button>
                     </div>
-                    <div className="w-px h-6 bg-slate-200 dark:bg-slate-600 mx-1"></div>
-                    <div className="flex items-center gap-1 border border-slate-200 dark:border-slate-600 rounded-md p-0.5">
-                         <button onClick={() => setColumnCount(1)} className={`px-3 py-1 rounded text-xs font-medium transition-colors ${columnCount === 1 ? 'bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}>1</button>
-                         <button onClick={() => setColumnCount(2)} className={`px-3 py-1 rounded text-xs font-medium transition-colors ${columnCount === 2 ? 'bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}>2</button>
-                         <button onClick={() => setColumnCount(3)} className={`px-3 py-1 rounded text-xs font-medium transition-colors ${columnCount === 3 ? 'bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}>3</button>
+                    <div className="w-px h-6 bg-slate-200 mx-1"></div>
+                    <div className="flex items-center gap-1 border border-slate-200 rounded-md p-0.5">
+                         <button onClick={() => setColumnCount(1)} className={`px-3 py-1 rounded text-xs font-medium transition-colors ${columnCount === 1 ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-100'}`}>1</button>
+                         <button onClick={() => setColumnCount(2)} className={`px-3 py-1 rounded text-xs font-medium transition-colors ${columnCount === 2 ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-100'}`}>2</button>
+                         <button onClick={() => setColumnCount(3)} className={`px-3 py-1 rounded text-xs font-medium transition-colors ${columnCount === 3 ? 'bg-slate-200 text-slate-800' : 'hover:bg-slate-100'}`}>3</button>
                     </div>
                     <div className="relative ml-2" ref={menuRef}>
-                        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className={`p-2 rounded-md transition-colors ${isMenuOpen || isSelectionMode ? 'bg-slate-100 dark:bg-slate-700 text-blue-600 dark:text-blue-400' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`} title="Меню"><MenuIcon className="w-6 h-6" /></button>
+                        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className={`p-2 rounded-md transition-colors ${isMenuOpen || isSelectionMode ? 'bg-slate-100 text-blue-600' : 'hover:bg-slate-100'}`} title="Меню"><MenuIcon className="w-6 h-6" /></button>
                         {isMenuOpen && (
-                            <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md shadow-lg z-50 py-1 animate-fade-in-up">
-                                <button onClick={toggleSelectionMode} className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-between"><span>Удалить</span>{isSelectionMode && <CheckIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />}</button>
+                            <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-md shadow-lg z-50 py-1 animate-fade-in-up">
+                                <button onClick={toggleSelectionMode} className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between"><span>Удалить</span>{isSelectionMode && <CheckIcon className="w-4 h-4 text-blue-600" />}</button>
                             </div>
                         )}
                     </div>
@@ -1182,71 +1181,70 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
 
                         if (viewMode === 'list') {
                             return (
-                                <div key={cert.id} className={`border rounded-lg p-3 hover:shadow-md transition-all bg-white dark:bg-slate-800 flex items-center gap-4 cursor-pointer group select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/30 z-10' : 'border-slate-200 dark:border-slate-700'}`} onClick={(e) => handleCardClick(e, cert)} onContextMenu={(e) => handleContextMenu(e, cert.id)}>
+                                <div key={cert.id} className={`border rounded-lg p-3 hover:shadow-md transition-all bg-white flex items-center gap-4 cursor-pointer group select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500 bg-blue-50 z-10' : 'border-slate-200'}`} onClick={(e) => handleCardClick(e, cert)} onContextMenu={(e) => handleContextMenu(e, cert.id)}>
                                     {isSelectionMode && ( <div className="flex-shrink-0"><input type="checkbox" checked={isSelected} onChange={() => {}} className="h-5 w-5 form-checkbox-custom cursor-pointer" /></div> )}
-                                    <div className="p-2 bg-slate-100 dark:bg-slate-700 rounded text-slate-500 dark:text-slate-400 cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePreview(cert); }}><CertificateIcon className="w-6 h-6" /></div>
-                                    <div className="flex-grow min-w-0"><h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate"><HighlightMatch text={cert.number} query={searchQuery} /></h3><p className="text-xs text-slate-500 dark:text-slate-400">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p></div>
-                                    <div className="text-xs text-slate-500 dark:text-slate-400 truncate w-1/4">{cert.materials.map((m, i) => ( <span key={i}>{i > 0 && ', '}<HighlightMatch text={m} query={searchQuery} /></span> ))}</div>
+                                    <div className="p-2 bg-slate-100 rounded text-slate-500 cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePreview(cert); }}><CertificateIcon className="w-6 h-6" /></div>
+                                    <div className="flex-grow min-w-0"><h3 className="font-bold text-slate-800 text-sm truncate"><HighlightMatch text={cert.number} query={searchQuery} /></h3><p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p></div>
+                                    <div className="text-xs text-slate-500 truncate w-1/4">{cert.materials.map((m, i) => ( <span key={i}>{i > 0 && ', '}<HighlightMatch text={m} query={searchQuery} /></span> ))}</div>
                                     <div className="flex items-center gap-1 flex-shrink-0">
                                         <button className="text-slate-400 hover:text-blue-600 p-1.5 rounded hover:bg-blue-50 transition-colors" onClick={(e) => { e.stopPropagation(); setCopyModalState({ cert, selectedMaterials: new Set(cert.materials) }); }} title="Копировать сертификат"><CopyIcon className="w-4 h-4" /></button>
-                                        {linkCount > 0 && ( <button className="flex items-center gap-1 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-full text-xs font-medium border border-blue-100 dark:border-blue-800/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all mr-1" onClick={(e) => handleManageLinks(e, cert)} title="Управление связями"><LinkIcon className="w-3 h-3" /> {linkCount}</button> )}
+                                        {linkCount > 0 && ( <button className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-full text-xs font-medium border border-blue-100 hover:bg-blue-100 transition-all mr-1" onClick={(e) => handleManageLinks(e, cert)} title="Управление связями"><LinkIcon className="w-3 h-3" /> {linkCount}</button> )}
                                     </div>
                                 </div>
                             );
                         }
                         return (
-                        <div key={cert.id} className={`border rounded-lg overflow-hidden hover:shadow-md transition-all bg-white dark:bg-slate-800 flex flex-col h-full cursor-pointer relative group select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500 z-10' : 'border-slate-200 dark:border-slate-700'}`} onClick={(e) => handleCardClick(e, cert)} onContextMenu={(e) => handleContextMenu(e, cert.id)}>
+                        <div key={cert.id} className={`border rounded-lg overflow-hidden hover:shadow-md transition-all bg-white flex flex-col h-full cursor-pointer relative group select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500 z-10' : 'border-slate-200'}`} onClick={(e) => handleCardClick(e, cert)} onContextMenu={(e) => handleContextMenu(e, cert.id)}>
                             {isSelectionMode && ( <div className="absolute top-2 left-2 z-20"><input type="checkbox" checked={isSelected} onChange={() => {}} className="h-5 w-5 form-checkbox-custom cursor-pointer shadow-sm" /></div> )}
-                            <div className="h-40 bg-slate-200 dark:bg-slate-700 border-b border-slate-100 dark:border-slate-700 flex items-center justify-center cursor-pointer relative overflow-hidden" onClick={(e) => { if(isSelectionMode) return; e.stopPropagation(); handlePreview(cert); }} onDoubleClick={(e) => { if(isSelectionMode) return; e.stopPropagation(); if(mainFile.data) openInNewTab(mainFile.data); }} title="Нажмите для предпросмотра, дважды для открытия в новой вкладке">
-                                {hasFiles ? ( mainFile.type === 'image' ? ( <img src={mainFile.data} alt={cert.number} className="w-full h-full object-contain bg-slate-200 dark:bg-slate-700" /> ) : ( <div className="w-full h-full relative pointer-events-none"><object data={mainFile.data} type="application/pdf" className="w-full h-full opacity-80" tabIndex={-1}><div className="flex items-center justify-center h-full"><CertificateIcon className="w-12 h-12 text-red-400" /></div></object><div className="absolute inset-0 bg-transparent"></div></div> ) ) : ( <div className="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500"><CertificateIcon className="w-10 h-10 mb-1 opacity-50" /><span className="text-xs">Нет файла</span></div> )}
+                            <div className="h-40 bg-slate-200 border-b border-slate-100 flex items-center justify-center cursor-pointer relative overflow-hidden" onClick={(e) => { if(isSelectionMode) return; e.stopPropagation(); handlePreview(cert); }} onDoubleClick={(e) => { if(isSelectionMode) return; e.stopPropagation(); if(mainFile.data) openInNewTab(mainFile.data); }} title="Нажмите для предпросмотра, дважды для открытия в новой вкладке">
+                                {hasFiles ? ( mainFile.type === 'image' ? ( <img src={mainFile.data} alt={cert.number} className="w-full h-full object-contain bg-slate-200" /> ) : ( <div className="w-full h-full relative pointer-events-none"><object data={mainFile.data} type="application/pdf" className="w-full h-full opacity-80" tabIndex={-1}><div className="flex items-center justify-center h-full"><CertificateIcon className="w-12 h-12 text-red-400" /></div></object><div className="absolute inset-0 bg-transparent"></div></div> ) ) : ( <div className="flex flex-col items-center justify-center text-slate-400"><CertificateIcon className="w-10 h-10 mb-1 opacity-50" /><span className="text-xs">Нет файла</span></div> )}
                                 {fileCount > 1 && ( <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 shadow-sm"><CloudUploadIcon className="w-3 h-3" /> {fileCount}</div> )}
-                                {!isSelectionMode && ( <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-10 dark:hover:bg-opacity-30 transition-opacity flex items-center justify-center pointer-events-none"><span className="opacity-0 group-hover:opacity-100 bg-white/90 dark:bg-slate-800/90 dark:text-slate-200 px-3 py-1 rounded-full text-xs font-medium shadow-sm">Редактировать</span></div> )}
+                                {!isSelectionMode && ( <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-10 transition-opacity flex items-center justify-center pointer-events-none"><span className="opacity-0 group-hover:opacity-100 bg-white/90 px-3 py-1 rounded-full text-xs font-medium shadow-sm">Редактировать</span></div> )}
                             </div>
                             <div className="p-4 flex flex-col flex-grow">
                                 <div className="flex justify-between items-start mb-2">
-                                    <div><h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight mb-1"><HighlightMatch text={cert.number} query={searchQuery} /></h3><p className="text-xs text-slate-500 dark:text-slate-400">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p></div>
+                                    <div><h3 className="font-bold text-slate-800 text-sm leading-tight mb-1"><HighlightMatch text={cert.number} query={searchQuery} /></h3><p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p></div>
                                     <div className="flex items-center gap-1 ml-2">
                                         <button className="text-slate-400 hover:text-blue-600 p-1.5 rounded hover:bg-blue-50 transition-colors" onClick={(e) => { e.stopPropagation(); setCopyModalState({ cert, selectedMaterials: new Set(cert.materials) }); }} title="Копировать сертификат для вставки в Акт"><CopyIcon className="w-4 h-4" /></button>
-                                        {linkCount > 0 && ( <button className="flex items-center gap-1 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-full text-xs font-medium border border-blue-100 dark:border-blue-800/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all mr-1" onClick={(e) => handleManageLinks(e, cert)} title={`Используется в ${linkCount} актах`}><LinkIcon className="w-3 h-3" /> {linkCount}</button> )}
+                                        {linkCount > 0 && ( <button className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-full text-xs font-medium border border-blue-100 hover:bg-blue-100 transition-all mr-1" onClick={(e) => handleManageLinks(e, cert)} title={`Используется в ${linkCount} актах`}><LinkIcon className="w-3 h-3" /> {linkCount}</button> )}
                                     </div>
                                 </div>
-                                <div className="flex-grow cursor-pointer group/materials hover:bg-blue-50 dark:hover:bg-slate-700/50 hover:shadow-sm rounded-md transition-all duration-200 p-1 -m-1" onClick={(e) => toggleMaterialsExpand(e, cert.id)} title="Нажмите, чтобы развернуть/свернуть список материалов"><p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1 flex justify-between items-center group-hover/materials:text-blue-500 dark:group-hover/materials:text-blue-400 transition-colors">Материалы:<ChevronDownIcon className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} /></p><ul className="text-xs text-slate-700 dark:text-slate-300 space-y-1">{(isExpanded ? cert.materials : cert.materials.slice(0, 3)).map((m, i) => ( <li key={i} className="truncate border-l-2 border-blue-100 dark:border-slate-600 pl-2 group-hover/materials:border-blue-300 dark:group-hover/materials:border-blue-500"><HighlightMatch text={m} query={searchQuery} /></li> ))}{!isExpanded && cert.materials.length > 3 && ( <li className="text-slate-400 dark:text-slate-500 pl-2 italic">...и еще {cert.materials.length - 3}</li> )}{cert.materials.length === 0 && <li className="text-slate-400 dark:text-slate-500 italic pl-2">Список пуст</li>}</ul></div>
+                                <div className="flex-grow cursor-pointer group/materials hover:bg-blue-50 hover:shadow-sm rounded-md transition-all duration-200 p-1 -m-1" onClick={(e) => toggleMaterialsExpand(e, cert.id)} title="Нажмите, чтобы развернуть/свернуть список материалов"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex justify-between items-center group-hover/materials:text-blue-500 transition-colors">Материалы:<ChevronDownIcon className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} /></p><ul className="text-xs text-slate-700 space-y-1">{(isExpanded ? cert.materials : cert.materials.slice(0, 3)).map((m, i) => ( <li key={i} className="truncate border-l-2 border-blue-100 pl-2 group-hover/materials:border-blue-300"><HighlightMatch text={m} query={searchQuery} /></li> ))}{!isExpanded && cert.materials.length > 3 && ( <li className="text-slate-400 pl-2 italic">...и еще {cert.materials.length - 3}</li> )}{cert.materials.length === 0 && <li className="text-slate-400 italic pl-2">Список пуст</li>}</ul></div>
                             </div>
                         </div>
                     )})}
                     {filteredCertificates.length === 0 && (
-                        <div className="col-span-full flex flex-col items-center justify-center py-20 text-slate-400 dark:text-slate-500"><CertificateIcon className="w-16 h-16 mb-4 opacity-20" /><p>Ничего не найдено.</p></div>
+                        <div className="col-span-full flex flex-col items-center justify-center py-20 text-slate-400"><CertificateIcon className="w-16 h-16 mb-4 opacity-20" /><p>Ничего не найдено.</p></div>
                     )}
                  </div>
             </div>
 
             {isSelectionMode && (
-                <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-600 rounded-full px-6 py-2 flex items-center gap-4 z-50 animate-fade-in-up">
-                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">Выбрано: {selectedCertIds.size}</span>
-                    <div className="h-4 w-px bg-slate-300 dark:bg-slate-600"></div>
-                    <button onClick={handleBulkDelete} disabled={selectedCertIds.size === 0} className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><DeleteIcon className="w-4 h-4" /> Удалить</button>
-                    <button onClick={exitSelectionMode} className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors">Отмена</button>
+                <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-white shadow-xl border border-slate-200 rounded-full px-6 py-2 flex items-center gap-4 z-50 animate-fade-in-up">
+                    <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">Выбрано: {selectedCertIds.size}</span>
+                    <div className="h-4 w-px bg-slate-300"></div>
+                    <button onClick={handleBulkDelete} disabled={selectedCertIds.size === 0} className="flex items-center gap-2 text-sm text-red-600 hover:text-red-800 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><DeleteIcon className="w-4 h-4" /> Удалить</button>
+                    <button onClick={exitSelectionMode} className="text-sm text-slate-500 hover:text-slate-800 transition-colors">Отмена</button>
                 </div>
             )}
 
-            {contextMenu && ( <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}><MenuItem icon={<CheckIcon className="w-4 h-4"/>} label="Выбрать" onClick={() => { setIsSelectionMode(true); if (contextMenu.certId) { setSelectedCertIds(new Set([contextMenu.certId])); setLastSelectedCertId(contextMenu.certId); } setContextMenu(null); }} /> <MenuItem icon={<DeleteIcon className="w-4 h-4 text-red-600 dark:text-red-400"/>} label="Удалить" className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30" onClick={() => { if (contextMenu.certId) { const cert = certificates.find(c => c.id === contextMenu.certId); if (cert) handleClickDelete({ stopPropagation: () => {} } as React.MouseEvent, cert); } setContextMenu(null); }} /></ContextMenu> )}
+            {contextMenu && ( <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}><MenuItem icon={<CheckIcon className="w-4 h-4"/>} label="Выбрать" onClick={() => { setIsSelectionMode(true); if (contextMenu.certId) { setSelectedCertIds(new Set([contextMenu.certId])); setLastSelectedCertId(contextMenu.certId); } setContextMenu(null); }} /> <MenuItem icon={<DeleteIcon className="w-4 h-4 text-red-600"/>} label="Удалить" className="text-red-600 hover:bg-red-50" onClick={() => { if (contextMenu.certId) { const cert = certificates.find(c => c.id === contextMenu.certId); if (cert) handleClickDelete({ stopPropagation: () => {} } as React.MouseEvent, cert); } setContextMenu(null); }} /></ContextMenu> )}
 
             <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingCert ? 'Редактировать сертификат' : 'Новый сертификат'} maxWidth="max-w-[90vw] lg:max-w-7xl" className="resize-x overflow-hidden">
                 <CertificateForm certificate={editingCert} settings={settings} onSave={onSave} onClose={handleCloseModal} />
             </Modal>
             
-            {/* МОДАЛЬНОЕ ОКНО КОПИРОВАНИЯ СЕРТИФИКАТА */}
             {copyModalState && (
                 <Modal isOpen={true} onClose={() => setCopyModalState(null)} title={`Копирование сертификата № ${copyModalState.cert.number}`}>
-                    <div className="p-4 bg-white dark:bg-slate-800">
-                        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">Выберите материалы, которые хотите скопировать для вставки в таблицу Актов:</p>
+                    <div className="p-4 bg-white">
+                        <p className="text-sm text-slate-600 mb-4">Выберите материалы, которые хотите скопировать для вставки в таблицу Актов:</p>
                         
-                        <div className="max-h-60 overflow-y-auto space-y-1 border border-slate-200 dark:border-slate-700 rounded-md p-2 mb-6 bg-slate-50 dark:bg-slate-900/50">
+                        <div className="max-h-60 overflow-y-auto space-y-1 border border-slate-200 rounded-md p-2 mb-6 bg-slate-50">
                             {copyModalState.cert.materials.length === 0 && (
                                 <p className="text-xs italic text-slate-500 p-2">В сертификате нет добавленных материалов.</p>
                             )}
                             {copyModalState.cert.materials.map(mat => (
-                                <label key={mat} className="flex items-start gap-3 text-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 p-2 rounded transition-colors">
+                                <label key={mat} className="flex items-start gap-3 text-sm cursor-pointer hover:bg-slate-100 p-2 rounded transition-colors">
                                     <input 
                                         type="checkbox" 
                                         className="form-checkbox-custom w-4 h-4 mt-0.5 flex-shrink-0"
@@ -1258,13 +1256,13 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
                                             setCopyModalState({ ...copyModalState, selectedMaterials: newSet });
                                         }}
                                     />
-                                    <span className="break-words text-slate-800 dark:text-slate-200">{mat}</span>
+                                    <span className="break-words text-slate-800">{mat}</span>
                                 </label>
                             ))}
                         </div>
                         
-                        <div className="flex justify-end gap-3 pt-2 border-t border-slate-200 dark:border-slate-700">
-                            <button onClick={() => setCopyModalState(null)} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors font-medium">Отмена</button>
+                        <div className="flex justify-end gap-3 pt-2 border-t border-slate-200">
+                            <button onClick={() => setCopyModalState(null)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded transition-colors font-medium">Отмена</button>
                             <button 
                                 onClick={() => {
                                     const selected = copyModalState.cert.materials.filter(m => copyModalState.selectedMaterials.has(m));
@@ -1284,13 +1282,13 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
                 </Modal>
             )}
 
-            {deleteWarning && ( <Modal isOpen={true} onClose={() => setDeleteWarning(null)} title="Удаление сертификата"><div className="space-y-4"><p className="text-slate-700 dark:text-slate-300">Сертификат <strong>{deleteWarning.cert.number}</strong> используется в <strong>{deleteWarning.usedInActs.length}</strong> актах.</p><p className="text-sm text-slate-600 dark:text-slate-400">Если вы удалите сертификат, ссылки на него в актах могут стать некорректными. Выберите действие:</p><div className="flex flex-col gap-3 pt-2"><button onClick={() => handleConfirmDelete('remove_materials')} className="w-full flex items-start gap-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800/50 p-3 rounded-md hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors text-left"><DeleteIcon className="w-5 h-5 flex-shrink-0 mt-0.5" /><div><div className="font-semibold text-sm">Удалить Сертификат и Строки материалов</div><div className="text-xs opacity-75">Строки с упоминанием этого сертификата будут полностью удалены из всех актов.</div></div></button><button onClick={() => handleConfirmDelete('clean')} className="w-full flex items-start gap-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 p-3 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"><div className="p-0.5 bg-slate-200 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300"><CloseIcon className="w-4 h-4" /></div><div><div className="font-semibold text-sm text-slate-800 dark:text-slate-200">Удалить Сертификат и Ссылки</div><div className="text-xs text-slate-500 dark:text-slate-400">Сертификат удаляется. В актах останутся названия материалов, но исчезнет текст "(сертификат №...)".</div></div></button><button onClick={() => handleConfirmDelete('default')} className="w-full flex items-start gap-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 p-3 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"><div className="p-0.5 bg-slate-200 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300"><CheckIcon className="w-4 h-4" /></div><div><div className="font-semibold text-sm text-slate-800 dark:text-slate-200">Удалить Сертификат, Оставить текст</div><div className="text-xs text-slate-500 dark:text-slate-400">Сертификат удаляется из базы. Текст в актах не меняется (останется как "мертвый" текст).</div></div></button><button onClick={() => setDeleteWarning(null)} className="w-full text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 text-sm py-2 mt-2 transition-colors">Отмена</button></div></div></Modal> )}
+            {deleteWarning && ( <Modal isOpen={true} onClose={() => setDeleteWarning(null)} title="Удаление сертификата"><div className="space-y-4"><p className="text-slate-700">Сертификат <strong>{deleteWarning.cert.number}</strong> используется в <strong>{deleteWarning.usedInActs.length}</strong> актах.</p><p className="text-sm text-slate-600">Если вы удалите сертификат, ссылки на него в актах могут стать некорректными. Выберите действие:</p><div className="flex flex-col gap-3 pt-2"><button onClick={() => handleConfirmDelete('remove_materials')} className="w-full flex items-start gap-3 bg-red-50 text-red-800 border border-red-200 p-3 rounded-md hover:bg-red-100 transition-colors text-left"><DeleteIcon className="w-5 h-5 flex-shrink-0 mt-0.5" /><div><div className="font-semibold text-sm">Удалить Сертификат и Строки материалов</div><div className="text-xs opacity-75">Строки с упоминанием этого сертификата будут полностью удалены из всех актов.</div></div></button><button onClick={() => handleConfirmDelete('clean')} className="w-full flex items-start gap-3 bg-white border border-slate-300 p-3 rounded-md hover:bg-slate-50 transition-colors text-left"><div className="p-0.5 bg-slate-200 rounded text-slate-600"><CloseIcon className="w-4 h-4" /></div><div><div className="font-semibold text-sm text-slate-800">Удалить Сертификат и Ссылки</div><div className="text-xs text-slate-500">Сертификат удаляется. В актах останутся названия материалов, но исчезнет текст "(сертификат №...)".</div></div></button><button onClick={() => handleConfirmDelete('default')} className="w-full flex items-start gap-3 bg-white border border-slate-300 p-3 rounded-md hover:bg-slate-50 transition-colors text-left"><div className="p-0.5 bg-slate-200 rounded text-slate-600"><CheckIcon className="w-4 h-4" /></div><div><div className="font-semibold text-sm text-slate-800">Удалить Сертификат, Оставить текст</div><div className="text-xs text-slate-500">Сертификат удаляется из базы. Текст в актах не меняется (останется как "мертвый" текст).</div></div></button><button onClick={() => setDeleteWarning(null)} className="w-full text-slate-500 hover:text-slate-800 text-sm py-2 mt-2 transition-colors">Отмена</button></div></div></Modal> )}
 
-            {bulkDeleteWarning && ( <Modal isOpen={true} onClose={() => setBulkDeleteWarning(null)} title="Массовое удаление"><div className="space-y-4"><p className="text-slate-700 dark:text-slate-300">Вы выбрали для удаления <strong>{bulkDeleteWarning.totalCount}</strong> сертификатов.</p><div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded text-sm text-amber-800 dark:text-amber-300"><strong>Внимание:</strong> {bulkDeleteWarning.linkedCount} из них используются в актах.</div><p className="text-sm text-slate-600 dark:text-slate-400">Выберите, как поступить с сертификатами, которые имеют связи:</p><div className="flex flex-col gap-3 pt-2"><button onClick={() => handleConfirmBulkDelete('remove_materials')} className="w-full flex items-start gap-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800/50 p-3 rounded-md hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors text-left"><DeleteIcon className="w-5 h-5 flex-shrink-0 mt-0.5" /><div><div className="font-semibold text-sm">Удалить Сертификаты и Строки материалов</div><div className="text-xs opacity-75">Строки материалов, ссылающиеся на удаляемые сертификаты, будут удалены из актов.</div></div></button><button onClick={() => handleConfirmBulkDelete('clean')} className="w-full flex items-start gap-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 p-3 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"><div className="p-0.5 bg-slate-200 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300"><CloseIcon className="w-4 h-4" /></div><div><div className="font-semibold text-sm text-slate-800 dark:text-slate-200">Удалить Сертификаты и Ссылки</div><div className="text-xs text-slate-500 dark:text-slate-400">Сертификаты удаляются. Из актов удаляется только текст "(сертификат №...)", название материала остается.</div></div></button><button onClick={() => handleConfirmBulkDelete('default')} className="w-full flex items-start gap-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 p-3 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"><div className="p-0.5 bg-slate-200 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-300"><CheckIcon className="w-4 h-4" /></div><div><div className="font-semibold text-sm text-slate-800 dark:text-slate-200">Удалить Сертификаты, Оставить текст</div><div className="text-xs text-slate-500 dark:text-slate-400">Сертификаты удаляются из базы. Текст в актах не меняется.</div></div></button><button onClick={() => setBulkDeleteWarning(null)} className="w-full text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 text-sm py-2 mt-2 transition-colors">Отмена</button></div></div></Modal> )}
+            {bulkDeleteWarning && ( <Modal isOpen={true} onClose={() => setBulkDeleteWarning(null)} title="Массовое удаление"><div className="space-y-4"><p className="text-slate-700">Вы выбрали для удаления <strong>{bulkDeleteWarning.totalCount}</strong> сертификатов.</p><div className="p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800"><strong>Внимание:</strong> {bulkDeleteWarning.linkedCount} из них используются в актах.</div><p className="text-sm text-slate-600">Выберите, как поступить с сертификатами, которые имеют связи:</p><div className="flex flex-col gap-3 pt-2"><button onClick={() => handleConfirmBulkDelete('remove_materials')} className="w-full flex items-start gap-3 bg-red-50 text-red-800 border border-red-200 p-3 rounded-md hover:bg-red-100 transition-colors text-left"><DeleteIcon className="w-5 h-5 flex-shrink-0 mt-0.5" /><div><div className="font-semibold text-sm">Удалить Сертификаты и Строки материалов</div><div className="text-xs opacity-75">Строки материалов, ссылающиеся на удаляемые сертификаты, будут удалены из актов.</div></div></button><button onClick={() => handleConfirmBulkDelete('clean')} className="w-full flex items-start gap-3 bg-white border border-slate-300 p-3 rounded-md hover:bg-slate-50 transition-colors text-left"><div className="p-0.5 bg-slate-200 rounded text-slate-600"><CloseIcon className="w-4 h-4" /></div><div><div className="font-semibold text-sm text-slate-800">Удалить Сертификаты и Ссылки</div><div className="text-xs text-slate-500">Сертификаты удаляются. Из актов удаляется только текст "(сертификат №...)", название материала остается.</div></div></button><button onClick={() => handleConfirmBulkDelete('default')} className="w-full flex items-start gap-3 bg-white border border-slate-300 p-3 rounded-md hover:bg-slate-50 transition-colors text-left"><div className="p-0.5 bg-slate-200 rounded text-slate-600"><CheckIcon className="w-4 h-4" /></div><div><div className="font-semibold text-sm text-slate-800">Удалить Сертификаты, Оставить текст</div><div className="text-xs text-slate-500">Сертификаты удаляются из базы. Текст в актах не меняется.</div></div></button><button onClick={() => setBulkDeleteWarning(null)} className="w-full text-slate-500 hover:text-slate-800 text-sm py-2 mt-2 transition-colors">Отмена</button></div></div></Modal> )}
 
-            {manageLinksCert && ( <Modal isOpen={true} onClose={() => setManageLinksCert(null)} title={`Использование сертификата № ${manageLinksCert.cert.number}`}><div className="space-y-4"><div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded p-3 text-sm max-h-48 overflow-y-auto"><ul className="list-disc pl-5 space-y-1 text-slate-700 dark:text-slate-300">{manageLinksCert.usedInActs.map((act) => ( <li key={act.id}>Акт № {act.number}</li> ))}</ul></div><div className="flex flex-col gap-3"><h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Действия со связями:</h4><button onClick={() => handleUnlinkFromManager('remove_reference')} className="w-full flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 p-3 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left text-sm"><LinkIcon className="w-5 h-5 text-slate-400 dark:text-slate-500" /><div><div className="font-medium text-slate-800 dark:text-slate-200">Отвязать (Убрать упоминание сертификата)</div><div className="text-xs text-slate-500 dark:text-slate-400">В актах останутся названия материалов, удалится только "(сертификат №...)"</div></div></button><button onClick={() => handleUnlinkFromManager('remove_entry')} className="w-full flex items-center gap-3 bg-white dark:bg-slate-800 border border-red-200 dark:border-red-800/50 p-3 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-left text-sm"><DeleteIcon className="w-5 h-5 text-red-400 dark:text-red-500" /><div><div className="font-medium text-red-800 dark:text-red-400">Удалить материалы из актов</div><div className="text-xs text-red-600 dark:text-red-400">Строки с этими материалов будут полностью удалены из актов</div></div></button></div><div className="flex justify-end pt-2"><button onClick={() => setManageLinksCert(null)} className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors text-sm px-4 py-2">Закрыть</button></div></div></Modal> )}
+            {manageLinksCert && ( <Modal isOpen={true} onClose={() => setManageLinksCert(null)} title={`Использование сертификата № ${manageLinksCert.cert.number}`}><div className="space-y-4"><div className="bg-slate-50 border border-slate-200 rounded p-3 text-sm max-h-48 overflow-y-auto"><ul className="list-disc pl-5 space-y-1 text-slate-700">{manageLinksCert.usedInActs.map((act) => ( <li key={act.id}>Акт № {act.number}</li> ))}</ul></div><div className="flex flex-col gap-3"><h4 className="text-sm font-semibold text-slate-700">Действия со связями:</h4><button onClick={() => handleUnlinkFromManager('remove_reference')} className="w-full flex items-center gap-3 bg-white border border-slate-300 p-3 rounded-md hover:bg-slate-50 transition-colors text-left text-sm"><LinkIcon className="w-5 h-5 text-slate-400" /><div><div className="font-medium text-slate-800">Отвязать (Убрать упоминание сертификата)</div><div className="text-xs text-slate-500">В актах останутся названия материалов, удалится только "(сертификат №...)"</div></div></button><button onClick={() => handleUnlinkFromManager('remove_entry')} className="w-full flex items-center gap-3 bg-white border border-red-200 p-3 rounded-md hover:bg-red-50 transition-colors text-left text-sm"><DeleteIcon className="w-5 h-5 text-red-400" /><div><div className="font-medium text-red-800">Удалить материалы из актов</div><div className="text-xs text-red-600">Строки с этими материалов будут полностью удалены из актов</div></div></button></div><div className="flex justify-end pt-2"><button onClick={() => setManageLinksCert(null)} className="text-slate-500 hover:text-slate-700 transition-colors text-sm px-4 py-2">Закрыть</button></div></div></Modal> )}
 
-            {previewFile && ( <Modal isOpen={!!previewFile} onClose={() => setPreviewFile(null)} title="Просмотр документа" maxWidth="max-w-6xl"><div className="h-[75vh] w-full flex items-center justify-center bg-slate-100 dark:bg-slate-900 rounded overflow-hidden">{previewFile.type === 'pdf' ? ( <iframe src={previewFile.data} className="w-full h-full" title="PDF Preview" /> ) : ( <ImageViewer src={previewFile.data} alt="Certificate Preview" /> )}</div></Modal> )}
+            {previewFile && ( <Modal isOpen={!!previewFile} onClose={() => setPreviewFile(null)} title="Просмотр документа" maxWidth="max-w-6xl"><div className="h-[75vh] w-full flex items-center justify-center bg-slate-100 rounded overflow-hidden">{previewFile.type === 'pdf' ? ( <iframe src={previewFile.data} className="w-full h-full" title="PDF Preview" /> ) : ( <ImageViewer src={previewFile.data} alt="Certificate Preview" /> )}</div></Modal> )}
 
             <ObjectResourceImporter 
                 isOpen={isImportModalOpen}
@@ -1304,8 +1302,8 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
                 onImport={onImport}
                 renderItem={(item) => (
                     <div>
-                        <div className="font-semibold text-sm text-slate-800 dark:text-slate-200">№ {item.number}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">Материалов: {item.materials.length} | Файлов: {item.files?.length || 0}</div>
+                        <div className="font-semibold text-sm text-slate-800">№ {item.number}</div>
+                        <div className="text-xs text-slate-500">Материалов: {item.materials.length} | Файлов: {item.files?.length || 0}</div>
                     </div>
                 )}
             />
