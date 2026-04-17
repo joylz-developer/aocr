@@ -13,8 +13,8 @@ import MaterialsInput from './MaterialsInput';
 import MaterialPopover from './MaterialPopover';
 import MaterialsModal from './MaterialsModal';
 import SchemesInput from './SchemesInput';
-import SchemesPopover from './SchemesPopover'; // ДОБАВЛЕНО
-import SchemesModal from './SchemesModal'; // ДОБАВЛЕНО
+import SchemesPopover from './SchemesPopover'; 
+import SchemesModal from './SchemesModal'; 
 
 const AUTO_NEXT_ID = 'AUTO_NEXT';
 const AUTO_NEXT_LABEL = '⬇️ Следующий по списку (Автоматически)';
@@ -43,7 +43,7 @@ interface ActsTableProps {
     setCurrentPage: (page: Page) => void;
     createNewAct: () => Act;
     onNavigateToCertificate?: (id: string) => void;
-    onNavigateToScheme?: (id: string) => void; // ДОБАВЛЕНО
+    onNavigateToScheme?: (id: string) => void; 
 }
 
 interface PinnedColumnInfo {
@@ -389,7 +389,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         editingMaterialTitle?: string;
     } | null>(null);
 
-    // ДОБАВЛЕНО ДЛЯ СХЕМ
     const [schemePopoverState, setSchemePopoverState] = useState<{
         scheme: ExecutiveScheme;
         actId: string;
@@ -592,7 +591,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     useEffect(() => {
         if (!editingCell) return;
         const handleClickOutside = (event: MouseEvent) => {
-            // Исключаем закрытие, если открыт один из поповеров/модалок
             if (datePopoverState || regulationsModalOpen || regulationPopoverState || materialPopoverState || starPopoverState || schemePopoverState || linkSchemeModalState) return;
             if (editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
                 const isModalClick = (event.target as HTMLElement).closest('.fixed.inset-0.z-50');
@@ -718,7 +716,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     };
 
-    // ФУНКЦИЯ ДЛЯ ПОИСКА СХЕМЫ ПО ТЕКСТУ В ТАБЛИЦЕ
     const findSchemeByText = (text: string) => {
         if (!schemes) return null;
         return schemes.find(s => text.includes(`№ ${s.number}`) || text.includes(`№${s.number}`) || text.includes(s.name));
@@ -1240,8 +1237,19 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 const [rowIndex, colIndex] = id.split(':').map(Number);
                 return { rowIndex, colIndex };
             });
+            const minRow = Math.min(...coordsList.map(c => c.rowIndex));
             const maxRow = Math.max(...coordsList.map(c => c.rowIndex));
+            const minCol = Math.min(...coordsList.map(c => c.colIndex));
             const maxCol = Math.max(...coordsList.map(c => c.colIndex));
+            
+            // Если количество выделенных ячеек не равно площади прямоугольника,
+            // значит выделение "рваное" (с пропусками) - прячем точку.
+            const expectedCellsCount = (maxRow - minRow + 1) * (maxCol - minCol + 1);
+            if (selectedCells.size !== expectedCellsCount) {
+                setFillHandleCoords(null);
+                return;
+            }
+
             const cellSelector = `td[data-row-index="${maxRow}"][data-col-index="${maxCol}"]`;
             const cell = scrollContainerRef.current.querySelector(cellSelector) as HTMLElement;
             if (cell) {
@@ -1528,6 +1536,23 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         const isSelected = selectedCells.has(cellId);
                                         const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colIndex === colIndex;
                                         const isCopied = copiedCells?.has(cellId);
+                                        
+                                        // ВЫЧИСЛЕНИЕ "УМНЫХ" ГРАНИЦ ДЛЯ ВЫДЕЛЕНИЯ
+                                        const isTopSelected = selectedCells.has(getCellId(rowIndex - 1, colIndex));
+                                        const isBottomSelected = selectedCells.has(getCellId(rowIndex + 1, colIndex));
+                                        const isLeftSelected = selectedCells.has(getCellId(rowIndex, colIndex - 1));
+                                        const isRightSelected = selectedCells.has(getCellId(rowIndex, colIndex + 1));
+
+                                        let selectionShadow = undefined;
+                                        if (isSelected) {
+                                            const shadows = [];
+                                            if (!isTopSelected) shadows.push('inset 0 2px 0 0 #3b82f6');
+                                            if (!isBottomSelected) shadows.push('inset 0 -2px 0 0 #3b82f6');
+                                            if (!isLeftSelected) shadows.push('inset 2px 0 0 0 #3b82f6');
+                                            if (!isRightSelected) shadows.push('inset -2px 0 0 0 #3b82f6');
+                                            if (shadows.length > 0) selectionShadow = shadows.join(', ');
+                                        }
+
                                         let displayContent: React.ReactNode = String(act[col.key as keyof Act] || '');
                                         
                                         if (col.key === 'workDates') {
@@ -1611,7 +1636,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                     })}
                                                 </div>
                                             );
-                                        // БЛОК ДЛЯ ИСПОЛНИТЕЛЬНЫХ СХЕМ (ДОБАВЛЕНА ЛОГИКА ПОДЧЕРКИВАНИЯ И ПОПОВЕРА)
                                         } else if (col.key === 'certs') { 
                                             displayContent = (
                                                 <div className="flex flex-wrap gap-1">
@@ -1687,7 +1711,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 data-col-index={colIndex}
                                                 className={`
                                                     border border-slate-300 px-2 py-1 relative align-top transition-colors
-                                                    ${isSelected ? 'bg-blue-100 outline outline-2 outline-blue-500 z-10' : ''}
+                                                    ${isSelected ? 'bg-blue-100 z-10' : ''}
                                                     ${isCopied ? 'relative' : ''}
                                                     ${getHighlightClass(rowIndex, colIndex)}
                                                     ${col.key === 'id' ? 'text-xs text-slate-400 select-all' : ''}
@@ -1697,7 +1721,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
                                                 onDoubleClick={(e) => handleCellDoubleClick(e, rowIndex, colIndex)}
                                                 onContextMenu={(e) => handleContextMenu(e, rowIndex, colIndex)}
-                                                style={{ height: '1px' }} 
+                                                style={{ height: '1px', boxShadow: selectionShadow }} 
                                             >
                                                 {isCopied && <div className="copied-cell-overlay" />}
                                                 
