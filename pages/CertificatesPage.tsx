@@ -1134,7 +1134,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
                         className="flex items-center bg-slate-100 text-slate-700 border border-slate-300 px-3 py-2 rounded-md hover:bg-slate-200 transition-colors"
                         title="Копировать из другого объекта"
                     >
-                        <CopyIcon className="w-5 h-5 mr-1" /> Скопировать
+                        <CopyIcon className="w-5 h-5 mr-1" /> Копировать
                     </button>
                     <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 whitespace-nowrap transition-colors">
                         <PlusIcon /> Добавить сертификат
