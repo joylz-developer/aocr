@@ -142,7 +142,7 @@ const SingleDateEditorPopover: React.FC<{
         </button>
     );
 
-    const inputClass = "w-full p-1.5 border rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 border-slate-300";
+    const inputClass = "w-full p-1.5 border rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 border-slate-300 [.theme-dark_&]:[color-scheme:dark]";
 
     return (
         <div 
@@ -222,7 +222,7 @@ const DateEditorPopover: React.FC<{
         </button>
     );
 
-    const inputClass = "w-full p-1.5 border rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 border-slate-300";
+    const inputClass = "w-full p-1.5 border rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 border-slate-300 [.theme-dark_&]:[color-scheme:dark]";
 
     return (
         <div 
@@ -1850,7 +1850,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                                     value={editorValue} 
                                                                     onChange={handleEditorChange} 
                                                                     onKeyDown={handleEditorKeyDown} 
-                                                                    className="w-full h-full bg-transparent outline-none p-1 text-sm rounded border border-blue-300 focus:ring-1 focus:ring-blue-500" 
+                                                                    className="w-full h-full bg-transparent outline-none p-1 text-sm rounded border border-blue-300 focus:ring-1 focus:ring-blue-500 [.theme-dark_&]:[color-scheme:dark]" 
                                                                 />
                                                                 {editorValue && (
                                                                     <button 
