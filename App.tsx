@@ -131,7 +131,7 @@ const App: React.FC = () => {
         aiModel: 'gemini-2.5-flash',
         openAiApiKey: '',
         openAiBaseUrl: 'https://openrouter.ai/api/v1',
-        defaultActDate: '{workEndDate}',
+        defaultActDate: '',
         historyDepth: 20,
         registryThreshold: 5,
         certificatePromptNumber: DEFAULT_PROMPT_NUMBER,

@@ -3,7 +3,7 @@ import { ActTableColumnKey } from '../types';
 export const ALL_COLUMNS: { 
     key: ActTableColumnKey; 
     label: string; 
-    type: 'text' | 'date' | 'textarea' | 'custom_date' | 'materials' | 'schemes'; // ДОБАВЛЕНО 'schemes'
+    type: 'text' | 'date' | 'textarea' | 'custom_date' | 'materials' | 'schemes';
     widthClass: string; 
     description?: string;
     example?: string;
@@ -18,7 +18,7 @@ export const ALL_COLUMNS: {
     },
     { 
         key: 'date', 
-        label: 'Дата', 
+        label: 'Дата акта', 
         type: 'date', 
         widthClass: 'w-36', 
         description: 'Дата подписания акта комиссией.',
@@ -26,23 +26,15 @@ export const ALL_COLUMNS: {
     },
     { 
         key: 'workName', 
-        label: 'Наименование работ', 
+        label: '1. Наименование работ', 
         type: 'textarea', 
         widthClass: 'w-64', 
         description: 'Точное наименование скрытых работ, подлежащих освидетельствованию.',
         example: 'Устройство арматурного каркаса монолитных стен подвала в осях А-В/1-3'
     },
     { 
-        key: 'workDates', 
-        label: 'Даты работ', 
-        type: 'custom_date', 
-        widthClass: 'w-64', 
-        description: 'Период выполнения работ: дата начала и дата окончания.',
-        example: '2024-10-01 - 2024-10-14'
-    },
-    { 
         key: 'projectDocs', 
-        label: '1. Проектная документация', 
+        label: '2. Проектная документация', 
         type: 'textarea', 
         widthClass: 'w-64', 
         description: 'Шифр проекта, номера чертежей, на основании которых выполнены работы.',
@@ -50,31 +42,39 @@ export const ALL_COLUMNS: {
     },
     { 
         key: 'materials', 
-        label: '2. Материалы', 
+        label: '3. Материалы', 
         type: 'materials', 
         widthClass: 'w-80', 
         description: 'Перечень примененных материалов и изделий с указанием сертификатов и паспортов качества.',
         example: 'Арматура А500С Ø12мм (сертификат №12345); Бетон B25 W6 F150 (паспорт №987)'
     },
     { 
+        key: 'certs', 
+        label: '4. Исполнительные схемы', 
+        type: 'schemes',
+        widthClass: 'w-80', 
+        description: 'Перечень исполнительной геодезической документации, схем, результатов лабораторных испытаний.',
+        example: 'Исполнительная схема №12 от 12.10.2024; Протокол испытания №5'
+    },
+    { 
+        key: 'workDates', 
+        label: '5. Даты работ', 
+        type: 'custom_date', 
+        widthClass: 'w-64', 
+        description: 'Период выполнения работ: дата начала и дата окончания.',
+        example: '2024-10-01 - 2024-10-14'
+    },
+    { 
         key: 'regulations', 
-        label: '3. Нормативы', 
+        label: '6. Нормативы', 
         type: 'textarea', 
         widthClass: 'w-64', 
         description: 'Нормативные документы (СП, ГОСТ, СНиП), требованиям которых соответствуют работы.',
         example: 'СП 70.13330.2012 "Несущие и ограждающие конструкции"'
     },
     { 
-        key: 'certs', 
-        label: '4. Исполнительные схемы', 
-        type: 'schemes', // ИЗМЕНЕНО с 'textarea' на 'schemes'
-        widthClass: 'w-80', 
-        description: 'Перечень исполнительной геодезической документации, схем, результатов лабораторных испытаний.',
-        example: 'Исполнительная схема №12 от 12.10.2024; Протокол испытания №5'
-    },
-    { 
         key: 'nextWork', 
-        label: '5. Разрешение на работы', 
+        label: '7. Последующие работы', 
         type: 'textarea', 
         widthClass: 'w-64', 
         description: 'Наименование последующих работ, к выполнению которых разрешается приступить.',
@@ -82,7 +82,7 @@ export const ALL_COLUMNS: {
     },
     { 
         key: 'additionalInfo', 
-        label: '6. Доп. сведения', 
+        label: 'Доп. сведения', 
         type: 'textarea', 
         widthClass: 'w-48', 
         description: 'Любая дополнительная информация, замечания комиссии.',

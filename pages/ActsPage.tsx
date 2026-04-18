@@ -27,7 +27,7 @@ interface ActsPageProps {
     onUndo?: () => void;
     onRedo?: () => void;
     onNavigateToCertificate?: (id: string) => void;
-    onNavigateToScheme?: (id: string) => void; // ДОБАВЛЕНО
+    onNavigateToScheme?: (id: string) => void;
 }
 
 const ColumnPicker: React.FC<{
@@ -118,16 +118,28 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
     const [aiPrompt, setAiPrompt] = useState('');
     const [aiLoading, setAiLoading] = useState(false);
 
-    
+    // СОРТИРУЕМ список колонок для выпадающего меню в соответствии с порядком в таблице (columnOrder)
     const pickableColumns = useMemo(() => {
-        return ALL_COLUMNS.filter(col => {
+        const colMap = new Map(ALL_COLUMNS.map(col => [col.key, col]));
+        
+        const orderedCols = columnOrder
+            .filter(key => colMap.has(key as any))
+            .map(key => colMap.get(key as any)!);
+            
+        // Если появились новые колонки, которых нет в columnOrder, добавим их в конец
+        const orderedKeys = new Set(orderedCols.map(c => c.key));
+        const missingCols = ALL_COLUMNS.filter(c => !orderedKeys.has(c.key));
+        
+        const finalCols = [...orderedCols, ...missingCols];
+
+        return finalCols.filter(col => {
             if (col.key === 'date' && !settings.showActDate) return false;
             if (col.key === 'additionalInfo' && !settings.showAdditionalInfo) return false;
             if (col.key === 'attachments' && !settings.showAttachments) return false;
             if (col.key === 'copiesCount' && !settings.showCopiesCount) return false;
             return true;
         });
-    }, [settings]);
+    }, [settings, columnOrder]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -378,7 +390,7 @@ const ActsPage: React.FC<ActsPageProps> = ({ acts, people, organizations, groups
                     onReorderActs={onReorderActs}
                     setCurrentPage={setCurrentPage}
                     onNavigateToCertificate={onNavigateToCertificate}
-                    onNavigateToScheme={onNavigateToScheme} // ДОБАВЛЕНО
+                    onNavigateToScheme={onNavigateToScheme}
                 />
             </div>
             
