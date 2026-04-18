@@ -7,6 +7,7 @@ export const ALL_COLUMNS: {
     widthClass: string; 
     description?: string;
     example?: string;
+    templateTag?: string; // Новое поле для отображения переменной в подсказках
 }[] = [
     { 
         key: 'number', 
@@ -14,7 +15,8 @@ export const ALL_COLUMNS: {
         type: 'text', 
         widthClass: 'w-24', 
         description: 'Уникальный номер акта освидетельствования скрытых работ.',
-        example: '14-А'
+        example: '14-А',
+        templateTag: '{act_number}'
     },
     { 
         key: 'date', 
@@ -22,7 +24,8 @@ export const ALL_COLUMNS: {
         type: 'date', 
         widthClass: 'w-36', 
         description: 'Дата подписания акта комиссией.',
-        example: '2024-10-15'
+        example: '2024-10-15',
+        templateTag: '{act_day}, {act_month}, {act_year}'
     },
     { 
         key: 'workName', 
@@ -30,7 +33,8 @@ export const ALL_COLUMNS: {
         type: 'textarea', 
         widthClass: 'w-64', 
         description: 'Точное наименование скрытых работ, подлежащих освидетельствованию.',
-        example: 'Устройство арматурного каркаса монолитных стен подвала в осях А-В/1-3'
+        example: 'Устройство арматурного каркаса монолитных стен подвала в осях А-В/1-3',
+        templateTag: '{work_name}'
     },
     { 
         key: 'projectDocs', 
@@ -38,7 +42,8 @@ export const ALL_COLUMNS: {
         type: 'textarea', 
         widthClass: 'w-64', 
         description: 'Шифр проекта, номера чертежей, на основании которых выполнены работы.',
-        example: 'Шифр 2024-01-КЖ, Листы 15-18, Изм. 2'
+        example: 'Шифр 2024-01-КЖ, Листы 15-18, Изм. 2',
+        templateTag: '{project_docs}'
     },
     { 
         key: 'materials', 
@@ -46,7 +51,8 @@ export const ALL_COLUMNS: {
         type: 'materials', 
         widthClass: 'w-80', 
         description: 'Перечень примененных материалов и изделий с указанием сертификатов и паспортов качества.',
-        example: 'Арматура А500С Ø12мм (сертификат №12345); Бетон B25 W6 F150 (паспорт №987)'
+        example: 'Арматура А500С Ø12мм (сертификат №12345); Бетон B25 W6 F150 (паспорт №987)',
+        templateTag: '{materials}'
     },
     { 
         key: 'certs', 
@@ -54,7 +60,8 @@ export const ALL_COLUMNS: {
         type: 'schemes',
         widthClass: 'w-80', 
         description: 'Перечень исполнительной геодезической документации, схем, результатов лабораторных испытаний.',
-        example: 'Исполнительная схема №12 от 12.10.2024; Протокол испытания №5'
+        example: 'Исполнительная схема №12 от 12.10.2024; Протокол испытания №5',
+        templateTag: '{certs}'
     },
     { 
         key: 'workDates', 
@@ -62,7 +69,8 @@ export const ALL_COLUMNS: {
         type: 'custom_date', 
         widthClass: 'w-64', 
         description: 'Период выполнения работ: дата начала и дата окончания.',
-        example: '2024-10-01 - 2024-10-14'
+        example: '2024-10-01 - 2024-10-14',
+        templateTag: '{work_start_date}, {work_end_date}'
     },
     { 
         key: 'regulations', 
@@ -70,7 +78,8 @@ export const ALL_COLUMNS: {
         type: 'textarea', 
         widthClass: 'w-64', 
         description: 'Нормативные документы (СП, ГОСТ, СНиП), требованиям которых соответствуют работы.',
-        example: 'СП 70.13330.2012 "Несущие и ограждающие конструкции"'
+        example: 'СП 70.13330.2012 "Несущие и ограждающие конструкции"',
+        templateTag: '{regulations}'
     },
     { 
         key: 'nextWork', 
@@ -78,15 +87,17 @@ export const ALL_COLUMNS: {
         type: 'textarea', 
         widthClass: 'w-64', 
         description: 'Наименование последующих работ, к выполнению которых разрешается приступить.',
-        example: 'Бетонирование монолитных стен подвала в осях А-В/1-3'
+        example: 'Бетонирование монолитных стен подвала в осях А-В/1-3',
+        templateTag: '{next_work}'
     },
     { 
         key: 'additionalInfo', 
-        label: 'Доп. сведения', 
+        label: '8. Доп. сведения', 
         type: 'textarea', 
         widthClass: 'w-48', 
         description: 'Любая дополнительная информация, замечания комиссии.',
-        example: 'Работы выполнены в соответствии с ППР.'
+        example: 'Работы выполнены в соответствии с ППР.',
+        templateTag: '{additional_info}'
     },
     { 
         key: 'attachments', 
@@ -94,7 +105,8 @@ export const ALL_COLUMNS: {
         type: 'textarea', 
         widthClass: 'w-48', 
         description: 'Количество приложений к акту (страниц, листов).',
-        example: 'Приложения на 15 листах'
+        example: 'Приложения на 15 листах',
+        templateTag: '{attachments}'
     },
     { 
         key: 'copiesCount', 
@@ -102,7 +114,8 @@ export const ALL_COLUMNS: {
         type: 'text', 
         widthClass: 'w-24', 
         description: 'Количество составленных экземпляров акта.',
-        example: '4'
+        example: '4',
+        templateTag: '{copies_count}'
     },
     { 
         key: 'commissionGroup', 

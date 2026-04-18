@@ -79,6 +79,96 @@ const parseDisplayDate = (dateString: string): string | null => {
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 };
 
+// ФУНКЦИЯ ДЛЯ ВЫДЕЛЕНИЯ ПЕРЕМЕННЫХ ШАБЛОНА В ЯЧЕЙКАХ
+const renderTextWithTags = (text: string) => {
+    if (typeof text !== 'string') return text;
+    // Ищем любые переменные, обрамленные в фигурные скобки (например {work_end_date})
+    const parts = text.split(/(\{[\w_]+\})/g);
+    return parts.map((part, i) => {
+        if (part.startsWith('{') && part.endsWith('}')) {
+            return (
+                <span 
+                    key={i} 
+                    className="bg-pink-100 text-pink-700 px-1 py-0.5 rounded cursor-help font-mono text-[11px] border border-pink-200 mx-0.5 inline-block align-middle shadow-sm"
+                    title={`Переменная шаблона: при выгрузке вместо этого тега подставятся данные (${part})`}
+                >
+                    {part}
+                </span>
+            );
+        }
+        return part;
+    });
+};
+
+const SingleDateEditorPopover: React.FC<{
+    act: Act;
+    onActChange: (act: Act) => void;
+    onClose: () => void;
+    position: { top: number, left: number, width: number };
+}> = ({ act, onActChange, onClose, position }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [onClose]);
+
+    const handleDateChange = (value: string) => {
+        onActChange({ ...act, date: value });
+    };
+    
+    const addTime = (amount: number, unit: 'day' | 'week' | 'month') => {
+        if (!act.date) return;
+        const [year, month, day] = act.date.split('-').map(Number);
+        const utcDate = new Date(Date.UTC(year, month - 1, day));
+
+        if (unit === 'day') utcDate.setUTCDate(utcDate.getUTCDate() + amount);
+        else if (unit === 'week') utcDate.setUTCDate(utcDate.getUTCDate() + amount * 7);
+        else if (unit === 'month') utcDate.setUTCMonth(utcDate.getUTCMonth() + amount);
+        
+        const newDateYYYYMMDD = utcDate.toISOString().split('T')[0];
+        handleDateChange(newDateYYYYMMDD);
+    };
+
+    const QuickAddButton: React.FC<{ children: React.ReactNode; onClick: () => void }> = ({ children, onClick }) => (
+        <button type="button" onClick={onClick} className="px-2 py-1 text-xs bg-slate-200 hover:bg-slate-300 rounded">
+            {children}
+        </button>
+    );
+
+    const inputClass = "w-full p-1.5 border rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 border-slate-300";
+
+    return (
+        <div 
+            ref={containerRef} 
+            className="absolute bg-white p-3 border-2 border-blue-500 rounded-md z-40 flex flex-col gap-3 shadow-lg animate-fade-in-up" 
+            style={{ top: position.top, left: position.left, minWidth: '220px' }}
+            onMouseDown={e => e.stopPropagation()} 
+        >
+            <div>
+                <label className="text-xs font-medium text-slate-600">Дата акта</label>
+                <input
+                    type="date"
+                    value={act.date || ''}
+                    onChange={e => handleDateChange(e.target.value)}
+                    className={inputClass}
+                />
+            </div>
+            <div className="flex justify-start items-center gap-1">
+                <QuickAddButton onClick={() => addTime(1, 'day')}>+1Д</QuickAddButton>
+                <QuickAddButton onClick={() => addTime(1, 'week')}>+1Н</QuickAddButton>
+                <QuickAddButton onClick={() => addTime(1, 'month')}>+1М</QuickAddButton>
+            </div>
+        </div>
+    );
+};
+
 const DateEditorPopover: React.FC<{
     act: Act;
     onActChange: (act: Act) => void;
@@ -297,6 +387,12 @@ const RichHeaderTooltip: React.FC<{
             <p className="text-sm text-slate-600 mb-3 leading-relaxed">
                 {column.description}
             </p>
+            {column.templateTag && (
+                <div className="mb-3">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Переменная в шаблоне:</span>
+                    <code className="text-xs bg-pink-50 text-pink-700 border border-pink-200 px-1.5 py-0.5 rounded font-mono">{column.templateTag}</code>
+                </div>
+            )}
             {column.example && (
                 <div className="bg-slate-50 border border-slate-100 rounded p-2.5">
                     <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Пример заполнения:</span>
@@ -339,6 +435,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [starPopoverState, setStarPopoverState] = useState<{colKey: string, position: {top: number, left: number}} | null>(null);
 
     const [datePopoverState, setDatePopoverState] = useState<{ act: Act; position: { top: number, left: number, width: number } } | null>(null);
+    const [singleDatePopoverState, setSingleDatePopoverState] = useState<{ act: Act; position: { top: number, left: number, width: number } } | null>(null);
+
     const [fillHandleCoords, setFillHandleCoords] = useState<{top: number, left: number} | null>(null);
 
     const [hoveredHeaderKey, setHoveredHeaderKey] = useState<string | null>(null);
@@ -591,7 +689,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     useEffect(() => {
         if (!editingCell) return;
         const handleClickOutside = (event: MouseEvent) => {
-            if (datePopoverState || regulationsModalOpen || regulationPopoverState || materialPopoverState || starPopoverState || schemePopoverState || linkSchemeModalState) return;
+            if (datePopoverState || singleDatePopoverState || regulationsModalOpen || regulationPopoverState || materialPopoverState || starPopoverState || schemePopoverState || linkSchemeModalState) return;
             if (editorContainerRef.current && !editorContainerRef.current.contains(event.target as Node)) {
                 const isModalClick = (event.target as HTMLElement).closest('.fixed.inset-0.z-50');
                 if (isModalClick) return;
@@ -606,7 +704,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             clearTimeout(timerId);
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [editingCell, datePopoverState, handleEditorSave, closeEditor, regulationsModalOpen, regulationPopoverState, materialPopoverState, starPopoverState, schemePopoverState, linkSchemeModalState]);
+    }, [editingCell, datePopoverState, singleDatePopoverState, handleEditorSave, closeEditor, regulationsModalOpen, regulationPopoverState, materialPopoverState, starPopoverState, schemePopoverState, linkSchemeModalState]);
 
     useEffect(() => {
         if (editingCell) {
@@ -745,6 +843,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (e.detail > 1) e.preventDefault();
         setCopiedCells(null);
         setDatePopoverState(null);
+        setSingleDatePopoverState(null);
         setRegulationPopoverState(null);
         setMaterialPopoverState(null);
         setNextWorkPopoverState(null);
@@ -823,6 +922,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         });
     };
 
+    const handleSingleDateClick = (act: Act, target: HTMLElement) => {
+        const coords = getRelativeCoords(target);
+        setSingleDatePopoverState({
+            act,
+            position: { top: coords.top, left: coords.left, width: coords.width }
+        });
+    };
+
     const handleCellDoubleClick = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
         if (window.getSelection) { window.getSelection()?.removeAllRanges(); }
         const col = columns[colIndex];
@@ -830,6 +937,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             if (handleEditorSave()) { closeEditor(); } else { return; }
         }
         setDatePopoverState(null);
+        setSingleDatePopoverState(null);
         setRegulationPopoverState(null);
         setMaterialPopoverState(null);
         setNextWorkPopoverState(null);
@@ -1006,6 +1114,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             setCopiedCells(null);
             e.currentTarget.blur();
             setDatePopoverState(null);
+            setSingleDatePopoverState(null);
             setRegulationPopoverState(null);
             setMaterialPopoverState(null);
             setNextWorkPopoverState(null);
@@ -1242,8 +1351,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             const minCol = Math.min(...coordsList.map(c => c.colIndex));
             const maxCol = Math.max(...coordsList.map(c => c.colIndex));
             
-            // Если количество выделенных ячеек не равно площади прямоугольника,
-            // значит выделение "рваное" (с пропусками) - прячем точку.
             const expectedCellsCount = (maxRow - minRow + 1) * (maxCol - minCol + 1);
             if (selectedCells.size !== expectedCellsCount) {
                 setFillHandleCoords(null);
@@ -1698,7 +1805,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 displayContent = (
                                                     <span className="text-slate-400 italic flex items-start gap-1 group/default" title={`Автоматически: ${resolved}`}>
                                                         <SparklesIcon className="w-3 h-3 text-slate-300 opacity-50 group-hover/default:opacity-100 mt-0.5 flex-shrink-0" />
-                                                        <span className="truncate">{resolved || '(Пусто)'}</span>
+                                                        <span className="truncate">{renderTextWithTags(resolved || '(Пусто)')}</span>
                                                     </span>
                                                 );
                                             }
@@ -1789,9 +1896,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                     </div>
                                                 ) : (
                                                     <div className="w-full h-full min-h-[1.5em] whitespace-pre-wrap flex items-center justify-between group/cell">
-                                                        <span className="flex-grow">{displayContent}</span>
-                                                        {col.key === 'workDates' && (
-                                                            <button className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-blue-600 ml-2 transition-opacity" onClick={(e) => { e.stopPropagation(); handleDateClick(act, e.currentTarget); }}>
+                                                        <span className="flex-grow">
+                                                            {typeof displayContent === 'string' ? renderTextWithTags(displayContent) : displayContent}
+                                                        </span>
+                                                        {(col.key === 'workDates' || col.key === 'date') && (
+                                                            <button className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-blue-600 ml-2 transition-opacity flex-shrink-0" onClick={(e) => { 
+                                                                e.stopPropagation(); 
+                                                                if (col.key === 'workDates') handleDateClick(act, e.currentTarget); 
+                                                                else handleSingleDateClick(act, e.currentTarget);
+                                                            }}>
                                                                 <CalendarIcon className="w-4 h-4" />
                                                             </button>
                                                         )}
@@ -1859,6 +1972,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             )}
 
             {datePopoverState && <DateEditorPopover act={datePopoverState.act} onActChange={(updatedAct) => { handleSaveWithTemplateResolution(updatedAct); setDatePopoverState(prev => prev ? { ...prev, act: updatedAct } : null); }} onClose={() => setDatePopoverState(null)} position={datePopoverState.position} />}
+            {singleDatePopoverState && <SingleDateEditorPopover act={singleDatePopoverState.act} onActChange={(updatedAct) => { handleSaveWithTemplateResolution(updatedAct); setSingleDatePopoverState(prev => prev ? { ...prev, act: updatedAct } : null); }} onClose={() => setSingleDatePopoverState(null)} position={singleDatePopoverState.position} />}
             {regulationPopoverState && <RegulationPopover regulation={regulationPopoverState.regulation} position={regulationPopoverState.position} onClose={() => setRegulationPopoverState(null)} onOpenDetails={() => { setFullRegulationDetails(regulationPopoverState.regulation); setRegulationPopoverState(null); }} />}
             
             {/* Окно управления материалами */}
