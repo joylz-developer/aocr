@@ -1919,21 +1919,21 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                 </tr>
                             );
                         })}
-                        <tr className="h-10 group cursor-pointer" onClick={() => handleAddRows(1)}>
-                            <td colSpan={columns.length + 1} className="p-0 border border-t-0 border-slate-300 border-dashed bg-slate-50 hover:bg-blue-50 transition-colors">
-                                <div className="flex items-center justify-between px-4 py-2 text-slate-500 group-hover:text-blue-600 select-none">
-                                    <div className="flex items-center gap-2 font-medium">
-                                        <PlusIcon className="w-5 h-5"/>
-                                        <span>Добавить новый акт</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                                        <span className="text-xs">Добавить сразу:</span>
-                                        <input type="number" min="1" max="50" value={numRowsToAdd} onChange={(e) => setNumRowsToAdd(Math.max(1, parseInt(e.target.value) || 1))} className="w-12 h-7 px-1 text-center border border-slate-300 rounded text-sm focus:outline-none focus:border-blue-500" />
-                                        <button onClick={(e) => { e.stopPropagation(); handleAddRows(numRowsToAdd); }} className="bg-white border border-slate-300 px-3 py-1 rounded text-xs hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors">Добавить</button>
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
+<tr className="h-10 group cursor-pointer" onClick={() => handleAddRows(1)}>
+    <td colSpan={columns.length + 1} className="p-0 border border-t-0 border-slate-300 border-dashed bg-slate-50 hover:bg-blue-50 transition-colors">
+        <div className="sticky left-0 w-max flex items-center gap-10 px-4 py-2 text-slate-500 group-hover:text-blue-600 select-none">
+            <div className="flex items-center gap-2 font-medium">
+                <PlusIcon className="w-5 h-5"/>
+                <span>Добавить новый акт</span>
+            </div>
+            <div className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                <span className="text-xs">Добавить сразу:</span>
+                <input type="number" min="1" max="50" value={numRowsToAdd} onChange={(e) => setNumRowsToAdd(Math.max(1, parseInt(e.target.value) || 1))} className="w-12 h-7 px-1 text-center border border-slate-300 rounded text-sm focus:outline-none focus:border-blue-500 [.theme-dark_&]:[color-scheme:dark]" />
+                <button onClick={(e) => { e.stopPropagation(); handleAddRows(numRowsToAdd); }} className="bg-white border border-slate-300 px-3 py-1 rounded text-xs hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors">Добавить</button>
+            </div>
+        </div>
+    </td>
+</tr>
                     </tbody>
                 </table>
                 {fillHandleCoords && !editingCell && (
