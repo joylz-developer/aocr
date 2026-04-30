@@ -13,6 +13,10 @@ interface SettingsPageProps {
     onUploadRegistryTemplate: (file: File) => void;
     isTemplateLoaded: boolean;
     isRegistryTemplateLoaded: boolean;
+    // Новые пропсы для удаления и отображения дат
+    onDeleteTemplate?: (type: 'main' | 'registry') => void;
+    templateUpdateDate?: string;
+    registryUpdateDate?: string;
 }
 
 // --- Tooltip Logic ---
@@ -260,12 +264,29 @@ const SettingToggle: React.FC<SettingToggleProps> = ({ id, label, description, c
     </div>
 );
 
-type SettingsTab = 'general' | 'ai_prompts' | 'data' | 'help';
-type HelpSubTab = 'main' | 'registry';
+// Убрали вкладку "help"
+type SettingsTab = 'general' | 'ai_prompts' | 'data';
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport, onExport, onChangeTemplate, onDownloadTemplate, onUploadRegistryTemplate, isTemplateLoaded, isRegistryTemplateLoaded }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ 
+    settings, 
+    onSave, 
+    onImport, 
+    onExport, 
+    onChangeTemplate, 
+    onDownloadTemplate, 
+    onUploadRegistryTemplate, 
+    isTemplateLoaded, 
+    isRegistryTemplateLoaded,
+    onDeleteTemplate,
+    templateUpdateDate,
+    registryUpdateDate
+}) => {
     const [activeTab, setActiveTab] = useState<SettingsTab>('general');
-    const [helpSubTab, setHelpSubTab] = useState<HelpSubTab>('main');
+    
+    // Состояния для модалки со справкой
+    const [isHelpOpen, setIsHelpOpen] = useState(false);
+    const [helpType, setHelpType] = useState<'main' | 'registry'>('main');
+
     const [formData, setFormData] = useState<ProjectSettings>(settings);
     const [isSaved, setIsSaved] = useState(false);
     const [editingModel, setEditingModel] = useState<AiModelConfig | null>(null);
@@ -361,6 +382,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
         }
     }
 
+    const openHelp = (type: 'main' | 'registry') => {
+        setHelpType(type);
+        setIsHelpOpen(true);
+    };
+
     const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [testMessage, setTestMessage] = useState<string | null>(null);
 
@@ -385,7 +411,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
     return (
         <form onSubmit={handleSubmit} className="h-full flex flex-col w-full bg-white rounded-lg shadow-md overflow-hidden relative">
             <div className="p-6 pb-0 flex-shrink-0">
-                <h1 className="text-2xl font-bold text-slate-800 mb-6">Настройки и Справка</h1>
+                <h1 className="text-2xl font-bold text-slate-800 mb-6">Настройки</h1>
                 
                 {/* Main Tabs */}
                 <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg mb-4">
@@ -409,13 +435,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                         className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex-1 ${activeTab === 'data' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
                     >
                         Данные и Шаблоны
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('help')}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex-1 ${activeTab === 'help' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        Справка по тегам
                     </button>
                 </div>
             </div>
@@ -711,436 +730,175 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                             <p className="text-xs text-slate-500 mb-4">Настройте инструкции для нейросети при распознавании сертификатов и паспортов качества.</p>
                             
                             <div>
-                                <label htmlFor="certificatePromptNumber" className={labelClass}>
-                                    Номер документа
-                                </label>
-                                <div className="mb-1 p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600">
-                                    <strong className="text-slate-700">Формат ответа:</strong> Возвращает текст или JSON. Если используете JSON, укажите ключ: <code className="text-blue-600 font-mono">"number"</code>
-                                </div>
-                                <textarea
-                                    id="certificatePromptNumber"
-                                    name="certificatePromptNumber"
-                                    value={formData.certificatePromptNumber || ''}
-                                    onChange={handleChange}
-                                    rows={6}
-                                    className={`${inputClass} min-h-[150px] font-mono text-xs`}
-                                />
+                                <label htmlFor="certificatePromptNumber" className={labelClass}>Номер документа</label>
+                                <textarea id="certificatePromptNumber" name="certificatePromptNumber" value={formData.certificatePromptNumber || ''} onChange={handleChange} rows={6} className={`${inputClass} min-h-[150px] font-mono text-xs`} />
                             </div>
                             <div>
-                                <label htmlFor="certificatePromptDate" className={labelClass}>
-                                    Дата от
-                                </label>
-                                <div className="mb-1 p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600">
-                                    <strong className="text-slate-700">Формат ответа:</strong> Возвращает текст или JSON. Рекомендуемый ключ: <code className="text-blue-600 font-mono">"dateFrom"</code> (формат YYYY-MM-DD)
-                                </div>
-                                <textarea
-                                    id="certificatePromptDate"
-                                    name="certificatePromptDate"
-                                    value={formData.certificatePromptDate || ''}
-                                    onChange={handleChange}
-                                    rows={6}
-                                    className={`${inputClass} min-h-[150px] font-mono text-xs`}
-                                />
+                                <label htmlFor="certificatePromptDate" className={labelClass}>Дата от</label>
+                                <textarea id="certificatePromptDate" name="certificatePromptDate" value={formData.certificatePromptDate || ''} onChange={handleChange} rows={6} className={`${inputClass} min-h-[150px] font-mono text-xs`} />
                             </div>
                             <div>
-                                <label htmlFor="certificatePromptDateTo" className={labelClass}>
-                                    Дата до
-                                </label>
-                                <div className="mb-1 p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600">
-                                    <strong className="text-slate-700">Формат ответа:</strong> Возвращает текст или JSON. Рекомендуемый ключ: <code className="text-blue-600 font-mono">"dateTo"</code> (формат YYYY-MM-DD)
-                                </div>
-                                <textarea
-                                    id="certificatePromptDateTo"
-                                    name="certificatePromptDateTo"
-                                    value={(formData as any).certificatePromptDateTo || ''}
-                                    onChange={handleChange}
-                                    rows={6}
-                                    className={`${inputClass} min-h-[150px] font-mono text-xs`}
-                                />
+                                <label htmlFor="certificatePromptDateTo" className={labelClass}>Дата до</label>
+                                <textarea id="certificatePromptDateTo" name="certificatePromptDateTo" value={(formData as any).certificatePromptDateTo || ''} onChange={handleChange} rows={6} className={`${inputClass} min-h-[150px] font-mono text-xs`} />
                             </div>
                             <div>
-                                <label htmlFor="certificatePromptSupplier" className={labelClass}>
-                                    Поставщик
-                                </label>
-                                <div className="mb-1 p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600">
-                                    <strong className="text-slate-700">Формат ответа:</strong> Возвращает текст или JSON. Рекомендуемый ключ: <code className="text-blue-600 font-mono">"supplier"</code>
-                                </div>
-                                <textarea
-                                    id="certificatePromptSupplier"
-                                    name="certificatePromptSupplier"
-                                    value={(formData as any).certificatePromptSupplier || ''}
-                                    onChange={handleChange}
-                                    rows={6}
-                                    className={`${inputClass} min-h-[150px] font-mono text-xs`}
-                                />
+                                <label htmlFor="certificatePromptSupplier" className={labelClass}>Поставщик</label>
+                                <textarea id="certificatePromptSupplier" name="certificatePromptSupplier" value={(formData as any).certificatePromptSupplier || ''} onChange={handleChange} rows={6} className={`${inputClass} min-h-[150px] font-mono text-xs`} />
                             </div>
                             <div>
-                                <label htmlFor="certificatePromptMaterials" className={labelClass}>
-                                    Материалы
-                                </label>
-                                <div className="mb-1 p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600">
-                                    <strong className="text-slate-700">Формат ответа:</strong> Ожидается JSON-массив строк или объект с ключом: <code className="text-blue-600 font-mono">"materials"</code>
-                                </div>
-                                <textarea
-                                    id="certificatePromptMaterials"
-                                    name="certificatePromptMaterials"
-                                    value={formData.certificatePromptMaterials || ''}
-                                    onChange={handleChange}
-                                    rows={6}
-                                    className={`${inputClass} min-h-[150px] font-mono text-xs`}
-                                />
+                                <label htmlFor="certificatePromptMaterials" className={labelClass}>Материалы</label>
+                                <textarea id="certificatePromptMaterials" name="certificatePromptMaterials" value={formData.certificatePromptMaterials || ''} onChange={handleChange} rows={6} className={`${inputClass} min-h-[150px] font-mono text-xs`} />
                             </div>
                         </div>
 
                         <div className="space-y-4 pt-4 border-t border-slate-200">
                             <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Промпт для Людей</h3>
-                            <p className="text-xs text-slate-500 mb-2">Настройте инструкцию для извлечения данных о людях (ФИО, должность, организация).</p>
-                            
                             <div>
-                                <label htmlFor="personExtractionPrompt" className={labelClass}>
-                                    Промпт (Люди)
-                                </label>
-                                <div className="mb-2 p-2 bg-slate-50 border border-slate-200 rounded text-xs text-slate-600 leading-relaxed">
-                                    <strong className="text-slate-800 block mb-1">Обязательные ключи JSON:</strong>
-                                    <ul className="list-disc list-inside mb-2">
-                                        <li><code className="text-blue-600 font-mono">"name"</code> — ФИО</li>
-                                        <li><code className="text-blue-600 font-mono">"position"</code> — Должность</li>
-                                    </ul>
-                                    <strong className="text-slate-800 block mb-1">Опциональные ключи JSON:</strong>
-                                    <ul className="list-disc list-inside">
-                                        <li><code className="text-blue-600 font-mono">"organization"</code> — Организация</li>
-                                        <li><code className="text-blue-600 font-mono">"authDoc"</code> — Документ о полномочиях</li>
-                                        <li><code className="text-blue-600 font-mono">"nrs"</code> — Номер НРС</li>
-                                    </ul>
-                                </div>
-                                <textarea
-                                    id="personExtractionPrompt"
-                                    name="personExtractionPrompt"
-                                    value={formData.personExtractionPrompt || ''}
-                                    onChange={handleChange}
-                                    className={`${inputClass} min-h-[150px] font-mono text-xs`}
-                                />
+                                <label htmlFor="personExtractionPrompt" className={labelClass}>Промпт (Люди)</label>
+                                <textarea id="personExtractionPrompt" name="personExtractionPrompt" value={formData.personExtractionPrompt || ''} onChange={handleChange} className={`${inputClass} min-h-[150px] font-mono text-xs`} />
                             </div>
                         </div>
 
                         <div className="space-y-4 pt-4 border-t border-slate-200">
                             <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Промпт для Организаций</h3>
-                            <p className="text-xs text-slate-500 mb-2">Настройте инструкцию для извлечения данных об организациях.</p>
-                            
                             <div>
-                                <label htmlFor="organizationExtractionPrompt" className={labelClass}>
-                                    Промпт (Организации)
-                                </label>
-                                <div className="mb-2 p-2 bg-slate-50 border border-slate-200 rounded text-xs text-slate-600 leading-relaxed">
-                                    <strong className="text-slate-800 block mb-1">Доступные ключи JSON:</strong>
-                                    <div className="flex flex-wrap gap-2 mt-1">
-                                        <code className="text-blue-600 font-mono">"name"</code>
-                                        <code className="text-blue-600 font-mono">"inn"</code>
-                                        <code className="text-blue-600 font-mono">"ogrn"</code>
-                                        <code className="text-blue-600 font-mono">"kpp"</code>
-                                        <code className="text-blue-600 font-mono">"address"</code>
-                                        <code className="text-blue-600 font-mono">"phone"</code>
-                                        <code className="text-blue-600 font-mono">"sro"</code>
-                                    </div>
-                                </div>
-                                <textarea
-                                    id="organizationExtractionPrompt"
-                                    name="organizationExtractionPrompt"
-                                    value={formData.organizationExtractionPrompt || ''}
-                                    onChange={handleChange}
-                                    className={`${inputClass} min-h-[150px] font-mono text-xs`}
-                                />
+                                <label htmlFor="organizationExtractionPrompt" className={labelClass}>Промпт (Организации)</label>
+                                <textarea id="organizationExtractionPrompt" name="organizationExtractionPrompt" value={formData.organizationExtractionPrompt || ''} onChange={handleChange} className={`${inputClass} min-h-[150px] font-mono text-xs`} />
                             </div>
                         </div>
                     </div>
                 )}
 
                 {activeTab === 'data' && (
-                    <div className="space-y-6">
-                        <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
-                            <h3 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
-                                <ImportIcon className="w-5 h-5"/> Управление данными
-                            </h3>
-                            <p className="text-sm text-slate-600 mb-4">
-                                Вы можете сохранить резервную копию выбранных данных в архив ZIP или восстановить данные из файла.
-                            </p>
-                            <div className="flex gap-3">
-                                <button 
-                                    type="button"
-                                    onClick={onImport}
-                                    className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
-                                >
-                                    <ImportIcon className="w-4 h-4" /> Импорт данных
+                    <div className="space-y-6 mt-2">
+                        
+                        {/* 1. Блок Управление данными */}
+                        <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm relative">
+                            <div className="flex items-start mb-3 gap-3">
+                                <div className="p-3 rounded-full bg-blue-50 text-blue-600">
+                                    <ImportIcon className="w-6 h-6"/>
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-slate-800 text-base">Управление данными</h3>
+                                    <p className="text-sm text-slate-500 mt-1">Резервное копирование и восстановление.</p>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-100">
+                                <button type="button" onClick={onImport} className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded text-sm hover:bg-slate-50 transition-colors">
+                                    <ImportIcon className="w-4 h-4" /> Импорт
                                 </button>
-                                <button 
-                                    type="button"
-                                    onClick={onExport}
-                                    className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
-                                >
-                                    <ExportIcon className="w-4 h-4" /> Экспорт данных
+                                <button type="button" onClick={onExport} className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded text-sm hover:bg-slate-50 transition-colors">
+                                    <ExportIcon className="w-4 h-4" /> Экспорт
                                 </button>
                             </div>
                         </div>
 
-                        <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
-                            <h3 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
-                                <TemplateIcon className="w-5 h-5"/> Шаблон Акта (Основной)
-                            </h3>
-                            <p className="text-sm text-slate-600 mb-4">
-                                Основной шаблон документа .docx. Используется для генерации актов.
-                            </p>
-                            <div className="flex gap-3">
-                                <button 
-                                    type="button"
-                                    onClick={onChangeTemplate}
-                                    className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
-                                >
-                                    <TemplateIcon className="w-4 h-4" /> Сменить шаблон
-                                </button>
-                                <button 
-                                    type="button"
-                                    onClick={() => onDownloadTemplate('main')}
-                                    disabled={!isTemplateLoaded}
-                                    className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <DownloadIcon className="w-4 h-4" /> Скачать текущий
+                        {/* 2. Блок Шаблон Акта */}
+                        <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm relative">
+                            <div className="flex justify-between items-start mb-3">
+                                <div className="flex items-start gap-3">
+                                    <div className={`p-3 rounded-full ${isTemplateLoaded ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`}>
+                                        <TemplateIcon className="w-6 h-6"/>
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                                            Шаблон Акта (Основной)
+                                        </h3>
+                                        <div className="flex items-center gap-2 mt-1 text-xs">
+                                            {isTemplateLoaded ? (
+                                                <>
+                                                    <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Загружен</span>
+                                                    <span className="text-slate-400">Добавлен: {templateUpdateDate || 'Дата неизвестна'}</span>
+                                                </>
+                                            ) : (
+                                                <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Не загружен</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="button" onClick={() => openHelp('main')} className="text-blue-600 text-sm hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-full transition-colors">
+                                    <QuestionMarkCircleIcon className="w-4 h-4"/> Справка по тегам
                                 </button>
                             </div>
-                        </div>
-
-                        <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
-                            <h3 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
-                                <TemplateIcon className="w-5 h-5"/> Шаблон Реестра Материалов
-                            </h3>
-                            <p className="text-sm text-slate-600 mb-4">
-                                Дополнительный шаблон (.docx) для списка материалов. Генерируется, если количество материалов в акте превышает {formData.registryThreshold} шт.
-                                <br/><span className="text-xs text-slate-500 italic">Примечание: Шаблон должен быть в формате Word с таблицей, а не Excel.</span>
-                            </p>
-                            <div className="flex gap-3 items-center">
-                                <input type="file" ref={registryInputRef} onChange={handleRegistryFileChange} className="hidden" accept=".docx" />
+                            
+                            <p className="text-sm text-slate-600 mb-4 mt-2">Основной шаблон документа .docx. Используется для генерации актов.</p>
+                            
+                            <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-100">
+                                <button type="button" onClick={onChangeTemplate} className="flex items-center gap-2 bg-blue-600 text-white border border-blue-600 px-4 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
+                                    <CloudUploadIcon className="w-4 h-4" /> {isTemplateLoaded ? 'Заменить' : 'Загрузить'}
+                                </button>
                                 
-                                {isRegistryTemplateLoaded ? (
+                                {isTemplateLoaded && (
                                     <>
-                                        <button 
-                                            type="button"
-                                            onClick={() => registryInputRef.current?.click()}
-                                            className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
-                                        >
-                                            <TemplateIcon className="w-4 h-4" /> Заменить
-                                        </button>
-                                        <button 
-                                            type="button"
-                                            onClick={() => onDownloadTemplate('registry')}
-                                            className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-md hover:bg-slate-50 shadow-sm"
-                                        >
+                                        <button type="button" onClick={() => onDownloadTemplate('main')} className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded text-sm hover:bg-slate-50 transition-colors">
                                             <DownloadIcon className="w-4 h-4" /> Скачать
                                         </button>
+                                        <button type="button" onClick={() => onDeleteTemplate?.('main')} className="flex items-center gap-2 bg-white text-red-600 border border-red-200 px-4 py-2 rounded text-sm hover:bg-red-50 transition-colors">
+                                            <DeleteIcon className="w-4 h-4" /> Удалить
+                                        </button>
                                     </>
-                                ) : (
-                                    <button 
-                                        type="button"
-                                        onClick={() => registryInputRef.current?.click()}
-                                        className="flex items-center gap-2 bg-blue-600 text-white border border-blue-600 px-4 py-2 rounded-md hover:bg-blue-700 shadow-sm"
-                                    >
-                                        <CloudUploadIcon className="w-4 h-4" /> Загрузить шаблон реестра
-                                    </button>
                                 )}
                             </div>
                         </div>
-                    </div>
-                )}
 
-                {activeTab === 'help' && (
-                    <div className="flex flex-col h-full">
-                        <div className="flex space-x-1 border-b border-slate-200 mb-4 pb-1">
-                            <button
-                                type="button"
-                                onClick={() => setHelpSubTab('main')}
-                                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${helpSubTab === 'main' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                            >
-                                Шаблон Акта
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setHelpSubTab('registry')}
-                                className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${helpSubTab === 'registry' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                            >
-                                Шаблон Реестра
-                            </button>
-                        </div>
-
-                        <div className="prose max-w-none text-slate-700 text-sm leading-relaxed pb-4">
-                            {helpSubTab === 'main' ? (
-                                <>
-                                    <p>Используйте эти теги в основном шаблоне акта (.docx). При наведении на тег появится подсказка.</p>
-                                    
-                                    <div className="bg-blue-50 border border-blue-100 p-3 rounded mb-4 mt-2">
-                                        <h4 className="font-semibold text-blue-800 mb-1">Использование в полях по умолчанию</h4>
-                                        <p className="text-xs text-blue-700">
-                                            Теги можно использовать не только в Word-шаблоне, но и в настройках приложения (например, в полях "Приложения" или "Доп. сведения").
-                                            При генерации документа программа заменит их на данные из теку акт.
-                                        </p>
-                                        <div className="mt-2 text-xs">
-                                            <strong>Пример для поля "Приложения":</strong>
-                                            <code className="block mt-1 bg-white border border-blue-200 p-1.5 rounded text-slate-600">
-                                                Исполнительная схема; {'{certs}'};{'\n'}
-                                                {'{materials}'}
-                                            </code>
+                        {/* 3. Блок Шаблон Реестра */}
+                        <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm relative">
+                            <input type="file" ref={registryInputRef} onChange={handleRegistryFileChange} className="hidden" accept=".docx" />
+                            
+                            <div className="flex justify-between items-start mb-3">
+                                <div className="flex items-start gap-3">
+                                    <div className={`p-3 rounded-full ${isRegistryTemplateLoaded ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`}>
+                                        <TemplateIcon className="w-6 h-6"/>
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                                            Шаблон Реестра Материалов
+                                        </h3>
+                                        <div className="flex items-center gap-2 mt-1 text-xs">
+                                            {isRegistryTemplateLoaded ? (
+                                                <>
+                                                    <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Загружен</span>
+                                                    <span className="text-slate-400">Добавлен: {registryUpdateDate || 'Дата неизвестна'}</span>
+                                                </>
+                                            ) : (
+                                                <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Не загружен</span>
+                                            )}
                                         </div>
                                     </div>
-
-                                    <h4 className="font-semibold mt-4">Основные данные</h4>
-                                    <div className="flex flex-wrap gap-2">
-                                        <TagTooltip tag="{act_number}" description="Номер акта" />
-                                        <TagTooltip tag="{object_name}" description="Наименование объекта строительства" />
-                                        <TagTooltip tag="{act_day}" description="День подписания акта" />
-                                        <TagTooltip tag="{act_month}" description="Месяц подписания" />
-                                        <TagTooltip tag="{act_year}" description="Год подписания" />
-                                        <TagTooltip tag="{copies_count}" description="Количество экземпляров" />
-                                        <TagTooltip tag="{additional_info}" description="Дополнительные сведения" />
-                                        <TagTooltip tag="{attachments}" description="Текст из поля Приложения (одной строкой с переносами)" />
-                                    </div>
-
-                                    {/* GENERATOR COMPONENT */}
-                                    <TagGenerator />
-
-                                    <h4 className="font-semibold mt-4">Организации-участники</h4>
-                                    <div className="flex flex-wrap gap-2">
-                                        <TagTooltip tag="{builder_details}" description="Реквизиты Застройщика" />
-                                        <TagTooltip tag="{contractor_details}" description="Реквизиты Лица, осуществляющего строительство" />
-                                        <TagTooltip tag="{designer_details}" description="Реквизиты Проектировщика" />
-                                    </div>
-
-                                    <h4 className="font-semibold mt-4">Произвели осмотр работ</h4>
-                                    <div className="flex flex-wrap gap-2">
-                                        <TagTooltip tag="{work_performer}" description="Реквизиты Лица, выполнившего работы" />
-                                    </div>
-
-                                    <h4 className="font-semibold mt-4">Работы, Материалы, Даты</h4>
-                                    <div className="flex flex-wrap gap-2">
-                                        <TagTooltip tag="{work_name}" description="Наименование выполненных работ" />
-                                        <TagTooltip tag="{project_docs}" description="Проектная документация" />
-                                        
-                                        <TagTooltip tag="{materials}" description="Автоматически: 'Текст материалов' ИЛИ 'ссылка на реестр' (если материалов > порога)" />
-                                        <TagTooltip tag="{materials_raw}" description="Всегда полный список материалов текстом" />
-                                        
-                                        <TagTooltip tag="{material_docs}" description="Уникальные паспорта/сертификаты (без названий материалов). Смарт: если материалов много, будет ссылка на реестр." />
-                                        <TagTooltip tag="{material_docs_raw}" description="Все уникальные паспорта/сертификаты (без названий) всегда полным списком." />
-
-                                        <TagTooltip tag="{certs}" description="Документы о качестве/схемы" />
-                                        <TagTooltip tag="{regulations}" description="Нормативные документы" />
-                                        <TagTooltip tag="{next_work}" description="Разрешенные следующие работы" />
-                                        <TagTooltip tag="{work_start_day}" description="День начала работ" />
-                                        <TagTooltip tag="{work_end_day}" description="День окончания работ" />
-                                    </div>
-
-                                    <h4 className="font-semibold mt-4">Комиссия (Представители)</h4>
-                                    <p className="text-xs text-slate-500 mb-2">Используйте <code>{`{#tnz}...{/tnz}`}</code> для скрытия пустых полей.</p>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                                        {Object.entries(ROLES).map(([key, label]) => (
-                                            <div key={key} className="border p-2 rounded">
-                                                <div className="font-medium mb-1">{label} ({key})</div>
-                                                <div className="mt-1 flex flex-wrap gap-1">
-                                                    <TagTooltip tag={`{${key}_details}`} description={`Должность, ФИО, Документ`} />
-                                                    <TagTooltip tag={`{${key}_details_short}`} description={`Должность, Фамилия И.О., Документ`} />
-                                                    <TagTooltip tag={`{${key}_name}`} description="Полное ФИО" />
-                                                    <TagTooltip tag={`{${key}_name_short}`} description="Фамилия И.О." />
-                                                    <TagTooltip tag={`{${key}_position}`} description="Должность" />
-                                                    <TagTooltip tag={`{${key}_org}`} description="Организация" />
-                                                    <TagTooltip tag={`{${key}_auth_doc}`} description="Документ о полномочиях" />
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    <p>Используйте эти теги в шаблоне реестра (.docx). Обязательно создайте таблицу для списка материалов.</p>
-                                    
-                                    <h4 className="font-semibold mt-4">Шапка реестра (Общие данные)</h4>
-                                    <div className="flex flex-wrap gap-2">
-                                        <TagTooltip tag="{act_number}" description="Номер акта, к которому относится реестр" />
-                                        <TagTooltip tag="{object_name}" description="Наименование объекта" />
-                                        <TagTooltip tag="{act_day}" description="День подписания акта" />
-                                        <TagTooltip tag="{act_month}" description="Месяц подписания" />
-                                        <TagTooltip tag="{act_year}" description="Год подписания" />
-                                    </div>
-
-                                    <h4 className="font-semibold mt-4">Таблица материалов (Цикл строки)</h4>
-                                    <p className="text-xs text-slate-500 mb-2">
-                                        Чтобы строка таблицы повторялась для каждого материала, нужно использовать "обнимающие" теги:
-                                    </p>
-                                    
-                                    {/* Visual Representation of Table Row Loop */}
-                                    <div className="bg-slate-50 border border-slate-200 rounded p-4 mb-4 overflow-x-auto">
-                                        <p className="text-xs text-slate-600 mb-2 font-semibold">Схема таблицы в Word:</p>
-                                        <table className="w-full text-xs text-left border-collapse bg-white">
-                                            <thead>
-                                                <tr className="bg-slate-100">
-                                                    <th className="border p-2 w-16">№</th>
-                                                    <th className="border p-2">Наименование</th>
-                                                    <th className="border p-2">Документ</th>
-                                                    <th className="border p-2 w-24">Кол-во</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr>
-                                                    <td className="border p-2 align-top bg-blue-50 text-blue-700 font-mono">
-                                                        {'{#materials_list}'} <br/>
-                                                        {'{index}'}
-                                                    </td>
-                                                    <td className="border p-2 align-top text-slate-700 font-mono">
-                                                        {'{material_name}'}
-                                                    </td>
-                                                    <td className="border p-2 align-top text-slate-700 font-mono">
-                                                        {'{cert_doc}'}
-                                                    </td>
-                                                    <td className="border p-2 align-top bg-blue-50 text-blue-700 font-mono">
-                                                        {'{amount}'} <br/>
-                                                        {'{/materials_list}'}
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                        <p className="text-[10px] text-slate-500 mt-2 italic">
-                                            * Тег <code>{`{#materials_list}`}</code> ставится в первую ячейку, а <code>{`{/materials_list}`}</code> в последнюю.
-                                        </p>
-                                    </div>
-
-                                    <div className="flex flex-wrap gap-2 ml-4">
-                                        <TagTooltip tag="{index}" description="Порядковый номер (1, 2, 3...)" />
-                                        <TagTooltip tag="{name}" description="Полная строка материала (как в акте)" />
-                                        <TagTooltip tag="{material_name}" description="Только наименование материала (до скобок)" />
-                                        <TagTooltip tag="{cert_doc}" description="Документ о качестве (текст внутри скобок)" />
-                                        <TagTooltip tag="{date}" description="Дата (пустая ячейка для ручного заполнения)" />
-                                        <TagTooltip tag="{amount}" description="Кол-во листов (пустая ячейка)" />
-                                    </div>
-
-                                    <h4 className="font-semibold mt-4">Комиссия (Представители)</h4>
-                                    <p className="text-xs text-slate-500 mb-2">
-                                        Те же теги, что и в основном акте. Используйте их для блока подписей внизу реестра.
-                                    </p>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                                        {Object.entries(ROLES).map(([key, label]) => (
-                                            <div key={key} className="border p-2 rounded">
-                                                <div className="font-medium mb-1">{label} ({key})</div>
-                                                <div className="mt-1 flex flex-wrap gap-1">
-                                                    <TagTooltip tag={`{${key}_details_short}`} description={`Должность, Фамилия И.О., Документ`} />
-                                                    <TagTooltip tag={`{${key}_name_short}`} description="Фамилия И.О." />
-                                                    <TagTooltip tag={`{${key}_position}`} description="Должность" />
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </>
-                            )}
+                                </div>
+                                <button type="button" onClick={() => openHelp('registry')} className="text-blue-600 text-sm hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-full transition-colors">
+                                    <QuestionMarkCircleIcon className="w-4 h-4"/> Справка по тегам
+                                </button>
+                            </div>
+                            
+                            <p className="text-sm text-slate-600 mb-4 mt-2">
+                                Дополнительный шаблон (.docx) для списка материалов. Генерируется автоматически, если материалов &gt; {formData.registryThreshold} шт.
+                            </p>
+                            
+                            <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-100">
+                                <button type="button" onClick={() => registryInputRef.current?.click()} className="flex items-center gap-2 bg-blue-600 text-white border border-blue-600 px-4 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
+                                    <CloudUploadIcon className="w-4 h-4" /> {isRegistryTemplateLoaded ? 'Заменить' : 'Загрузить'}
+                                </button>
+                                
+                                {isRegistryTemplateLoaded && (
+                                    <>
+                                        <button type="button" onClick={() => onDownloadTemplate('registry')} className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded text-sm hover:bg-slate-50 transition-colors">
+                                            <DownloadIcon className="w-4 h-4" /> Скачать
+                                        </button>
+                                        <button type="button" onClick={() => onDeleteTemplate?.('registry')} className="flex items-center gap-2 bg-white text-red-600 border border-red-200 px-4 py-2 rounded text-sm hover:bg-red-50 transition-colors">
+                                            <DeleteIcon className="w-4 h-4" /> Удалить
+                                        </button>
+                                    </>
+                                )}
+                            </div>
                         </div>
+
                     </div>
                 )}
             </div>
 
             {/* Fixed Footer */}
-            <div className="flex-shrink-0 bg-white border-t border-slate-200 p-4 flex justify-end">
+            <div className="flex-shrink-0 bg-white border-t border-slate-200 p-4 flex justify-end relative z-10">
                 <button
                     type="submit"
                     className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 shadow-sm font-medium transition-colors"
@@ -1148,6 +906,214 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                     {isSaved ? 'Сохранено!' : 'Сохранить настройки'}
                 </button>
             </div>
+
+            {/* =========================================
+                МОДАЛЬНОЕ ОКНО СО СПРАВКОЙ ПО ТЕГАМ
+            ========================================= */}
+            {isHelpOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+                    <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-xl shadow-2xl flex flex-col overflow-hidden">
+                        <div className="flex justify-between items-center p-4 border-b border-slate-200 bg-slate-50">
+                            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                <QuestionMarkCircleIcon className="w-6 h-6 text-blue-600" />
+                                Справка по тегам шаблонов
+                            </h2>
+                            <button 
+                                type="button" 
+                                onClick={() => setIsHelpOpen(false)} 
+                                className="text-slate-400 hover:text-slate-700 hover:bg-slate-200 p-1.5 rounded-full transition-colors"
+                            >
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        
+                        <div className="flex-grow overflow-y-auto p-6 bg-white">
+                            <div className="flex space-x-1 border-b border-slate-200 mb-6 pb-1 sticky top-0 bg-white z-10">
+                                <button
+                                    type="button"
+                                    onClick={() => setHelpType('main')}
+                                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${helpType === 'main' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    Для Шаблона Акта
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setHelpType('registry')}
+                                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${helpType === 'registry' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    Для Шаблона Реестра
+                                </button>
+                            </div>
+
+                            <div className="prose max-w-none text-slate-700 text-sm leading-relaxed pb-4">
+                                {helpType === 'main' ? (
+                                    <>
+                                        <p>Используйте эти теги в основном шаблоне акта (.docx). При наведении на тег появится подсказка.</p>
+                                        
+                                        <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg mb-6 mt-4">
+                                            <h4 className="font-semibold text-blue-800 mb-1">Использование в полях по умолчанию</h4>
+                                            <p className="text-xs text-blue-700 mb-2">
+                                                Теги можно использовать не только в Word-шаблоне, но и в настройках приложения (например, в полях "Приложения" или "Доп. сведения"). При генерации документа программа заменит их на данные.
+                                            </p>
+                                            <div className="text-xs">
+                                                <strong className="text-blue-900">Пример для поля "Приложения":</strong>
+                                                <code className="block mt-1 bg-white border border-blue-200 p-2 rounded text-slate-700">
+                                                    Исполнительная схема; {'{certs}'};{'\n'}
+                                                    {'{materials}'}
+                                                </code>
+                                            </div>
+                                        </div>
+
+                                        <h4 className="font-semibold mt-4 mb-2 text-slate-800">Основные данные</h4>
+                                        <div className="flex flex-wrap gap-2 mb-6">
+                                            <TagTooltip tag="{act_number}" description="Номер акта" />
+                                            <TagTooltip tag="{object_name}" description="Наименование объекта строительства" />
+                                            <TagTooltip tag="{act_day}" description="День подписания акта" />
+                                            <TagTooltip tag="{act_month}" description="Месяц подписания" />
+                                            <TagTooltip tag="{act_year}" description="Год подписания" />
+                                            <TagTooltip tag="{copies_count}" description="Количество экземпляров" />
+                                            <TagTooltip tag="{additional_info}" description="Дополнительные сведения" />
+                                            <TagTooltip tag="{attachments}" description="Текст из поля Приложения (одной строкой с переносами)" />
+                                        </div>
+
+                                        <TagGenerator />
+
+                                        <h4 className="font-semibold mt-6 mb-2 text-slate-800">Организации-участники</h4>
+                                        <div className="flex flex-wrap gap-2 mb-6">
+                                            <TagTooltip tag="{builder_details}" description="Реквизиты Застройщика" />
+                                            <TagTooltip tag="{contractor_details}" description="Реквизиты Лица, осуществляющего строительство" />
+                                            <TagTooltip tag="{designer_details}" description="Реквизиты Проектировщика" />
+                                        </div>
+
+                                        <h4 className="font-semibold mt-6 mb-2 text-slate-800">Произвели осмотр работ</h4>
+                                        <div className="flex flex-wrap gap-2 mb-6">
+                                            <TagTooltip tag="{work_performer}" description="Реквизиты Лица, выполнившего работы" />
+                                        </div>
+
+                                        <h4 className="font-semibold mt-6 mb-2 text-slate-800">Работы, Материалы, Даты</h4>
+                                        <div className="flex flex-wrap gap-2 mb-6">
+                                            <TagTooltip tag="{work_name}" description="Наименование выполненных работ" />
+                                            <TagTooltip tag="{project_docs}" description="Проектная документация" />
+                                            
+                                            <TagTooltip tag="{materials}" description="Автоматически: 'Текст материалов' ИЛИ 'ссылка на реестр' (если материалов > порога)" />
+                                            <TagTooltip tag="{materials_raw}" description="Всегда полный список материалов текстом" />
+                                            
+                                            <TagTooltip tag="{material_docs}" description="Уникальные паспорта/сертификаты (без названий материалов). Смарт: если материалов много, будет ссылка на реестр." />
+                                            <TagTooltip tag="{material_docs_raw}" description="Все уникальные паспорта/сертификаты (без названий) всегда полным списком." />
+
+                                            <TagTooltip tag="{certs}" description="Документы о качестве/схемы" />
+                                            <TagTooltip tag="{regulations}" description="Нормативные документы" />
+                                            <TagTooltip tag="{next_work}" description="Разрешенные следующие работы" />
+                                            <TagTooltip tag="{work_start_day}" description="День начала работ" />
+                                            <TagTooltip tag="{work_end_day}" description="День окончания работ" />
+                                        </div>
+
+                                        <h4 className="font-semibold mt-6 mb-2 text-slate-800">Комиссия (Представители)</h4>
+                                        <p className="text-xs text-slate-500 mb-3">Используйте <code>{`{#tnz}...{/tnz}`}</code> для скрытия пустых полей.</p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                            {Object.entries(ROLES).map(([key, label]) => (
+                                                <div key={key} className="border border-slate-200 bg-slate-50 p-3 rounded">
+                                                    <div className="font-semibold mb-2 text-slate-800">{label} ({key})</div>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        <TagTooltip tag={`{${key}_details}`} description={`Должность, ФИО, Документ`} />
+                                                        <TagTooltip tag={`{${key}_details_short}`} description={`Должность, Фамилия И.О., Документ`} />
+                                                        <TagTooltip tag={`{${key}_name}`} description="Полное ФИО" />
+                                                        <TagTooltip tag={`{${key}_name_short}`} description="Фамилия И.О." />
+                                                        <TagTooltip tag={`{${key}_position}`} description="Должность" />
+                                                        <TagTooltip tag={`{${key}_org}`} description="Организация" />
+                                                        <TagTooltip tag={`{${key}_auth_doc}`} description="Документ о полномочиях" />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p>Используйте эти теги в шаблоне реестра (.docx). Обязательно создайте таблицу для списка материалов.</p>
+                                        
+                                        <h4 className="font-semibold mt-4 mb-2 text-slate-800">Шапка реестра (Общие данные)</h4>
+                                        <div className="flex flex-wrap gap-2 mb-6">
+                                            <TagTooltip tag="{act_number}" description="Номер акта, к которому относится реестр" />
+                                            <TagTooltip tag="{object_name}" description="Наименование объекта" />
+                                            <TagTooltip tag="{act_day}" description="День подписания акта" />
+                                            <TagTooltip tag="{act_month}" description="Месяц подписания" />
+                                            <TagTooltip tag="{act_year}" description="Год подписания" />
+                                        </div>
+
+                                        <h4 className="font-semibold mt-6 mb-2 text-slate-800">Таблица материалов (Цикл строки)</h4>
+                                        <p className="text-xs text-slate-500 mb-3">
+                                            Чтобы строка таблицы повторялась для каждого материала, нужно использовать "обнимающие" теги:
+                                        </p>
+                                        
+                                        <div className="bg-slate-50 border border-slate-200 rounded p-4 mb-4 overflow-x-auto">
+                                            <p className="text-xs text-slate-600 mb-2 font-semibold">Схема таблицы в Word:</p>
+                                            <table className="w-full text-xs text-left border-collapse bg-white shadow-sm">
+                                                <thead>
+                                                    <tr className="bg-slate-100">
+                                                        <th className="border border-slate-200 p-2 w-16">№</th>
+                                                        <th className="border border-slate-200 p-2">Наименование</th>
+                                                        <th className="border border-slate-200 p-2">Документ</th>
+                                                        <th className="border border-slate-200 p-2 w-24">Кол-во</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr>
+                                                        <td className="border border-slate-200 p-2 align-top bg-blue-50 text-blue-700 font-mono">
+                                                            {'{#materials_list}'} <br/>
+                                                            {'{index}'}
+                                                        </td>
+                                                        <td className="border border-slate-200 p-2 align-top text-slate-700 font-mono">
+                                                            {'{material_name}'}
+                                                        </td>
+                                                        <td className="border border-slate-200 p-2 align-top text-slate-700 font-mono">
+                                                            {'{cert_doc}'}
+                                                        </td>
+                                                        <td className="border border-slate-200 p-2 align-top bg-blue-50 text-blue-700 font-mono">
+                                                            {'{amount}'} <br/>
+                                                            {'{/materials_list}'}
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                            <p className="text-[10px] text-slate-500 mt-3 italic">
+                                                * Тег <code className="bg-white px-1 border border-slate-200 rounded">{`{#materials_list}`}</code> ставится в первую ячейку, а <code className="bg-white px-1 border border-slate-200 rounded">{`{/materials_list}`}</code> в последнюю.
+                                            </p>
+                                        </div>
+
+                                        <div className="flex flex-wrap gap-2 mb-6">
+                                            <TagTooltip tag="{index}" description="Порядковый номер (1, 2, 3...)" />
+                                            <TagTooltip tag="{name}" description="Полная строка материала (как в акте)" />
+                                            <TagTooltip tag="{material_name}" description="Только наименование материала (до скобок)" />
+                                            <TagTooltip tag="{cert_doc}" description="Документ о качестве (текст внутри скобок)" />
+                                            <TagTooltip tag="{date}" description="Дата (пустая ячейка для ручного заполнения)" />
+                                            <TagTooltip tag="{amount}" description="Кол-во листов (пустая ячейка)" />
+                                        </div>
+
+                                        <h4 className="font-semibold mt-6 mb-2 text-slate-800">Комиссия (Представители)</h4>
+                                        <p className="text-xs text-slate-500 mb-3">
+                                            Те же теги, что и в основном акте. Используйте их для блока подписей внизу реестра.
+                                        </p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                            {Object.entries(ROLES).map(([key, label]) => (
+                                                <div key={key} className="border border-slate-200 bg-slate-50 p-3 rounded">
+                                                    <div className="font-semibold mb-2 text-slate-800">{label} ({key})</div>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        <TagTooltip tag={`{${key}_details_short}`} description={`Должность, Фамилия И.О., Документ`} />
+                                                        <TagTooltip tag={`{${key}_name_short}`} description="Фамилия И.О." />
+                                                        <TagTooltip tag={`{${key}_position}`} description="Должность" />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </form>
     );
 };
