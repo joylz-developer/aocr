@@ -727,15 +727,45 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                             </div>
                             <div>
                                 <label htmlFor="certificatePromptDate" className={labelClass}>
-                                    Дата документа
+                                    Дата от
                                 </label>
                                 <div className="mb-1 p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600">
-                                    <strong className="text-slate-700">Формат ответа:</strong> Возвращает текст или JSON. Рекомендуемый ключ: <code className="text-blue-600 font-mono">"validUntil"</code> (формат YYYY-MM-DD)
+                                    <strong className="text-slate-700">Формат ответа:</strong> Возвращает текст или JSON. Рекомендуемый ключ: <code className="text-blue-600 font-mono">"dateFrom"</code> (формат YYYY-MM-DD)
                                 </div>
                                 <textarea
                                     id="certificatePromptDate"
                                     name="certificatePromptDate"
                                     value={formData.certificatePromptDate || ''}
+                                    onChange={handleChange}
+                                    className={`${inputClass} min-h-[60px]`}
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="certificatePromptDateTo" className={labelClass}>
+                                    Дата до
+                                </label>
+                                <div className="mb-1 p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600">
+                                    <strong className="text-slate-700">Формат ответа:</strong> Возвращает текст или JSON. Рекомендуемый ключ: <code className="text-blue-600 font-mono">"dateTo"</code> (формат YYYY-MM-DD)
+                                </div>
+                                <textarea
+                                    id="certificatePromptDateTo"
+                                    name="certificatePromptDateTo"
+                                    value={(formData as any).certificatePromptDateTo || ''}
+                                    onChange={handleChange}
+                                    className={`${inputClass} min-h-[60px]`}
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="certificatePromptSupplier" className={labelClass}>
+                                    Поставщик
+                                </label>
+                                <div className="mb-1 p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600">
+                                    <strong className="text-slate-700">Формат ответа:</strong> Возвращает текст или JSON. Рекомендуемый ключ: <code className="text-blue-600 font-mono">"supplier"</code>
+                                </div>
+                                <textarea
+                                    id="certificatePromptSupplier"
+                                    name="certificatePromptSupplier"
+                                    value={(formData as any).certificatePromptSupplier || ''}
                                     onChange={handleChange}
                                     className={`${inputClass} min-h-[60px]`}
                                 />
@@ -943,7 +973,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                         <h4 className="font-semibold text-blue-800 mb-1">Использование в полях по умолчанию</h4>
                                         <p className="text-xs text-blue-700">
                                             Теги можно использовать не только в Word-шаблоне, но и в настройках приложения (например, в полях "Приложения" или "Доп. сведения").
-                                            При генерации документа программа заменит их на данные из текущего акта.
+                                            При генерации документа программа заменит их на данные из теку акт.
                                         </p>
                                         <div className="mt-2 text-xs">
                                             <strong>Пример для поля "Приложения":</strong>

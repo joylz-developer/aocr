@@ -25,7 +25,9 @@ interface CertificatesPageProps {
 
 interface AiSuggestions {
     numbers?: string[];
-    dates?: string[];
+    dateFrom?: string[];
+    dateTo?: string[];
+    supplier?: string[];
     materials?: string[];
 }
 
@@ -407,11 +409,14 @@ const CertificateForm: React.FC<{
             return {
                 id: crypto.randomUUID(),
                 number: '',
-                validUntil: '',
+                dateFrom: '',
+                dateTo: '',
+                supplier: '',
+                validUntil: '', // для обратной совместимости
                 amount: '1',
                 materials: [],
                 files: []
-            };
+            } as Certificate;
         }
     });
 
@@ -450,7 +455,11 @@ const CertificateForm: React.FC<{
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        setFormData(prev => {
+            const next = { ...prev, [name]: value };
+            if (name === 'dateFrom') next.validUntil = value; // Синхронизация для обратной совместимости
+            return next;
+        });
     };
 
     const processFiles = (fileList: FileList) => {
@@ -554,21 +563,20 @@ const CertificateForm: React.FC<{
             const [mimeType, base64Data] = activeFile.data.split(',');
             const cleanMimeType = mimeType.match(/:(.*?);/)?.[1];
             if (!cleanMimeType || !base64Data) throw new Error("Invalid file data");
-            const promptNumber = settings.certificatePromptNumber || "Document Type + Number";
-            const promptDate = settings.certificatePromptDate || "Issue Date YYYY-MM-DD";
-            const promptMaterials = settings.certificatePromptMaterials || "Exact material names";
             
             const finalPrompt = `
 Analyze the provided document image. This is a certificate or passport for construction materials.
 Your task is to extract the following information and return it in a valid JSON object:
 
 1. "numbers": Extract the document number (e.g., "Certificate No. 123", "Passport No. 456"). Return an array of strings.
-2. "dates": Extract the document date (issue date). Format as YYYY-MM-DD if possible. Return an array of strings.
-3. "materials": Extract the names of the materials listed in the document. Return an array of strings.
+2. "dateFrom": Extract the issue date (Дата от). Format strictly as YYYY-MM-DD. Return an array of strings.
+3. "dateTo": Extract the expiration date (Дата до), if any. Format strictly as YYYY-MM-DD. Return an array of strings.
+4. "supplier": Extract the name of the supplier or manufacturer (Поставщик). Return an array of strings.
+5. "materials": Extract the names of the materials listed in the document. Return an array of strings.
 
-If you cannot find specific information, return an empty array for that field.
-The output must be a valid JSON object with the keys: "numbers", "dates", "materials".
-Do not include any markdown formatting or additional text. Just the JSON.
+Format of the response:
+Must be a valid JSON object with the keys: "numbers", "dateFrom", "dateTo", "supplier", "materials".
+Do not include any markdown formatting, code blocks, or additional text. Just the JSON.
             `.trim();
             
             const response = await generateContent(settings, finalPrompt, cleanMimeType, base64Data, true);
@@ -579,11 +587,16 @@ Do not include any markdown formatting or additional text. Just the JSON.
             if (jsonStartIndex === -1 || jsonEndIndex === -1) throw new Error("JSON structure not found");
             const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
             const result = JSON.parse(jsonString);
+            
             const numbers = Array.isArray(result.numbers) ? result.numbers : (result.number ? [result.number] : []);
-            const dates = Array.isArray(result.dates) ? result.dates : (result.validUntil ? [result.validUntil] : []);
+            // Обрабатываем возможные нестрогие ответы AI
+            const dateFrom = Array.isArray(result.dateFrom) ? result.dateFrom : (typeof result.dateFrom === 'string' ? [result.dateFrom] : (Array.isArray(result.dates) ? result.dates : []));
+            const dateTo = Array.isArray(result.dateTo) ? result.dateTo : (typeof result.dateTo === 'string' ? [result.dateTo] : []);
+            const supplier = Array.isArray(result.supplier) ? result.supplier : (typeof result.supplier === 'string' ? [result.supplier] : []);
             const rawMaterials = Array.isArray(result.materials) ? result.materials : [];
             const uniqueMaterials = Array.from(new Set(rawMaterials)) as string[];
-            setAiSuggestions({ numbers, dates, materials: uniqueMaterials });
+            
+            setAiSuggestions({ numbers, dateFrom, dateTo, supplier, materials: uniqueMaterials });
         } catch (error: any) {
             console.error("AI Scan Error:", error);
             setAiError(`Ошибка распознавания: ${error.message || "Неизвестная ошибка"}`);
@@ -664,22 +677,34 @@ Do not include any markdown formatting or additional text. Just the JSON.
     const handleEditMaterial = (index: number, newValue: string) => {
         setFormData(prev => { const newMaterials = [...prev.materials]; newMaterials[index] = newValue; return { ...prev, materials: newMaterials }; });
     };
-    const applyAiSuggestion = (field: 'number' | 'validUntil', value: string) => { setFormData(prev => ({ ...prev, [field]: value })); };
+    
+    const applyAiSuggestion = (field: keyof Certificate, value: string) => { 
+        setFormData(prev => {
+            const next = { ...prev, [field]: value };
+            if (field === 'dateFrom') next.validUntil = value; // Синхронизация
+            return next;
+        }); 
+    };
 
     const isPreviewMode = !!diffResult;
     const handleModalClick = (e: React.MouseEvent) => { e.stopPropagation(); }
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formData.number.trim() || !formData.validUntil.trim()) {
-            alert("Пожалуйста, заполните номер и дату документа.");
+        const from = formData.dateFrom || formData.validUntil;
+        if (!formData.number.trim() || !from?.trim()) {
+            alert("Пожалуйста, заполните номер и дату (От).");
+            return;
+        }
+        if (from && formData.dateTo && new Date(from) > new Date(formData.dateTo)) {
+            alert("Дата 'От' не может быть позже даты 'До'.");
             return;
         }
         onSave(formData);
         onClose();
     };
 
-    const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 disabled:bg-slate-100 disabled:text-slate-500 text-sm";
+    const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 disabled:bg-slate-100 disabled:text-slate-500 text-sm [.theme-dark_&]:[color-scheme:dark]";
     const labelClass = "block text-sm font-medium text-slate-700 mb-1";
 
     return (
@@ -720,7 +745,7 @@ Do not include any markdown formatting or additional text. Just the JSON.
                         )}
                     </div>
                     <div className={`flex flex-col h-full min-h-0 transition-all duration-300 ${isGalleryCollapsed ? 'w-full pl-2' : 'w-full md:w-2/5'}`}>
-                        <div className="overflow-y-auto pr-2 flex-grow space-y-5 pb-4">
+                        <div className="overflow-y-auto pr-2 flex-grow space-y-4 pb-4">
                             {isAiConfigured && activeFile && (
                                 <div className="flex flex-col">
                                     <button type="button" onClick={handleAiScan} disabled={isScanning || isPreviewMode} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-4 py-2.5 rounded-lg hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-sm font-medium"><SparklesIcon className="w-5 h-5" />{isScanning ? 'Анализ текущего файла...' : 'Сканировать (AI)'}</button>
@@ -728,7 +753,7 @@ Do not include any markdown formatting or additional text. Just the JSON.
                                 </div>
                             )}
                             <div>
-                                <label className={labelClass}>Номер (тип + №)</label>
+                                <label className={labelClass}>Номер (тип + №) <span className="text-red-500">*</span></label>
                                 <input type="text" name="number" value={formData.number} onChange={handleChange} className={inputClass} required placeholder="Паспорт качества № 123" disabled={isPreviewMode} />
                                 {aiSuggestions?.numbers && aiSuggestions.numbers.length > 0 && !isPreviewMode && (
                                     <div className="mt-2 flex flex-wrap gap-2">
@@ -741,24 +766,51 @@ Do not include any markdown formatting or additional text. Just the JSON.
                             </div>
                             <div className="flex gap-4">
                                 <div className="flex-1">
-                                    <label className={labelClass}>Дата документа</label>
-                                    <input type="date" name="validUntil" value={formData.validUntil} onChange={handleChange} className={inputClass} required disabled={isPreviewMode} />
-                                    {aiSuggestions?.dates && aiSuggestions.dates.length > 0 && !isPreviewMode && (
+                                    <label className={labelClass}>Дата от <span className="text-red-500">*</span></label>
+                                    <input type="date" name="dateFrom" value={formData.dateFrom || formData.validUntil || ''} onChange={handleChange} className={inputClass} required disabled={isPreviewMode} max={formData.dateTo || undefined} />
+                                    {aiSuggestions?.dateFrom && aiSuggestions.dateFrom.length > 0 && !isPreviewMode && (
                                         <div className="mt-2 flex flex-wrap gap-2">
                                             <span className="text-xs text-violet-600 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
-                                            {aiSuggestions.dates.map((dateStr, idx) => { 
+                                            {aiSuggestions.dateFrom.map((dateStr, idx) => { 
                                                 const formatted = new Date(dateStr).toLocaleDateString(); 
                                                 return ( 
-                                                    <button key={idx} type="button" onClick={() => applyAiSuggestion('validUntil', dateStr)} className={`text-xs px-2 py-1 rounded border transition-colors ${formData.validUntil === dateStr ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300' } `} title={`Нажмите, чтобы выбрать: ${formatted}`}>{formatted}</button> 
+                                                    <button key={idx} type="button" onClick={() => applyAiSuggestion('dateFrom', dateStr)} className={`text-xs px-2 py-1 rounded border transition-colors ${(formData.dateFrom || formData.validUntil) === dateStr ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300' } `} title={`Нажмите, чтобы выбрать: ${formatted}`}>{formatted}</button> 
                                                 ); 
                                             })}
                                         </div>
                                     )}
                                 </div>
-                                <div className="w-32">
-                                    <label className={labelClass}>Кол-во листов</label>
+                                <div className="flex-1">
+                                    <label className={labelClass}>Дата до</label>
+                                    <input type="date" name="dateTo" value={formData.dateTo || ''} onChange={handleChange} className={inputClass} disabled={isPreviewMode} min={formData.dateFrom || formData.validUntil || undefined} />
+                                    {aiSuggestions?.dateTo && aiSuggestions.dateTo.length > 0 && !isPreviewMode && (
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            <span className="text-xs text-violet-600 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
+                                            {aiSuggestions.dateTo.map((dateStr, idx) => { 
+                                                const formatted = new Date(dateStr).toLocaleDateString(); 
+                                                return ( 
+                                                    <button key={idx} type="button" onClick={() => applyAiSuggestion('dateTo', dateStr)} className={`text-xs px-2 py-1 rounded border transition-colors ${formData.dateTo === dateStr ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300' } `} title={`Нажмите, чтобы выбрать: ${formatted}`}>{formatted}</button> 
+                                                ); 
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="w-24 flex-shrink-0">
+                                    <label className={labelClass}>Листов</label>
                                     <input type="number" name="amount" value={formData.amount} onChange={handleChange} className={inputClass} min="1" disabled={isPreviewMode} />
                                 </div>
+                            </div>
+                            <div>
+                                <label className={labelClass}>Поставщик</label>
+                                <input type="text" name="supplier" value={formData.supplier || ''} onChange={handleChange} className={inputClass} placeholder="ООО 'Ромашка'" disabled={isPreviewMode} />
+                                {aiSuggestions?.supplier && aiSuggestions.supplier.length > 0 && !isPreviewMode && (
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        <span className="text-xs text-violet-600 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
+                                        {aiSuggestions.supplier.map((sup, idx) => ( 
+                                            <button key={idx} type="button" onClick={() => applyAiSuggestion('supplier', sup)} className={`text-xs px-2 py-1 rounded border transition-colors max-w-full truncate ${formData.supplier === sup ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300' } `} title={`Нажмите, чтобы выбрать: ${sup}`}>{sup}</button> 
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <div className="border-t border-slate-200 pt-4">
                                 <div className="flex justify-between items-center mb-1">
@@ -948,7 +1000,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
             for (const token of tokens) {
                 let tokenMatched = false;
                 let bestTokenScore = 1000;
-                if (certNumLower.includes(token)) {
+                if (certNumLower.includes(token) || (c.supplier && c.supplier.toLowerCase().includes(token))) {
                     tokenMatched = true;
                     bestTokenScore = 0; 
                 } else {
@@ -1134,7 +1186,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
                         className="flex items-center bg-slate-100 text-slate-700 border border-slate-300 px-3 py-2 rounded-md hover:bg-slate-200 transition-colors"
                         title="Копировать из другого объекта"
                     >
-                        <CopyIcon className="w-5 h-5 mr-1" /> Копировать
+                        <CopyIcon className="w-5 h-5 mr-1" /> Скопировать
                     </button>
                     <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 whitespace-nowrap transition-colors">
                         <PlusIcon /> Добавить сертификат
@@ -1144,7 +1196,7 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
 
             <div className="flex flex-col lg:flex-row gap-4 mb-4 pb-4 border-b border-slate-100 items-center justify-between">
                 <div className="flex gap-2 w-full lg:w-auto flex-1">
-                    <input type="text" placeholder="Поиск по номеру, материалам..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full lg:max-w-md px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" placeholder="Поиск по номеру, материалам, поставщику..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full lg:max-w-md px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     <FilterPicker value={filterUsage} onChange={setFilterUsage} />
                 </div>
                 <div className="flex items-center gap-4 text-slate-500 flex-shrink-0">
@@ -1178,13 +1230,19 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
                         const linkCount = usageMap.get(cert.id) || 0;
                         const isExpanded = expandedMaterialCards.has(cert.id);
                         const isSelected = selectedCertIds.has(cert.id);
+                        
+                        const dFrom = cert.dateFrom || cert.validUntil;
 
                         if (viewMode === 'list') {
                             return (
                                 <div key={cert.id} className={`border rounded-lg p-3 hover:shadow-md transition-all bg-white flex items-center gap-4 cursor-pointer group select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500 bg-blue-50 z-10' : 'border-slate-200'}`} onClick={(e) => handleCardClick(e, cert)} onContextMenu={(e) => handleContextMenu(e, cert.id)}>
                                     {isSelectionMode && ( <div className="flex-shrink-0"><input type="checkbox" checked={isSelected} onChange={() => {}} className="h-5 w-5 form-checkbox-custom cursor-pointer" /></div> )}
                                     <div className="p-2 bg-slate-100 rounded text-slate-500 cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePreview(cert); }}><CertificateIcon className="w-6 h-6" /></div>
-                                    <div className="flex-grow min-w-0"><h3 className="font-bold text-slate-800 text-sm truncate"><HighlightMatch text={cert.number} query={searchQuery} /></h3><p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p></div>
+                                    <div className="flex-grow min-w-0">
+                                        <h3 className="font-bold text-slate-800 text-sm truncate"><HighlightMatch text={cert.number} query={searchQuery} /></h3>
+                                        <p className="text-xs text-slate-500">Период: {dFrom ? new Date(dFrom).toLocaleDateString() : '...'} {cert.dateTo ? ` - ${new Date(cert.dateTo).toLocaleDateString()}` : ''}</p>
+                                        {cert.supplier && <p className="text-xs text-slate-500 truncate w-full">Поставщик: <HighlightMatch text={cert.supplier} query={searchQuery} /></p>}
+                                    </div>
                                     <div className="text-xs text-slate-500 truncate w-1/4">{cert.materials.map((m, i) => ( <span key={i}>{i > 0 && ', '}<HighlightMatch text={m} query={searchQuery} /></span> ))}</div>
                                     <div className="flex items-center gap-1 flex-shrink-0">
                                         <button className="text-slate-400 hover:text-blue-600 p-1.5 rounded hover:bg-blue-50 transition-colors" onClick={(e) => { e.stopPropagation(); setCopyModalState({ cert, selectedMaterials: new Set(cert.materials) }); }} title="Копировать сертификат"><CopyIcon className="w-4 h-4" /></button>
@@ -1203,8 +1261,12 @@ const CertificatesPage: React.FC<CertificatesPageProps> = ({ certificates, allCe
                             </div>
                             <div className="p-4 flex flex-col flex-grow">
                                 <div className="flex justify-between items-start mb-2">
-                                    <div><h3 className="font-bold text-slate-800 text-sm leading-tight mb-1"><HighlightMatch text={cert.number} query={searchQuery} /></h3><p className="text-xs text-slate-500">Дата: {new Date(cert.validUntil).toLocaleDateString()}</p></div>
-                                    <div className="flex items-center gap-1 ml-2">
+                                    <div className="min-w-0 pr-2">
+                                        <h3 className="font-bold text-slate-800 text-sm leading-tight mb-1 truncate"><HighlightMatch text={cert.number} query={searchQuery} /></h3>
+                                        <p className="text-[10px] text-slate-500 whitespace-nowrap">От: {dFrom ? new Date(dFrom).toLocaleDateString() : '...'} {cert.dateTo ? ` До: ${new Date(cert.dateTo).toLocaleDateString()}` : ''}</p>
+                                        {cert.supplier && <p className="text-[10px] text-slate-500 mt-0.5 truncate w-full" title={cert.supplier}>Поставщик: <HighlightMatch text={cert.supplier} query={searchQuery} /></p>}
+                                    </div>
+                                    <div className="flex items-center gap-1 ml-auto flex-shrink-0">
                                         <button className="text-slate-400 hover:text-blue-600 p-1.5 rounded hover:bg-blue-50 transition-colors" onClick={(e) => { e.stopPropagation(); setCopyModalState({ cert, selectedMaterials: new Set(cert.materials) }); }} title="Копировать сертификат для вставки в Акт"><CopyIcon className="w-4 h-4" /></button>
                                         {linkCount > 0 && ( <button className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-full text-xs font-medium border border-blue-100 hover:bg-blue-100 transition-all mr-1" onClick={(e) => handleManageLinks(e, cert)} title={`Используется в ${linkCount} актах`}><LinkIcon className="w-3 h-3" /> {linkCount}</button> )}
                                     </div>

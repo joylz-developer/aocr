@@ -78,6 +78,10 @@ export interface Certificate {
     
     materials: string[]; // List of material names included in this certificate
     constructionObjectId?: string; // Linked to object
+
+    dateFrom?: string;
+    dateTo?: string;
+    supplier?: string;
 }
 
 // Map of representative roles to their descriptions
@@ -197,6 +201,8 @@ export interface ProjectSettings {
     certificatePromptMaterials?: string;
     personExtractionPrompt?: string;
     organizationExtractionPrompt?: string;
+    certificatePromptDateTo?: string;
+    certificatePromptSupplier?: string;
 }
 
 // Types for Import/Export feature
