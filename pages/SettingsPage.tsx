@@ -722,7 +722,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                     name="certificatePromptNumber"
                                     value={formData.certificatePromptNumber || ''}
                                     onChange={handleChange}
-                                    className={`${inputClass} min-h-[60px]`}
+                                    rows={6}
+                                    className={`${inputClass} min-h-[150px] font-mono text-xs`}
                                 />
                             </div>
                             <div>
@@ -737,7 +738,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                     name="certificatePromptDate"
                                     value={formData.certificatePromptDate || ''}
                                     onChange={handleChange}
-                                    className={`${inputClass} min-h-[60px]`}
+                                    rows={6}
+                                    className={`${inputClass} min-h-[150px] font-mono text-xs`}
                                 />
                             </div>
                             <div>
@@ -752,7 +754,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                     name="certificatePromptDateTo"
                                     value={(formData as any).certificatePromptDateTo || ''}
                                     onChange={handleChange}
-                                    className={`${inputClass} min-h-[60px]`}
+                                    rows={6}
+                                    className={`${inputClass} min-h-[150px] font-mono text-xs`}
                                 />
                             </div>
                             <div>
@@ -767,7 +770,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                     name="certificatePromptSupplier"
                                     value={(formData as any).certificatePromptSupplier || ''}
                                     onChange={handleChange}
-                                    className={`${inputClass} min-h-[60px]`}
+                                    rows={6}
+                                    className={`${inputClass} min-h-[150px] font-mono text-xs`}
                                 />
                             </div>
                             <div>
@@ -782,7 +786,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSave, onImport,
                                     name="certificatePromptMaterials"
                                     value={formData.certificatePromptMaterials || ''}
                                     onChange={handleChange}
-                                    className={`${inputClass} min-h-[60px]`}
+                                    rows={6}
+                                    className={`${inputClass} min-h-[150px] font-mono text-xs`}
                                 />
                             </div>
                         </div>
