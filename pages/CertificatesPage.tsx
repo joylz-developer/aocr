@@ -8,6 +8,13 @@ import { generateContent } from '../services/aiService';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import ObjectResourceImporter from '../components/ObjectResourceImporter';
 
+const SpinnerIcon = ({ className = "w-4 h-4" }) => (
+    <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+);
+
 interface CertificatesPageProps {
     certificates: Certificate[]; 
     allCertificates: Certificate[]; 
@@ -386,7 +393,6 @@ const ImageViewer: React.FC<{ src: string; alt: string }> = ({ src, alt }) => {
     );
 };
 
-
 const CertificateForm: React.FC<{
     certificate: Certificate | null;
     settings: ProjectSettings;
@@ -412,7 +418,7 @@ const CertificateForm: React.FC<{
                 dateFrom: '',
                 dateTo: '',
                 supplier: '',
-                validUntil: '', // для обратной совместимости
+                validUntil: '',
                 amount: '1',
                 materials: [],
                 files: []
@@ -423,7 +429,10 @@ const CertificateForm: React.FC<{
     const [activeFileId, setActiveFileId] = useState<string | null>(null);
     const [newMaterial, setNewMaterial] = useState('');
     const [isDragging, setIsDragging] = useState(false);
-    const [isScanning, setIsScanning] = useState(false);
+    
+    // Новое состояние для управления сканированием отдельных полей
+    const [scanningField, setScanningField] = useState<'all' | 'numbers' | 'dateFrom' | 'dateTo' | 'supplier' | 'materials' | null>(null);
+    
     const [aiError, setAiError] = useState<string | null>(null);
     const [aiSuggestions, setAiSuggestions] = useState<AiSuggestions | null>(null);
     
@@ -453,11 +462,11 @@ const CertificateForm: React.FC<{
         formData.files.find(f => f.id === activeFileId) || formData.files[0] || null
     , [formData.files, activeFileId]);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setFormData(prev => {
             const next = { ...prev, [name]: value };
-            if (name === 'dateFrom') next.validUntil = value; // Синхронизация для обратной совместимости
+            if (name === 'dateFrom') next.validUntil = value;
             return next;
         });
     };
@@ -556,52 +565,99 @@ const CertificateForm: React.FC<{
         setFileToDeleteId(null);
     };
 
-    const handleAiScan = async () => {
+    // ОБНОВЛЕННАЯ логика сканирования (с точечными промптами)
+    const handleAiScan = async (targetField: 'all' | 'numbers' | 'dateFrom' | 'dateTo' | 'supplier' | 'materials' = 'all') => {
         if (!activeFile || !isAiConfigured) return;
-        setIsScanning(true); setAiError(null); setAiSuggestions(null); setShowAiMaterials(true);
+        
+        setScanningField(targetField);
+        setAiError(null);
+        
+        if (targetField === 'all' || targetField === 'materials') {
+            setShowAiMaterials(true);
+        }
+
         try {
             const [mimeType, base64Data] = activeFile.data.split(',');
             const cleanMimeType = mimeType.match(/:(.*?);/)?.[1];
             if (!cleanMimeType || !base64Data) throw new Error("Invalid file data");
             
-            const finalPrompt = `
+            let finalPrompt = "";
+            
+            if (targetField === 'all') {
+                finalPrompt = `
 Analyze the provided document image. This is a certificate or passport for construction materials.
 Your task is to extract the following information and return it in a valid JSON object:
 
-1. "numbers": Extract the document number (e.g., "Certificate No. 123", "Passport No. 456"). Return an array of strings.
-2. "dateFrom": Extract the issue date (Дата от). Format strictly as YYYY-MM-DD. Return an array of strings.
-3. "dateTo": Extract the expiration date (Дата до), if any. Format strictly as YYYY-MM-DD. Return an array of strings.
-4. "supplier": Extract the name of the supplier or manufacturer (Поставщик). Return an array of strings.
-5. "materials": Extract the names of the materials listed in the document. Return an array of strings.
+1. "numbers": ${settings.certificatePromptNumber || 'Extract the document number (e.g., "Certificate No. 123", "Passport No. 456").'} Return an array of strings.
+2. "dateFrom": ${settings.certificatePromptDate || 'Extract the issue date (Дата от). Format strictly as YYYY-MM-DD.'} Return an array of strings.
+3. "dateTo": ${settings.certificatePromptDateTo || 'Extract the expiration date (Дата до), if any. Format strictly as YYYY-MM-DD.'} Return an array of strings.
+4. "supplier": ${settings.certificatePromptSupplier || 'Extract the name of the supplier or manufacturer (Поставщик).'} Return an array of strings.
+5. "materials": ${settings.certificatePromptMaterials || 'Extract the names of the materials listed in the document.'} Return an array of strings.
 
 Format of the response:
 Must be a valid JSON object with the keys: "numbers", "dateFrom", "dateTo", "supplier", "materials".
 Do not include any markdown formatting, code blocks, or additional text. Just the JSON.
-            `.trim();
+                `.trim();
+            } else {
+                const specificPrompts = {
+                    numbers: `"numbers": ${settings.certificatePromptNumber || 'Extract the document number (e.g., "Certificate No. 123", "Passport No. 456").'} Return an array of strings.`,
+                    dateFrom: `"dateFrom": ${settings.certificatePromptDate || 'Extract the issue date (Дата от). Format strictly as YYYY-MM-DD.'} Return an array of strings.`,
+                    dateTo: `"dateTo": ${settings.certificatePromptDateTo || 'Extract the expiration date (Дата до), if any. Format strictly as YYYY-MM-DD.'} Return an array of strings.`,
+                    supplier: `"supplier": ${settings.certificatePromptSupplier || 'Extract the name of the supplier or manufacturer (Поставщик).'} Return an array of strings.`,
+                    materials: `"materials": ${settings.certificatePromptMaterials || 'Extract the names of the materials listed in the document.'} Return an array of strings.`
+                };
+
+                finalPrompt = `
+Analyze the provided document image. This is a certificate or passport for construction materials.
+Your task is to extract ONLY the requested specific information and return it in a valid JSON object:
+
+1. ${specificPrompts[targetField]}
+
+Format of the response:
+Must be a valid JSON object with ONLY the key: "${targetField}".
+Do not include any markdown formatting, code blocks, or additional text. Just the JSON.
+                `.trim();
+            }
             
             const response = await generateContent(settings, finalPrompt, cleanMimeType, base64Data, true);
             const text = response.text;
             if (!text) throw new Error("Empty response from AI");
+            
             const jsonStartIndex = text.indexOf('{');
             const jsonEndIndex = text.lastIndexOf('}');
             if (jsonStartIndex === -1 || jsonEndIndex === -1) throw new Error("JSON structure not found");
+            
             const jsonString = text.substring(jsonStartIndex, jsonEndIndex + 1);
             const result = JSON.parse(jsonString);
             
-            const numbers = Array.isArray(result.numbers) ? result.numbers : (result.number ? [result.number] : []);
-            // Обрабатываем возможные нестрогие ответы AI
-            const dateFrom = Array.isArray(result.dateFrom) ? result.dateFrom : (typeof result.dateFrom === 'string' ? [result.dateFrom] : (Array.isArray(result.dates) ? result.dates : []));
-            const dateTo = Array.isArray(result.dateTo) ? result.dateTo : (typeof result.dateTo === 'string' ? [result.dateTo] : []);
-            const supplier = Array.isArray(result.supplier) ? result.supplier : (typeof result.supplier === 'string' ? [result.supplier] : []);
-            const rawMaterials = Array.isArray(result.materials) ? result.materials : [];
-            const uniqueMaterials = Array.from(new Set(rawMaterials)) as string[];
+            setAiSuggestions(prev => {
+                const newSuggestions = prev ? { ...prev } : {} as AiSuggestions;
+                
+                if (targetField === 'all' || targetField === 'numbers') {
+                    newSuggestions.numbers = Array.isArray(result.numbers) ? result.numbers : (result.number ? [result.number] : []);
+                }
+                if (targetField === 'all' || targetField === 'dateFrom') {
+                    newSuggestions.dateFrom = Array.isArray(result.dateFrom) ? result.dateFrom : (typeof result.dateFrom === 'string' ? [result.dateFrom] : (Array.isArray(result.dates) ? result.dates : []));
+                }
+                if (targetField === 'all' || targetField === 'dateTo') {
+                    newSuggestions.dateTo = Array.isArray(result.dateTo) ? result.dateTo : (typeof result.dateTo === 'string' ? [result.dateTo] : []);
+                }
+                if (targetField === 'all' || targetField === 'supplier') {
+                    newSuggestions.supplier = Array.isArray(result.supplier) ? result.supplier : (typeof result.supplier === 'string' ? [result.supplier] : []);
+                }
+                if (targetField === 'all' || targetField === 'materials') {
+                    const rawMaterials = Array.isArray(result.materials) ? result.materials : [];
+                    newSuggestions.materials = Array.from(new Set(rawMaterials)) as string[];
+                }
+                
+                return newSuggestions;
+            });
             
-            setAiSuggestions({ numbers, dateFrom, dateTo, supplier, materials: uniqueMaterials });
         } catch (error: any) {
             console.error("AI Scan Error:", error);
             setAiError(`Ошибка распознавания: ${error.message || "Неизвестная ошибка"}`);
         } finally {
-            setIsScanning(false);
+            setScanningField(null);
         }
     };
 
@@ -707,6 +763,31 @@ Do not include any markdown formatting, code blocks, or additional text. Just th
     const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 disabled:bg-slate-100 disabled:text-slate-500 text-sm [.theme-dark_&]:[color-scheme:dark]";
     const labelClass = "block text-sm font-medium text-slate-700 mb-1";
 
+    // Хелпер для рендера заголовков полей с точечной кнопкой AI
+    const FieldLabelWithAI: React.FC<{
+        label: string;
+        targetField: 'numbers' | 'dateFrom' | 'dateTo' | 'supplier';
+        isRequired?: boolean;
+    }> = ({ label, targetField, isRequired }) => (
+        <div className="flex justify-between items-center mb-1">
+            <label className="block text-sm font-medium text-slate-700 [.theme-dark_&]:text-slate-300">
+                {label} {isRequired && <span className="text-red-500">*</span>}
+            </label>
+            {isAiConfigured && activeFile && !isPreviewMode && (
+                <button
+                    type="button"
+                    onClick={() => handleAiScan(targetField)}
+                    disabled={scanningField !== null}
+                    className={`text-violet-500 hover:text-violet-700 transition-all p-1 rounded hover:bg-violet-50 [.theme-dark_&]:hover:bg-violet-900/30 flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider disabled:opacity-50 disabled:cursor-not-allowed`}
+                    title={`Сканировать только поле "${label}"`}
+                >
+                    {scanningField === targetField ? <SpinnerIcon className="w-3.5 h-3.5" /> : <SparklesIcon className="w-3.5 h-3.5" />}
+                    {scanningField === targetField ? 'Загрузка...' : 'AI'}
+                </button>
+            )}
+        </div>
+    );
+
     return (
         <div onClick={handleModalClick} className="h-full">
             <form onSubmit={handleSubmit} className="flex flex-col h-[75vh]">
@@ -746,50 +827,44 @@ Do not include any markdown formatting, code blocks, or additional text. Just th
                     </div>
                     <div className={`flex flex-col h-full min-h-0 transition-all duration-300 ${isGalleryCollapsed ? 'w-full pl-2' : 'w-full md:w-2/5'}`}>
                         <div className="overflow-y-auto pr-2 flex-grow space-y-4 pb-4">
-                            {isAiConfigured && activeFile && (
-                                <div className="flex flex-col">
-                                    <button type="button" onClick={handleAiScan} disabled={isScanning || isPreviewMode} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-4 py-2.5 rounded-lg hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-sm font-medium"><SparklesIcon className="w-5 h-5" />{isScanning ? 'Анализ текущего файла...' : 'Сканировать (AI)'}</button>
-                                    {aiError && <p className="text-red-500 text-xs mt-2">{aiError}</p>}
-                                </div>
-                            )}
                             <div>
-                                <label className={labelClass}>Номер (тип + №) <span className="text-red-500">*</span></label>
+                                <FieldLabelWithAI label="Номер (тип + №)" targetField="numbers" isRequired />
                                 <input type="text" name="number" value={formData.number} onChange={handleChange} className={inputClass} required placeholder="Паспорт качества № 123" disabled={isPreviewMode} />
                                 {aiSuggestions?.numbers && aiSuggestions.numbers.length > 0 && !isPreviewMode && (
                                     <div className="mt-2 flex flex-wrap gap-2">
-                                        <span className="text-xs text-violet-600 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
+                                        <span className="text-xs text-violet-600 [.theme-dark_&]:text-violet-400 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
                                         {aiSuggestions.numbers.map((suggestion, idx) => ( 
-                                            <button key={idx} type="button" onClick={() => applyAiSuggestion('number', suggestion)} className={`text-xs px-2 py-1 rounded border transition-colors max-w-full truncate ${formData.number === suggestion ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300' } `} title={`Нажмите, чтобы выбрать: ${suggestion}`}>{suggestion}</button> 
+                                            <button key={idx} type="button" onClick={() => applyAiSuggestion('number', suggestion)} className={`text-xs px-2 py-1 rounded border transition-colors max-w-full truncate ${formData.number === suggestion ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200 [.theme-dark_&]:bg-violet-900/40 [.theme-dark_&]:text-violet-300 [.theme-dark_&]:border-violet-700 [.theme-dark_&]:ring-violet-700' : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300 [.theme-dark_&]:bg-violet-900/20 [.theme-dark_&]:text-slate-300 [.theme-dark_&]:border-violet-800/50 [.theme-dark_&]:hover:bg-violet-900/40 [.theme-dark_&]:hover:border-violet-700' } `} title={`Нажмите, чтобы выбрать: ${suggestion}`}>{suggestion}</button> 
                                         ))}
                                     </div>
                                 )}
                             </div>
                             <div className="flex gap-4">
                                 <div className="flex-1">
-                                    <label className={labelClass}>Дата от <span className="text-red-500">*</span></label>
+                                    <FieldLabelWithAI label="Дата от" targetField="dateFrom" isRequired />
                                     <input type="date" name="dateFrom" value={formData.dateFrom || formData.validUntil || ''} onChange={handleChange} className={inputClass} required disabled={isPreviewMode} max={formData.dateTo || undefined} />
                                     {aiSuggestions?.dateFrom && aiSuggestions.dateFrom.length > 0 && !isPreviewMode && (
                                         <div className="mt-2 flex flex-wrap gap-2">
-                                            <span className="text-xs text-violet-600 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
+                                            <span className="text-xs text-violet-600 [.theme-dark_&]:text-violet-400 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
                                             {aiSuggestions.dateFrom.map((dateStr, idx) => { 
                                                 const formatted = new Date(dateStr).toLocaleDateString(); 
                                                 return ( 
-                                                    <button key={idx} type="button" onClick={() => applyAiSuggestion('dateFrom', dateStr)} className={`text-xs px-2 py-1 rounded border transition-colors ${(formData.dateFrom || formData.validUntil) === dateStr ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300' } `} title={`Нажмите, чтобы выбрать: ${formatted}`}>{formatted}</button> 
+                                                    <button key={idx} type="button" onClick={() => applyAiSuggestion('dateFrom', dateStr)} className={`text-xs px-2 py-1 rounded border transition-colors ${(formData.dateFrom || formData.validUntil) === dateStr ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200 [.theme-dark_&]:bg-violet-900/40 [.theme-dark_&]:text-violet-300 [.theme-dark_&]:border-violet-700 [.theme-dark_&]:ring-violet-700' : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300 [.theme-dark_&]:bg-violet-900/20 [.theme-dark_&]:text-slate-300 [.theme-dark_&]:border-violet-800/50 [.theme-dark_&]:hover:bg-violet-900/40 [.theme-dark_&]:hover:border-violet-700' } `} title={`Нажмите, чтобы выбрать: ${formatted}`}>{formatted}</button> 
                                                 ); 
                                             })}
                                         </div>
                                     )}
                                 </div>
                                 <div className="flex-1">
-                                    <label className={labelClass}>Дата до</label>
+                                    <FieldLabelWithAI label="Дата до" targetField="dateTo" />
                                     <input type="date" name="dateTo" value={formData.dateTo || ''} onChange={handleChange} className={inputClass} disabled={isPreviewMode} min={formData.dateFrom || formData.validUntil || undefined} />
                                     {aiSuggestions?.dateTo && aiSuggestions.dateTo.length > 0 && !isPreviewMode && (
                                         <div className="mt-2 flex flex-wrap gap-2">
-                                            <span className="text-xs text-violet-600 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
+                                            <span className="text-xs text-violet-600 [.theme-dark_&]:text-violet-400 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
                                             {aiSuggestions.dateTo.map((dateStr, idx) => { 
                                                 const formatted = new Date(dateStr).toLocaleDateString(); 
                                                 return ( 
-                                                    <button key={idx} type="button" onClick={() => applyAiSuggestion('dateTo', dateStr)} className={`text-xs px-2 py-1 rounded border transition-colors ${formData.dateTo === dateStr ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300' } `} title={`Нажмите, чтобы выбрать: ${formatted}`}>{formatted}</button> 
+                                                    <button key={idx} type="button" onClick={() => applyAiSuggestion('dateTo', dateStr)} className={`text-xs px-2 py-1 rounded border transition-colors ${formData.dateTo === dateStr ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200 [.theme-dark_&]:bg-violet-900/40 [.theme-dark_&]:text-violet-300 [.theme-dark_&]:border-violet-700 [.theme-dark_&]:ring-violet-700' : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300 [.theme-dark_&]:bg-violet-900/20 [.theme-dark_&]:text-slate-300 [.theme-dark_&]:border-violet-800/50 [.theme-dark_&]:hover:bg-violet-900/40 [.theme-dark_&]:hover:border-violet-700' } `} title={`Нажмите, чтобы выбрать: ${formatted}`}>{formatted}</button> 
                                                 ); 
                                             })}
                                         </div>
@@ -800,40 +875,65 @@ Do not include any markdown formatting, code blocks, or additional text. Just th
                                     <input type="number" name="amount" value={formData.amount} onChange={handleChange} className={inputClass} min="1" disabled={isPreviewMode} />
                                 </div>
                             </div>
+                            
                             <div>
-                                <label className={labelClass}>Поставщик</label>
-                                <input type="text" name="supplier" value={formData.supplier || ''} onChange={handleChange} className={inputClass} placeholder="ООО 'Ромашка'" disabled={isPreviewMode} />
+                                <FieldLabelWithAI label="Поставщик" targetField="supplier" />
+                                <textarea 
+                                    name="supplier" 
+                                    value={formData.supplier || ''} 
+                                    onChange={handleChange} 
+                                    className={`${inputClass} resize-y min-h-[72px]`} 
+                                    rows={3}
+                                    placeholder="ООО 'Ромашка'" 
+                                    disabled={isPreviewMode} 
+                                />
                                 {aiSuggestions?.supplier && aiSuggestions.supplier.length > 0 && !isPreviewMode && (
                                     <div className="mt-2 flex flex-wrap gap-2">
-                                        <span className="text-xs text-violet-600 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
+                                        <span className="text-xs text-violet-600 [.theme-dark_&]:text-violet-400 font-semibold flex items-center w-full"><SparklesIcon className="w-3 h-3 mr-1"/> AI Варианты:</span>
                                         {aiSuggestions.supplier.map((sup, idx) => ( 
-                                            <button key={idx} type="button" onClick={() => applyAiSuggestion('supplier', sup)} className={`text-xs px-2 py-1 rounded border transition-colors max-w-full truncate ${formData.supplier === sup ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200' : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300' } `} title={`Нажмите, чтобы выбрать: ${sup}`}>{sup}</button> 
+                                            <button key={idx} type="button" onClick={() => applyAiSuggestion('supplier', sup)} className={`text-xs px-2 py-1 rounded border transition-colors max-w-full truncate ${formData.supplier === sup ? 'bg-violet-100 text-violet-800 border-violet-300 ring-1 ring-violet-200 [.theme-dark_&]:bg-violet-900/40 [.theme-dark_&]:text-violet-300 [.theme-dark_&]:border-violet-700 [.theme-dark_&]:ring-violet-700' : 'bg-violet-50 text-slate-700 border-violet-100 hover:bg-violet-200 hover:border-violet-300 [.theme-dark_&]:bg-violet-900/20 [.theme-dark_&]:text-slate-300 [.theme-dark_&]:border-violet-800/50 [.theme-dark_&]:hover:bg-violet-900/40 [.theme-dark_&]:hover:border-violet-700' } `} title={`Нажмите, чтобы выбрать: ${sup}`}>{sup}</button> 
                                         ))}
                                     </div>
                                 )}
                             </div>
                             <div className="border-t border-slate-200 pt-4">
                                 <div className="flex justify-between items-center mb-1">
-                                    <label className={labelClass}>Материалы ({formData.materials.length})</label>
+                                    <div className="flex items-center gap-2">
+                                        <label className="block text-sm font-medium text-slate-700 [.theme-dark_&]:text-slate-300">
+                                            Материалы ({formData.materials.length})
+                                        </label>
+                                        {isAiConfigured && activeFile && !isPreviewMode && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleAiScan('materials')}
+                                                disabled={scanningField !== null}
+                                                className={`text-violet-500 hover:text-violet-700 transition-all p-1 rounded hover:bg-violet-50 [.theme-dark_&]:hover:bg-violet-900/30 flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider disabled:opacity-50 disabled:cursor-not-allowed`}
+                                                title="Сканировать только материалы"
+                                            >
+                                                {scanningField === 'materials' ? <SpinnerIcon className="w-3.5 h-3.5" /> : <SparklesIcon className="w-3.5 h-3.5" />}
+                                                {scanningField === 'materials' ? 'Загрузка...' : 'AI'}
+                                            </button>
+                                        )}
+                                    </div>
                                     {formData.materials.length > 0 && !isPreviewMode && ( <button type="button" onClick={handleRemoveAllMaterials} className="text-xs text-red-500 hover:text-red-700 underline">Удалить все</button> )}
                                 </div>
                                 {aiSuggestions?.materials && aiSuggestions.materials.length > 0 && !isPreviewMode && (
-                                    <div className="mb-4 bg-violet-50 border border-violet-100 rounded-md p-3">
+                                    <div className="mb-4 bg-violet-50 [.theme-dark_&]:bg-violet-900/10 border border-violet-100 [.theme-dark_&]:border-violet-800/50 rounded-md p-3">
                                         <div className="flex justify-between items-center mb-2 cursor-pointer select-none" onClick={() => setShowAiMaterials(!showAiMaterials)}>
-                                            <p className="text-xs text-violet-700 font-bold flex items-center"><SparklesIcon className="w-3 h-3 mr-1"/> Найдено в документе ({aiSuggestions.materials.length})</p>
+                                            <p className="text-xs text-violet-700 [.theme-dark_&]:text-violet-400 font-bold flex items-center"><SparklesIcon className="w-3 h-3 mr-1"/> Найдено в документе ({aiSuggestions.materials.length})</p>
                                             <div className="flex items-center gap-2"><ChevronDownIcon className={`w-4 h-4 text-violet-500 transition-transform ${showAiMaterials ? 'rotate-180' : ''}`} /></div>
                                         </div>
                                         {showAiMaterials && (
                                             <div className="animate-fade-in-up">
-                                                <div className="flex gap-2 mb-3 justify-end border-b border-violet-100 pb-2">
-                                                    <button type="button" onClick={() => { if (aiSuggestions.materials) { setFormData(prev => ({...prev, materials: [...aiSuggestions.materials!]})); } }} className="text-xs bg-white border border-violet-200 text-violet-700 px-2 py-1 rounded hover:bg-violet-50 transition-colors">Заменить все</button>
+                                                <div className="flex gap-2 mb-3 justify-end border-b border-violet-100 [.theme-dark_&]:border-violet-800/50 pb-2">
+                                                    <button type="button" onClick={() => { if (aiSuggestions.materials) { setFormData(prev => ({...prev, materials: [...aiSuggestions.materials!]})); } }} className="text-xs bg-white [.theme-dark_&]:bg-[#0d1117] border border-violet-200 [.theme-dark_&]:border-violet-800 text-violet-700 [.theme-dark_&]:text-violet-400 px-2 py-1 rounded hover:bg-violet-50 [.theme-dark_&]:hover:bg-violet-900/30 transition-colors">Заменить все</button>
                                                     <button type="button" onClick={() => { if (aiSuggestions.materials) { const unique = aiSuggestions.materials.filter(m => !formData.materials.includes(m)); setFormData(prev => ({...prev, materials: [...prev.materials, ...unique]})); } }} className="text-xs bg-violet-600 text-white px-2 py-1 rounded hover:bg-violet-700 transition-colors">Добавить уникальные</button>
                                                 </div>
                                                 <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
                                                     {aiSuggestions.materials.map((mat, idx) => { 
                                                         const isDuplicate = formData.materials.includes(mat); 
                                                         return ( 
-                                                            <button key={idx} type="button" onClick={() => !isDuplicate && handleAddMaterial(mat)} disabled={isDuplicate} className={`text-xs border px-2 py-1 rounded-full text-left max-w-full truncate transition-colors ${isDuplicate ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-default line-through' : 'bg-white border-violet-200 text-slate-700 hover:border-violet-400 hover:text-violet-700' } `} title={isDuplicate ? "Уже добавлено" : "Нажмите, чтобы добавить"}>{isDuplicate ? '' : '+ '}{mat}</button> 
+                                                            <button key={idx} type="button" onClick={() => !isDuplicate && handleAddMaterial(mat)} disabled={isDuplicate} className={`text-xs border px-2 py-1 rounded-full text-left max-w-full truncate transition-colors ${isDuplicate ? 'bg-slate-100 text-slate-400 border-slate-200 [.theme-dark_&]:bg-[#161b22] [.theme-dark_&]:text-slate-500 [.theme-dark_&]:border-slate-700 cursor-default line-through' : 'bg-white border-violet-200 text-slate-700 hover:border-violet-400 hover:text-violet-700 [.theme-dark_&]:bg-[#0d1117] [.theme-dark_&]:border-violet-800 [.theme-dark_&]:text-slate-300 [.theme-dark_&]:hover:border-violet-500 [.theme-dark_&]:hover:text-violet-400' } `} title={isDuplicate ? "Уже добавлено" : "Нажмите, чтобы добавить"}>{isDuplicate ? '' : '+ '}{mat}</button> 
                                                         ); 
                                                     })}
                                                 </div>
@@ -861,44 +961,44 @@ Do not include any markdown formatting, code blocks, or additional text. Just th
                                     <div className="mt-6 pt-4 border-t border-slate-200">
                                         {!diffResult ? (
                                             <div className="flex gap-2">
-                                                <input type="text" value={massEditPrompt} onChange={e => setMassEditPrompt(e.target.value)} placeholder="AI: 'Удали размеры', 'Исправь...', 'Очистить'..." className="flex-grow text-sm border border-violet-200 rounded-md px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-violet-500" onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAiMassEdit())} />
+                                                <input type="text" value={massEditPrompt} onChange={e => setMassEditPrompt(e.target.value)} placeholder="AI: 'Удали размеры', 'Исправь...', 'Очистить'..." className="flex-grow text-sm border border-violet-200 [.theme-dark_&]:border-violet-800/50 rounded-md px-3 py-2 bg-white [.theme-dark_&]:bg-[#0d1117] text-slate-900 [.theme-dark_&]:text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500" onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAiMassEdit())} />
                                                 <button type="button" onClick={handleAiMassEdit} disabled={isMassEditing || !massEditPrompt.trim()} className="bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-3 py-2 rounded-md hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-50 text-sm whitespace-nowrap flex items-center transition-all">{isMassEditing ? '...' : <SparklesIcon className="w-4 h-4" />}</button>
                                             </div>
                                         ) : (
-                                            <div className="bg-violet-50 p-3 rounded-md border border-violet-100 animate-fade-in-up">
-                                                <div className="flex justify-between items-center mb-2 pb-2 border-b border-violet-200">
-                                                    <p className="text-xs text-violet-800 font-medium">Проверьте изменения:</p>
+                                            <div className="bg-violet-50 [.theme-dark_&]:bg-[#1e1a3b] p-3 rounded-md border border-violet-100 [.theme-dark_&]:border-violet-900/50 animate-fade-in-up">
+                                                <div className="flex justify-between items-center mb-2 pb-2 border-b border-violet-200 [.theme-dark_&]:border-violet-800/50">
+                                                    <p className="text-xs text-violet-800 [.theme-dark_&]:text-violet-300 font-medium">Проверьте изменения:</p>
                                                     <div className="flex gap-3">
-                                                        <button type="button" onClick={() => handleSelectAllDiffs(true)} className="text-[10px] font-medium text-violet-600 hover:underline">Выбрать все</button>
+                                                        <button type="button" onClick={() => handleSelectAllDiffs(true)} className="text-[10px] font-medium text-violet-600 [.theme-dark_&]:text-violet-400 hover:underline">Выбрать все</button>
                                                         <button type="button" onClick={() => handleSelectAllDiffs(false)} className="text-[10px] font-medium text-slate-500 hover:underline">Снять все</button>
                                                     </div>
                                                 </div>
                                                 <div className="mb-3 space-y-2 pr-1">
                                                     {diffResult.length === 0 && <p className="text-xs text-slate-500 italic">Нет изменений</p>}
                                                     {diffResult.map((item) => ( 
-                                                        <div key={item.id} className="flex items-start gap-2 text-xs bg-white p-2 rounded border border-slate-200 shadow-sm">
+                                                        <div key={item.id} className="flex items-start gap-2 text-xs bg-white [.theme-dark_&]:bg-[#0d1117] p-2 rounded border border-slate-200 [.theme-dark_&]:border-slate-700 shadow-sm">
                                                             <input type="checkbox" checked={item.selected} onChange={() => handleToggleDiffSelection(item.id)} className="h-4 w-4 form-checkbox-custom flex-shrink-0 mt-0.5" />
                                                             <div className="flex-grow min-w-0">
                                                                 {item.status === 'modified' && ( 
                                                                     <div className="flex flex-col md:flex-row items-start md:items-stretch gap-2 w-full">
-                                                                        <div className="flex-1 w-full md:w-auto p-1.5 bg-red-50 border border-red-100 rounded text-red-900 text-xs break-words">{item.original}</div>
+                                                                        <div className="flex-1 w-full md:w-auto p-1.5 bg-red-50 [.theme-dark_&]:bg-red-900/20 border border-red-100 [.theme-dark_&]:border-red-800/50 rounded text-red-900 [.theme-dark_&]:text-red-400 text-xs break-words">{item.original}</div>
                                                                         <div className="flex-shrink-0 self-center"><ArrowRightIcon className="w-3 h-3 text-slate-400 hidden md:block" /><ArrowRightIcon className="w-3 h-3 text-slate-400 md:hidden rotate-90" /></div>
-                                                                        <div className="flex-1 w-full md:w-auto p-1.5 bg-green-50 border border-green-100 rounded text-green-900 text-xs font-medium break-words">{item.new}</div>
+                                                                        <div className="flex-1 w-full md:w-auto p-1.5 bg-green-50 [.theme-dark_&]:bg-green-900/20 border border-green-100 [.theme-dark_&]:border-green-800/50 rounded text-green-900 [.theme-dark_&]:text-green-400 text-xs font-medium break-words">{item.new}</div>
                                                                     </div> 
                                                                 )}
-                                                                {item.status === 'added' && ( <div className="text-green-700 font-medium flex items-start gap-1 p-1.5 bg-green-50 border border-green-100 rounded"><PlusIcon className="w-3 h-3 flex-shrink-0 mt-0.5" /><span className="break-words">{item.new}</span></div> )}
-                                                                {item.status === 'removed' && ( <div className="text-red-700 p-1.5 bg-red-50 border border-red-100 rounded flex items-start gap-1 opacity-80"><span className="line-through decoration-red-400 break-words">{item.original}</span></div> )}
+                                                                {item.status === 'added' && ( <div className="text-green-700 [.theme-dark_&]:text-green-400 font-medium flex items-start gap-1 p-1.5 bg-green-50 [.theme-dark_&]:bg-green-900/20 border border-green-100 [.theme-dark_&]:border-green-800/50 rounded"><PlusIcon className="w-3 h-3 flex-shrink-0 mt-0.5" /><span className="break-words">{item.new}</span></div> )}
+                                                                {item.status === 'removed' && ( <div className="text-red-700 [.theme-dark_&]:text-red-400 p-1.5 bg-red-50 [.theme-dark_&]:bg-red-900/20 border border-red-100 [.theme-dark_&]:border-red-800/50 rounded flex items-start gap-1 opacity-80"><span className="line-through decoration-red-400 break-words">{item.original}</span></div> )}
                                                                 {item.status === 'unchanged' && ( <div className="text-slate-500 break-words pt-0.5" title="Без изменений">{item.original}</div> )}
                                                             </div>
-                                                            <div className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded mt-0.5 ${item.status === 'modified' ? 'bg-amber-100 text-amber-700' : ''} ${item.status === 'added' ? 'bg-green-100 text-green-700' : ''} ${item.status === 'removed' ? 'bg-red-100 text-red-700' : ''} ${item.status === 'unchanged' ? 'bg-slate-100 text-slate-500' : ''} `}>
+                                                            <div className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded mt-0.5 ${item.status === 'modified' ? 'bg-amber-100 text-amber-700 [.theme-dark_&]:bg-amber-900/30 [.theme-dark_&]:text-amber-400' : ''} ${item.status === 'added' ? 'bg-green-100 text-green-700 [.theme-dark_&]:bg-green-900/30 [.theme-dark_&]:text-green-400' : ''} ${item.status === 'removed' ? 'bg-red-100 text-red-700 [.theme-dark_&]:bg-red-900/30 [.theme-dark_&]:text-red-400' : ''} ${item.status === 'unchanged' ? 'bg-slate-100 text-slate-500 [.theme-dark_&]:bg-[#161b22] [.theme-dark_&]:text-slate-400' : ''} `}>
                                                                 {item.status === 'modified' ? 'ИЗМ' : item.status === 'added' ? 'НОВ' : item.status === 'removed' ? 'УДЛ' : 'ОК'}
                                                             </div>
                                                         </div> 
                                                     ))}
                                                 </div>
-                                                <div className="flex gap-2 sticky bottom-0 bg-violet-50 pt-2 border-t border-violet-100">
+                                                <div className="flex gap-2 sticky bottom-0 bg-violet-50 [.theme-dark_&]:bg-[#1e1a3b] pt-2 border-t border-violet-100 [.theme-dark_&]:border-violet-800/50">
                                                     <button type="button" onClick={handleCommitMassEdit} className="flex-1 bg-violet-600 text-white text-xs py-2 rounded hover:bg-violet-700 transition-colors font-medium">Применить выбранное</button>
-                                                    <button type="button" onClick={handleCancelMassEdit} className="flex-1 bg-white border border-slate-300 text-slate-700 text-xs py-2 rounded hover:bg-slate-50 transition-colors font-medium">Отменить</button>
+                                                    <button type="button" onClick={handleCancelMassEdit} className="flex-1 bg-white [.theme-dark_&]:bg-[#0d1117] border border-slate-300 [.theme-dark_&]:border-slate-600 text-slate-700 [.theme-dark_&]:text-slate-300 text-xs py-2 rounded hover:bg-slate-50 [.theme-dark_&]:hover:bg-[#161b22] transition-colors font-medium">Отменить</button>
                                                 </div>
                                             </div>
                                         )}
@@ -906,9 +1006,27 @@ Do not include any markdown formatting, code blocks, or additional text. Just th
                                 )}
                             </div>
                         </div>
-                        <div className="flex justify-end space-x-3 pt-4 border-t border-slate-200 bg-white mt-auto">
-                            <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-md hover:bg-slate-300 transition-colors">Отмена</button>
-                            <button type="submit" disabled={isPreviewMode} className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed">Сохранить</button>
+                        <div className="flex justify-between items-end pt-4 border-t border-slate-200 [.theme-dark_&]:border-slate-700 bg-white [.theme-dark_&]:bg-slate-800 mt-auto">
+                            <div className="flex flex-col items-start max-w-[50%]">
+                                {isAiConfigured && activeFile && (
+                                    <>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => handleAiScan('all')} 
+                                            disabled={scanningField !== null || isPreviewMode} 
+                                            className="flex items-center justify-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white px-4 py-2 rounded-md hover:from-violet-600 hover:to-fuchsia-700 disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-sm font-medium"
+                                        >
+                                            {scanningField === 'all' ? <SpinnerIcon className="w-5 h-5" /> : <SparklesIcon className="w-5 h-5" />}
+                                            {scanningField === 'all' ? 'Анализ всего документа...' : 'Сканировать всё (AI)'}
+                                        </button>
+                                        {aiError && <p className="text-red-500 text-xs mt-1 truncate w-full" title={aiError}>{aiError}</p>}
+                                    </>
+                                )}
+                            </div>
+                            <div className="flex space-x-3 flex-shrink-0">
+                                <button type="button" onClick={onClose} className="bg-slate-200 [.theme-dark_&]:bg-slate-700 text-slate-800 [.theme-dark_&]:text-slate-200 px-4 py-2 rounded-md hover:bg-slate-300 [.theme-dark_&]:hover:bg-slate-600 transition-colors">Отмена</button>
+                                <button type="submit" disabled={isPreviewMode} className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed">Сохранить</button>
+                            </div>
                         </div>
                     </div>
                 </div>

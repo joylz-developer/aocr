@@ -79,17 +79,15 @@ const parseDisplayDate = (dateString: string): string | null => {
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 };
 
-// ФУНКЦИЯ ДЛЯ ВЫДЕЛЕНИЯ ПЕРЕМЕННЫХ ШАБЛОНА В ЯЧЕЙКАХ
 const renderTextWithTags = (text: string) => {
     if (typeof text !== 'string') return text;
-    // Ищем любые переменные, обрамленные в фигурные скобки (например {work_end_date})
     const parts = text.split(/(\{[\w_]+\})/g);
     return parts.map((part, i) => {
         if (part.startsWith('{') && part.endsWith('}')) {
             return (
                 <span 
                     key={i} 
-                    className="bg-pink-100 text-pink-700 px-1 py-0.5 rounded cursor-help font-mono text-[11px] border border-pink-200 mx-0.5 inline-block align-middle shadow-sm"
+                    className="bg-pink-100 text-pink-700 px-1 py-0.5 rounded cursor-help font-mono text-[11px] border border-pink-200 mx-0.5 inline-block align-middle shadow-sm [.theme-dark_&]:bg-pink-900/30 [.theme-dark_&]:text-pink-400 [.theme-dark_&]:border-pink-800/50"
                     title={`Переменная шаблона: при выгрузке вместо этого тега подставятся данные (${part})`}
                 >
                     {part}
@@ -137,22 +135,22 @@ const SingleDateEditorPopover: React.FC<{
     };
 
     const QuickAddButton: React.FC<{ children: React.ReactNode; onClick: () => void }> = ({ children, onClick }) => (
-        <button type="button" onClick={onClick} className="px-2 py-1 text-xs bg-slate-200 hover:bg-slate-300 rounded">
+        <button type="button" onClick={onClick} className="px-2 py-1 text-xs bg-slate-200 hover:bg-slate-300 [.theme-dark_&]:bg-slate-700 [.theme-dark_&]:hover:bg-slate-600 [.theme-dark_&]:text-slate-200 rounded transition-colors">
             {children}
         </button>
     );
 
-    const inputClass = "w-full p-1.5 border rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 border-slate-300 [.theme-dark_&]:[color-scheme:dark]";
+    const inputClass = "w-full p-1.5 border rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 border-slate-300 [.theme-dark_&]:bg-[#0d1117] [.theme-dark_&]:border-slate-600 [.theme-dark_&]:text-slate-200 [.theme-dark_&]:[color-scheme:dark]";
 
     return (
         <div 
             ref={containerRef} 
-            className="absolute bg-white p-3 border-2 border-blue-500 rounded-md z-40 flex flex-col gap-3 shadow-lg animate-fade-in-up" 
+            className="absolute bg-white [.theme-dark_&]:bg-slate-800 p-3 border-2 border-blue-500 rounded-md z-40 flex flex-col gap-3 shadow-lg animate-fade-in-up" 
             style={{ top: position.top, left: position.left, minWidth: '220px' }}
             onMouseDown={e => e.stopPropagation()} 
         >
             <div>
-                <label className="text-xs font-medium text-slate-600">Дата акта</label>
+                <label className="text-xs font-medium text-slate-600 [.theme-dark_&]:text-slate-300">Дата акта</label>
                 <input
                     type="date"
                     value={act.date || ''}
@@ -217,22 +215,22 @@ const DateEditorPopover: React.FC<{
     };
 
     const QuickAddButton: React.FC<{ children: React.ReactNode; onClick: () => void }> = ({ children, onClick }) => (
-        <button type="button" onClick={onClick} className="px-2 py-1 text-xs bg-slate-200 hover:bg-slate-300 rounded">
+        <button type="button" onClick={onClick} className="px-2 py-1 text-xs bg-slate-200 hover:bg-slate-300 [.theme-dark_&]:bg-slate-700 [.theme-dark_&]:hover:bg-slate-600 [.theme-dark_&]:text-slate-200 rounded transition-colors">
             {children}
         </button>
     );
 
-    const inputClass = "w-full p-1.5 border rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 border-slate-300 [.theme-dark_&]:[color-scheme:dark]";
+    const inputClass = "w-full p-1.5 border rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 border-slate-300 [.theme-dark_&]:bg-[#0d1117] [.theme-dark_&]:border-slate-600 [.theme-dark_&]:text-slate-200 [.theme-dark_&]:[color-scheme:dark]";
 
     return (
         <div 
             ref={containerRef} 
-            className="absolute bg-white p-3 border-2 border-blue-500 rounded-md z-40 flex flex-col gap-3 shadow-lg animate-fade-in-up" 
+            className="absolute bg-white [.theme-dark_&]:bg-slate-800 p-3 border-2 border-blue-500 rounded-md z-40 flex flex-col gap-3 shadow-lg animate-fade-in-up" 
             style={{ top: position.top, left: position.left, minWidth: '220px' }}
             onMouseDown={e => e.stopPropagation()} 
         >
             <div>
-                <label className="text-xs font-medium text-slate-600">Начало</label>
+                <label className="text-xs font-medium text-slate-600 [.theme-dark_&]:text-slate-300">Начало</label>
                 <input
                     type="date"
                     value={act.workStartDate || ''}
@@ -241,7 +239,7 @@ const DateEditorPopover: React.FC<{
                 />
             </div>
              <div>
-                <label className="text-xs font-medium text-slate-600">Окончание</label>
+                <label className="text-xs font-medium text-slate-600 [.theme-dark_&]:text-slate-300">Окончание</label>
                 <input
                     type="date"
                     value={act.workEndDate || ''}
@@ -267,21 +265,21 @@ const RegulationPopover: React.FC<{
 }> = ({ regulation, position, onClose, onOpenDetails }) => {
     return (
         <div 
-            className="absolute z-50 bg-white border border-slate-200 shadow-xl rounded-lg p-3 w-72 animate-fade-in-up"
+            className="absolute z-50 bg-white [.theme-dark_&]:bg-slate-800 border border-slate-200 [.theme-dark_&]:border-slate-700 shadow-xl rounded-lg p-3 w-72 animate-fade-in-up"
             style={{ top: position.top, left: position.left }}
             onMouseDown={e => e.stopPropagation()} 
         >
             <div className="flex justify-between items-start mb-2">
-                <h4 className="font-bold text-slate-800 text-sm">{regulation.designation}</h4>
-                 <span className={`text-[10px] px-1.5 py-0.5 rounded border ${regulation.status.includes('Действует') ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                <h4 className="font-bold text-slate-800 [.theme-dark_&]:text-slate-200 text-sm">{regulation.designation}</h4>
+                 <span className={`text-[10px] px-1.5 py-0.5 rounded border ${regulation.status.includes('Действует') ? 'bg-green-50 text-green-700 border-green-200 [.theme-dark_&]:bg-green-900/30 [.theme-dark_&]:text-green-400 [.theme-dark_&]:border-green-800/50' : 'bg-red-50 text-red-700 border-red-200 [.theme-dark_&]:bg-red-900/30 [.theme-dark_&]:text-red-400 [.theme-dark_&]:border-red-800/50'}`}>
                     {regulation.status}
                 </span>
             </div>
-            <p className="text-xs text-slate-600 mb-3 line-clamp-3">{regulation.title}</p>
+            <p className="text-xs text-slate-600 [.theme-dark_&]:text-slate-400 mb-3 line-clamp-3">{regulation.title}</p>
             <div className="flex justify-between items-center">
                 <button 
                     onClick={onOpenDetails} 
-                    className="text-xs text-blue-600 hover:text-blue-800 font-medium hover:underline flex items-center gap-1"
+                    className="text-xs text-blue-600 [.theme-dark_&]:text-blue-400 hover:text-blue-800 [.theme-dark_&]:hover:text-blue-300 font-medium hover:underline flex items-center gap-1"
                 >
                     <BookIcon className="w-3 h-3"/> Биография
                 </button>
@@ -309,15 +307,15 @@ const NextWorkPopover: React.FC<{
 
     return (
         <div 
-            className="absolute z-50 bg-white border border-slate-200 shadow-xl rounded-lg flex flex-col max-h-60 w-80 animate-fade-in-up"
+            className="absolute z-50 bg-white [.theme-dark_&]:bg-slate-800 border border-slate-200 [.theme-dark_&]:border-slate-700 shadow-xl rounded-lg flex flex-col max-h-60 w-80 animate-fade-in-up"
             style={{ top: position.top, left: position.left }}
             onMouseDown={e => e.stopPropagation()}
         >
-            <div className="p-2 border-b border-slate-100">
+            <div className="p-2 border-b border-slate-100 [.theme-dark_&]:border-slate-700">
                 <input 
                     type="text" 
                     placeholder="Поиск или ввод текста..." 
-                    className="w-full text-sm border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full text-sm border border-slate-300 [.theme-dark_&]:border-slate-600 bg-white [.theme-dark_&]:bg-[#0d1117] text-slate-900 [.theme-dark_&]:text-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     autoFocus
@@ -325,7 +323,7 @@ const NextWorkPopover: React.FC<{
             </div>
             <div className="overflow-y-auto flex-1">
                  <button 
-                    className="w-full text-left px-3 py-2 text-sm text-slate-500 hover:bg-slate-50 border-b border-slate-100 italic"
+                    className="w-full text-left px-3 py-2 text-sm text-slate-500 [.theme-dark_&]:text-slate-400 hover:bg-slate-50 [.theme-dark_&]:hover:bg-slate-700/50 border-b border-slate-100 [.theme-dark_&]:border-slate-700 italic transition-colors"
                     onClick={() => onSelect(null)}
                 >
                     -- Очистить / Нет связи --
@@ -333,7 +331,7 @@ const NextWorkPopover: React.FC<{
                 
                 {searchTerm.trim() && (
                      <button
-                        className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 border-b border-slate-100 flex items-center gap-2 group"
+                        className="w-full text-left px-3 py-2 text-sm text-slate-700 [.theme-dark_&]:text-slate-200 hover:bg-slate-100 [.theme-dark_&]:hover:bg-slate-700/50 border-b border-slate-100 [.theme-dark_&]:border-slate-700 flex items-center gap-2 group transition-colors"
                         onClick={() => onSelect(searchTerm)}
                         title="Использовать введенный текст без привязки"
                     >
@@ -343,7 +341,7 @@ const NextWorkPopover: React.FC<{
                 )}
 
                 <button 
-                    className="w-full text-left px-3 py-2 text-sm text-blue-700 bg-blue-50 hover:bg-blue-100 border-b border-blue-100 font-medium flex items-center gap-2"
+                    className="w-full text-left px-3 py-2 text-sm text-blue-700 [.theme-dark_&]:text-blue-400 bg-blue-50 [.theme-dark_&]:bg-blue-900/30 hover:bg-blue-100 [.theme-dark_&]:hover:bg-blue-900/50 border-b border-blue-100 [.theme-dark_&]:border-blue-900/50 font-medium flex items-center gap-2 transition-colors"
                     onClick={() => onSelect(AUTO_NEXT_ID)}
                 >
                     <ArrowDownCircleIcon className="w-4 h-4"/> 
@@ -352,11 +350,11 @@ const NextWorkPopover: React.FC<{
                 {filteredActs.length > 0 ? filteredActs.map(act => (
                     <button
                         key={act.id}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 border-b border-slate-50 last:border-0"
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 [.theme-dark_&]:hover:bg-slate-700/50 border-b border-slate-50 [.theme-dark_&]:border-slate-700 last:border-0 transition-colors"
                         onClick={() => onSelect(act)}
                     >
-                        <div className="font-medium text-slate-800">Акт №{act.number || 'б/н'}</div>
-                        <div className="text-xs text-slate-500 truncate">{act.workName || 'Без названия'}</div>
+                        <div className="font-medium text-slate-800 [.theme-dark_&]:text-slate-200">Акт №{act.number || 'б/н'}</div>
+                        <div className="text-xs text-slate-500 [.theme-dark_&]:text-slate-400 truncate">{act.workName || 'Без названия'}</div>
                     </button>
                 )) : (
                      !searchTerm && <div className="px-3 py-4 text-center text-xs text-slate-400">Нет подходящих актов</div>
@@ -374,29 +372,29 @@ const RichHeaderTooltip: React.FC<{
 
     return (
         <div 
-            className="fixed z-50 w-80 bg-white rounded-lg shadow-xl border border-slate-200 p-4 text-left pointer-events-none animate-fade-in-up"
+            className="fixed z-50 w-80 bg-white [.theme-dark_&]:bg-slate-800 rounded-lg shadow-xl border border-slate-200 [.theme-dark_&]:border-slate-700 p-4 text-left pointer-events-none animate-fade-in-up"
             style={{ 
                 top: position.top + 25, 
                 left: position.left - 10,
             }}
         >
-            <div className="absolute -top-1.5 left-4 w-3 h-3 bg-white border-t border-l border-slate-200 transform rotate-45"></div>
-            <h4 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
+            <div className="absolute -top-1.5 left-4 w-3 h-3 bg-white [.theme-dark_&]:bg-slate-800 border-t border-l border-slate-200 [.theme-dark_&]:border-slate-700 transform rotate-45"></div>
+            <h4 className="font-bold text-slate-800 [.theme-dark_&]:text-slate-200 mb-2 flex items-center gap-2">
                 {column.label}
             </h4>
-            <p className="text-sm text-slate-600 mb-3 leading-relaxed">
+            <p className="text-sm text-slate-600 [.theme-dark_&]:text-slate-400 mb-3 leading-relaxed">
                 {column.description}
             </p>
             {column.templateTag && (
                 <div className="mb-3">
                     <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Переменная в шаблоне:</span>
-                    <code className="text-xs bg-pink-50 text-pink-700 border border-pink-200 px-1.5 py-0.5 rounded font-mono">{column.templateTag}</code>
+                    <code className="text-xs bg-pink-50 [.theme-dark_&]:bg-pink-900/30 text-pink-700 [.theme-dark_&]:text-pink-400 border border-pink-200 [.theme-dark_&]:border-pink-800/50 px-1.5 py-0.5 rounded font-mono">{column.templateTag}</code>
                 </div>
             )}
             {column.example && (
-                <div className="bg-slate-50 border border-slate-100 rounded p-2.5">
+                <div className="bg-slate-50 [.theme-dark_&]:bg-[#0d1117] border border-slate-100 [.theme-dark_&]:border-slate-700 rounded p-2.5">
                     <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Пример заполнения:</span>
-                    <code className="text-xs text-blue-700 font-mono break-words">{column.example}</code>
+                    <code className="text-xs text-blue-700 [.theme-dark_&]:text-blue-400 font-mono break-words">{column.example}</code>
                 </div>
             )}
         </div>
@@ -425,6 +423,10 @@ const resolvePreviewTemplate = (template: string, act: Act): string => {
 const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, certificates = [], schemes = [], template, registryTemplate, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, selectedCells, setSelectedCells, onSave, onRequestDelete, onReorderActs, setCurrentPage, createNewAct, onNavigateToCertificate, onNavigateToScheme }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
+    // Реф для хранения значения без триггера ререндера (позволяет нативному Ctrl+Z работать)
+    const editorValueRef = useRef<string>('');
+    const currentEditingCellId = useRef<string | null>(null);
+
     const [dateError, setDateError] = useState<string | null>(null);
     const [copiedCells, setCopiedCells] = useState<Set<string> | null>(null);
     const [isDraggingSelection, setIsDraggingSelection] = useState(false);
@@ -438,6 +440,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [singleDatePopoverState, setSingleDatePopoverState] = useState<{ act: Act; position: { top: number, left: number, width: number } } | null>(null);
 
     const [fillHandleCoords, setFillHandleCoords] = useState<{top: number, left: number} | null>(null);
+
+    const [hoveredColIndex, setHoveredColIndex] = useState<number | null>(null);
 
     const [hoveredHeaderKey, setHoveredHeaderKey] = useState<string | null>(null);
     const [hoveredHeaderPos, setHoveredHeaderPos] = useState<{top: number, left: number} | null>(null);
@@ -505,6 +509,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [fullRegulationDetails, setFullRegulationDetails] = useState<Regulation | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; rowIndex: number; colIndex: number } | null>(null);
     const [numRowsToAdd, setNumRowsToAdd] = useState(1);
+    
+    const [dragOverCol, setDragOverCol] = useState<string | null>(null);
 
     const tableContainerRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -648,14 +654,35 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setDateError(null);
     }, []);
     
+    // Новая логика для неконтролируемых инпутов
+    const handleNativeEditorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const val = e.target.value;
+        setEditorValue(val);
+        editorValueRef.current = val;
+        setDateError(null);
+        if (e.target instanceof HTMLTextAreaElement) {
+            e.target.style.height = 'auto';
+            e.target.style.height = `${e.target.scrollHeight}px`;
+        }
+    };
+
+    // Обычная логика для контролируемых кастомных компонентов (Селекты и т.д.)
+    const handleCustomEditorChange = (newVal: string) => {
+        setEditorValue(newVal);
+        editorValueRef.current = newVal;
+        setDateError(null);
+    };
+
     const handleEditorSave = useCallback(() => {
         if (!editingCell) return true;
         const { rowIndex, colIndex } = editingCell;
         const act = acts[rowIndex];
         const col = columns[colIndex];
         const updatedAct = { ...act };
+        const currentValue = editorValueRef.current; // Читаем актуальное значение из REF
+        
         if (col.key === 'workDates') {
-            const parts = editorValue.split('-').map(s => s.trim());
+            const parts = currentValue.split('-').map(s => s.trim());
             const startStr = parts[0];
             const endStr = parts.length > 1 ? parts[1] : startStr;
             if (!startStr && !endStr) { 
@@ -674,9 +701,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             }
         } else {
             const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'id' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
-            (updatedAct as any)[columnKey] = editorValue;
+            (updatedAct as any)[columnKey] = currentValue;
             if (col.key === 'nextWork') {
-                updatedAct.nextWork = editorValue;
+                updatedAct.nextWork = currentValue;
                 if (act.nextWorkActId === AUTO_NEXT_ID) { updatedAct.nextWorkActId = undefined; } else { updatedAct.nextWorkActId = undefined; }
             }
         }
@@ -684,7 +711,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             handleSaveWithTemplateResolution(updatedAct);
         }
         return true; 
-    }, [acts, columns, editingCell, editorValue, handleSaveWithTemplateResolution]);
+    }, [acts, columns, editingCell, handleSaveWithTemplateResolution]);
 
     useEffect(() => {
         if (!editingCell) return;
@@ -707,11 +734,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     }, [editingCell, datePopoverState, singleDatePopoverState, handleEditorSave, closeEditor, regulationsModalOpen, regulationPopoverState, materialPopoverState, starPopoverState, schemePopoverState, linkSchemeModalState]);
 
     useEffect(() => {
-        if (editingCell) {
-            const { rowIndex, colIndex } = editingCell;
+        const cellId = editingCell ? `${editingCell.rowIndex}:${editingCell.colIndex}` : null;
+        if (cellId && cellId !== currentEditingCellId.current) {
+            currentEditingCellId.current = cellId;
+            const { rowIndex, colIndex } = editingCell!;
             const act = acts[rowIndex];
             const col = columns[colIndex];
             let initialValue;
+            
             if (col.key === 'workDates') {
                 const start = formatDateForDisplay(act.workStartDate);
                 const end = formatDateForDisplay(act.workEndDate);
@@ -732,29 +762,28 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                 initialValue = act[columnKey] || '';
             }
-            setEditorValue(String(initialValue));
+            
+            const stringVal = String(initialValue);
+            setEditorValue(stringVal);
+            editorValueRef.current = stringVal;
+
             setTimeout(() => {
                 if (col.key !== 'regulations' && col.key !== 'materials' && col.key !== 'certs') { if (editorRef.current) editorRef.current.focus(); }
                 if (editorRef.current instanceof HTMLTextAreaElement) {
                     const el = editorRef.current;
+                    el.value = stringVal; 
                     el.style.height = 'auto';
                     el.style.height = `${el.scrollHeight}px`;
                     el.selectionStart = el.selectionEnd = el.value.length;
                 } else if (editorRef.current instanceof HTMLInputElement) {
+                    editorRef.current.value = stringVal;
                     if(col.type !== 'date') editorRef.current.select();
                 }
             }, 0);
+        } else if (!cellId) {
+            currentEditingCellId.current = null;
         }
-    }, [editingCell, acts, columns]);
-
-    const handleEditorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        setEditorValue(e.target.value);
-        setDateError(null);
-        if (e.target instanceof HTMLTextAreaElement) {
-            e.target.style.height = 'auto';
-            e.target.style.height = `${e.target.scrollHeight}px`;
-        }
-    };
+    }, [editingCell, acts, columns]); 
     
     const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         e.stopPropagation();
@@ -770,11 +799,9 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const handleRegulationsSelect = (selectedRegs: Regulation[]) => {
         if (!editingCell) return;
         const newText = selectedRegs.map(reg => reg.designation).join('; ');
-        setEditorValue(prev => {
-            if (!prev) return newText;
-            const sep = prev.trim().endsWith(';') ? ' ' : '; ';
-            return prev + sep + newText;
-        });
+        const currentVal = editorValueRef.current;
+        const newVal = currentVal ? (currentVal.trim().endsWith(';') ? currentVal + ' ' + newText : currentVal + '; ' + newText) : newText;
+        handleCustomEditorChange(newVal);
         if (editorRef.current instanceof HTMLTextAreaElement) {
              setTimeout(() => {
                  if (editorRef.current) {
@@ -1293,6 +1320,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const handleColumnDragOver = (e: React.DragEvent<HTMLTableHeaderCellElement>, colKey: string) => {
         e.preventDefault();
         if (!draggedColKey || draggedColKey === colKey) return;
+        
+        if (dragOverCol !== colKey) {
+            setDragOverCol(colKey);
+        }
+
         const rect = e.currentTarget.getBoundingClientRect();
         const midX = rect.left + rect.width / 2;
         const isLeft = e.clientX < midX;
@@ -1304,18 +1336,23 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setDragIndicator({ type: 'col', x: isLeft ? rect.left : rect.right, y: tableRect.top, width: 2, height: tableRect.height });
     };
 
-    const handleColumnDrop = () => {
+    const handleColumnDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setDragOverCol(null);
+        
         if (!draggedColKey || !dropTargetColKey || !dropColPosition) { handleDragEnd(); return; }
         const currentOrder = columns.map(c => c.key);
         const fromIndex = currentOrder.indexOf(draggedColKey as any);
         const toIndex = currentOrder.indexOf(dropTargetColKey as any);
         if (fromIndex === -1 || toIndex === -1) { handleDragEnd(); return; }
+        
         const newOrder = [...currentOrder];
         newOrder.splice(fromIndex, 1); 
         let insertIndex = toIndex;
         if (fromIndex < toIndex) insertIndex--; 
         if (dropColPosition === 'right') insertIndex++;
         newOrder.splice(insertIndex, 0, draggedColKey as any);
+        
         const fullOrder = [...columnOrder];
         const fullFromIndex = fullOrder.indexOf(draggedColKey);
         if (fullFromIndex !== -1) {
@@ -1337,6 +1374,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setDraggedColKey(null);
         setDropTargetColKey(null);
         setDropColPosition(null);
+        setDragOverCol(null);
         dragHandlePressedRef.current = false;
     };
 
@@ -1377,7 +1415,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         updateFillHandlePosition();
     }, [updateFillHandlePosition]);
 
-
     const handleColumnHeaderClick = (e: React.MouseEvent, colIndex: number) => {
         if (e.ctrlKey || e.metaKey) {
              const newSelectedCells = new Set(selectedCells);
@@ -1399,7 +1436,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (!fillTargetArea) return '';
         const { minRow, maxRow, minCol, maxCol } = normalizeSelection(fillTargetArea.start, fillTargetArea.end);
         if (rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol) {
-            return 'bg-blue-100/50';
+            return 'bg-blue-100/50 [.theme-dark_&]:bg-blue-900/40';
         }
         return '';
     };
@@ -1551,20 +1588,43 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 ref={scrollContainerRef}
             >
                 <table className="w-full border-collapse text-sm min-w-max">
-                    <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                    <thead 
+                        className="bg-slate-50 sticky top-0 z-10 shadow-sm"
+                        onMouseLeave={() => setHoveredColIndex(null)}
+                    >
                         <tr>
-                            <th className="w-12 border border-slate-300 px-2 py-2 font-medium text-slate-500 text-center select-none bg-slate-100">#</th>
+                            <th className="w-12 border border-slate-300 [.theme-dark_&]:border-slate-700 px-2 py-2 font-medium text-slate-500 [.theme-dark_&]:text-slate-400 text-center select-none bg-slate-100 [.theme-dark_&]:bg-[#161b22]">#</th>
                             {columns.map((col, index) => {
                                 const isActiveColumn = activeCell?.colIndex === index;
                                 const isPinned = !!pinnedColumns[col.key];
+                                const isDraggingOver = dragOverCol === col.key;
+                                const isHoveredColumn = hoveredColIndex === index;
+                                const isSelected = selectedColumns.has(index);
+
+                                // ИСПРАВЛЕНИЕ: Мы убираем градиент для скрытия иконок. 
+                                // Теперь иконки всегда видны, если колонка наведена, выделена или активна.
+                                // Для того, чтобы длинный текст не наезжал на иконки, используется padding.
+
+                                let bgClass = "bg-slate-100 [.theme-dark_&]:bg-[#161b22] text-slate-600 [.theme-dark_&]:text-slate-300";
+
+                                if (isDraggingOver) {
+                                    bgClass = "bg-blue-50 border-l-2 border-l-blue-500 [.theme-dark_&]:bg-[#1e2c4b] [.theme-dark_&]:border-l-blue-500 text-slate-800 [.theme-dark_&]:text-slate-200";
+                                } else if (isSelected) {
+                                    bgClass = "bg-blue-100 [.theme-dark_&]:bg-[#1e2e53] text-slate-800 [.theme-dark_&]:text-slate-200";
+                                } else if (isPinned) {
+                                    bgClass = "bg-amber-50 border-b-amber-200 text-amber-900 [.theme-dark_&]:bg-[#362c16] [.theme-dark_&]:border-b-amber-700/50 [.theme-dark_&]:text-amber-400";
+                                }
+
+                                const showIcons = isHoveredColumn || isPinned || isActiveColumn;
 
                                 return (
                                     <th
                                         key={col.key}
+                                        data-col-index={index}
                                         className={`
-                                            border border-slate-300 px-2 py-2 font-medium text-slate-600 text-left select-none relative
+                                            border border-slate-300 [.theme-dark_&]:border-slate-700 px-2 py-2 font-medium text-left select-none relative
                                             ${col.widthClass}
-                                            ${selectedColumns.has(index) ? 'bg-blue-100' : ''}
+                                            ${bgClass}
                                             ${draggedColKey === col.key ? 'opacity-50' : ''}
                                             grabbable group/th
                                         `}
@@ -1573,23 +1633,31 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         onDragOver={(e) => handleColumnDragOver(e, col.key)}
                                         onDrop={handleColumnDrop}
                                         onDragEnd={handleDragEnd}
+                                        onDragLeave={() => setDragOverCol(null)}
                                         onClick={(e) => handleColumnHeaderClick(e, index)}
+                                        onMouseEnter={() => setHoveredColIndex(index)}
                                     >
-                                        <div className="flex items-center justify-between">
-                                            <span>{col.label}</span>
-                                            <div className="flex items-center gap-1 ml-2">
+                                        <div className="relative flex items-center justify-between w-full h-full min-w-max">
+                                            {/* Добавляем pr-10 только если иконки показываются, чтобы текст не прыгал, 
+                                                сделаем отступ всегда постоянным для тех колонок где могут быть иконки, либо фиксированным */}
+                                            <span className="truncate pr-10">{col.label}</span>
+                                            
+                                            <div className={`absolute right-0 top-1/2 -translate-y-1/2 flex items-center space-x-1 px-1 transition-opacity duration-200 
+                                                ${showIcons ? 'opacity-100 pointer-events-auto z-10' : 'opacity-0 pointer-events-none'}`}>
+                                                
                                                 {(isPinned || isActiveColumn) && (
                                                     <span 
-                                                        className={`cursor-pointer transition-opacity flex-shrink-0 ${isPinned ? 'text-yellow-500 opacity-100 hover:text-yellow-600' : 'text-slate-300 opacity-50 group-hover/th:opacity-100 hover:text-yellow-400'}`}
+                                                        className={`cursor-pointer transition-opacity flex-shrink-0 bg-transparent ${isPinned ? 'text-amber-500 opacity-100 hover:text-amber-600' : 'text-slate-400 hover:text-amber-400'}`}
                                                         onClick={(e) => handleStarClick(e, col.key, index)}
                                                         title={isPinned ? "Управление закреплением" : "Закрепить текущее значение ячейки для новых актов"}
                                                     >
                                                         <StarIcon className="w-4 h-4" filled={isPinned} />
                                                     </span>
                                                 )}
+                                                {col.required && <span title="Обязательное поле" className="text-red-400 cursor-help font-bold">*</span>}
                                                 {(col.description) && (
                                                     <span 
-                                                        className="text-slate-400 hover:text-blue-600 cursor-help opacity-50 group-hover/th:opacity-100 transition-opacity flex-shrink-0"
+                                                        className="text-slate-400 hover:text-blue-600 cursor-help transition-opacity flex-shrink-0"
                                                         onMouseEnter={(e) => handleHeaderMouseEnter(e, col.key)}
                                                         onMouseLeave={handleHeaderMouseLeave}
                                                     >
@@ -1603,7 +1671,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                             })}
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody
+                        onMouseLeave={() => setHoveredColIndex(null)}
+                        onMouseOver={(e) => {
+                            const td = (e.target as HTMLElement).closest('td');
+                            if (td && td.dataset.colIndex) {
+                                setHoveredColIndex(Number(td.dataset.colIndex));
+                            }
+                        }}
+                    >
                         {acts.map((act, rowIndex) => {
                             const isRowSelected = selectedRows.has(rowIndex);
                             const isRowDragged = draggedRowIndices?.includes(rowIndex);
@@ -1613,7 +1689,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                     key={act.id} 
                                     className={`
                                         group
-                                        ${isRowSelected ? 'bg-blue-50' : 'hover:bg-slate-50'}
+                                        ${isRowSelected ? 'bg-blue-50 [.theme-dark_&]:bg-blue-900/20' : 'hover:bg-slate-50 [.theme-dark_&]:hover:bg-slate-800/50'}
                                         ${isRowDragged ? 'opacity-40' : ''}
                                         ${actPickerState?.sourceRowIndex === rowIndex ? 'act-picker-source-row' : ''}
                                     `}
@@ -1625,8 +1701,8 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                 >
                                     <td 
                                         className={`
-                                            row-drag-handle border border-slate-300 px-1 py-1 text-center text-xs select-none relative group/handle cursor-grab active:cursor-grabbing
-                                            ${isRowSelected ? 'bg-blue-100 border-blue-200 z-20' : 'bg-slate-50 text-slate-400'}
+                                            row-drag-handle border border-slate-300 [.theme-dark_&]:border-slate-700 px-1 py-1 text-center text-xs select-none relative group/handle cursor-grab active:cursor-grabbing
+                                            ${isRowSelected ? 'bg-blue-100 border-blue-200 z-20 [.theme-dark_&]:bg-blue-900/40 [.theme-dark_&]:border-blue-800' : 'bg-slate-50 text-slate-400 [.theme-dark_&]:bg-[#161b22] [.theme-dark_&]:text-slate-500'}
                                         `}
                                         onMouseDown={(e) => handleRowHeaderMouseDown(e, rowIndex)}
                                         onMouseUp={handleRowHeaderMouseUp}
@@ -1635,7 +1711,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                             <div className={`p-0.5 rounded flex-shrink-0 ${isRowSelected ? 'text-blue-500' : 'text-slate-300 group-hover:text-slate-500'}`}>
                                                 <GripVerticalIcon className="w-4 h-4" />
                                             </div>
-                                            <span className={`flex-grow text-center ${isRowSelected ? 'font-semibold text-blue-700' : ''}`}>{rowIndex + 1}</span>
+                                            <span className={`flex-grow text-center ${isRowSelected ? 'font-semibold text-blue-700 [.theme-dark_&]:text-blue-400' : ''}`}>{rowIndex + 1}</span>
                                        </div>
                                     </td>
                                     {columns.map((col, colIndex) => {
@@ -1643,6 +1719,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         const isSelected = selectedCells.has(cellId);
                                         const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colIndex === colIndex;
                                         const isCopied = copiedCells?.has(cellId);
+                                        const isPinned = !!pinnedColumns[col.key];
                                         
                                         // ВЫЧИСЛЕНИЕ "УМНЫХ" ГРАНИЦ ДЛЯ ВЫДЕЛЕНИЯ
                                         const isTopSelected = selectedCells.has(getCellId(rowIndex - 1, colIndex));
@@ -1694,11 +1771,11 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 <div className="flex flex-wrap gap-1">
                                                     {(act.regulations || '').split(';').map(s => s.trim()).filter(Boolean).map((item, idx) => {
                                                         const reg = regulations.find(r => r.designation === item);
-                                                        let chipClass = "bg-slate-100 text-slate-800 border-slate-300";
+                                                        let chipClass = "bg-slate-100 text-slate-800 border-slate-300 [.theme-dark_&]:bg-slate-800 [.theme-dark_&]:border-slate-700 [.theme-dark_&]:text-slate-300";
                                                         if (reg) {
-                                                             if (reg.status.toLowerCase().includes('действует')) chipClass = "bg-green-100 text-green-800 border-green-200";
-                                                             else if (reg.status.toLowerCase().includes('заменен')) chipClass = "bg-red-100 text-red-800 border-red-200";
-                                                             else chipClass = "bg-blue-100 text-blue-800 border-blue-200";
+                                                             if (reg.status.toLowerCase().includes('действует')) chipClass = "bg-green-100 text-green-800 border-green-200 [.theme-dark_&]:bg-green-900/30 [.theme-dark_&]:border-green-800 [.theme-dark_&]:text-green-400";
+                                                             else if (reg.status.toLowerCase().includes('заменен')) chipClass = "bg-red-100 text-red-800 border-red-200 [.theme-dark_&]:bg-red-900/30 [.theme-dark_&]:border-red-800 [.theme-dark_&]:text-red-400";
+                                                             else chipClass = "bg-blue-100 text-blue-800 border-blue-200 [.theme-dark_&]:bg-blue-900/30 [.theme-dark_&]:border-blue-800 [.theme-dark_&]:text-blue-400";
                                                         }
                                                         return (
                                                             <span 
@@ -1719,7 +1796,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 <div className="flex flex-wrap gap-1">
                                                     {(act.materials || '').split(';').map(s => s.trim()).filter(Boolean).map((item, idx) => {
                                                         const cert = findCertByText(item);
-                                                        const chipClass = cert ? "bg-green-100 text-green-800 border-green-200" : "bg-red-100 text-red-800 border-red-200";
+                                                        const chipClass = cert ? "bg-green-100 text-green-800 border-green-200 [.theme-dark_&]:bg-green-900/30 [.theme-dark_&]:border-green-800 [.theme-dark_&]:text-green-400" : "bg-red-100 text-red-800 border-red-200 [.theme-dark_&]:bg-red-900/30 [.theme-dark_&]:border-red-800 [.theme-dark_&]:text-red-400";
                                                         
                                                         const displayTitle = item.split('(')[0].trim();
 
@@ -1749,7 +1826,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                     {(act.certs || '').split(';').map(s => s.trim()).filter(Boolean).map((item, idx) => {
                                                         const scheme = findSchemeByText(item);
                                                         const isLinked = !!scheme;
-                                                        const chipClass = isLinked ? "bg-indigo-100 text-indigo-800 border-indigo-200" : "bg-slate-100 text-slate-800 border-slate-200";
+                                                        const chipClass = isLinked ? "bg-indigo-100 text-indigo-800 border-indigo-200 [.theme-dark_&]:bg-indigo-900/30 [.theme-dark_&]:border-indigo-800 [.theme-dark_&]:text-indigo-400" : "bg-slate-100 text-slate-800 border-slate-200 [.theme-dark_&]:bg-slate-800 [.theme-dark_&]:border-slate-700 [.theme-dark_&]:text-slate-300";
                                                         return (
                                                             <span 
                                                                 key={idx} 
@@ -1787,7 +1864,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 const hasContent = nextAct.number || nextAct.workName;
                                                 if (hasContent) {
                                                     displayContent = (
-                                                        <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1.5 inline-flex max-w-full">
+                                                        <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 [.theme-dark_&]:bg-blue-900/30 [.theme-dark_&]:text-blue-400 [.theme-dark_&]:border-blue-800 flex items-center gap-1.5 inline-flex max-w-full">
                                                             <ArrowDownCircleIcon className="w-3 h-3 flex-shrink-0" />
                                                             <span className="truncate">Акт №{nextAct.number || 'б/н'} ({nextAct.workName || '...'})</span>
                                                         </span>
@@ -1816,13 +1893,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 key={col.key}
                                                 data-row-index={rowIndex}
                                                 data-col-index={colIndex}
+                                                onMouseEnter={() => setHoveredColIndex(colIndex)}
                                                 className={`
-                                                    border border-slate-300 px-2 py-1 relative align-top transition-colors
-                                                    ${isSelected ? 'bg-blue-100 z-10' : ''}
+                                                    border border-slate-300 [.theme-dark_&]:border-slate-700 px-2 py-1 relative align-top transition-colors
+                                                    ${isPinned && !isSelected && !isEditing ? 'bg-amber-50/40 [.theme-dark_&]:bg-amber-900/20' : ''}
+                                                    ${isSelected ? 'bg-blue-100 z-10 [.theme-dark_&]:bg-blue-900/30' : ''}
                                                     ${isCopied ? 'relative' : ''}
                                                     ${getHighlightClass(rowIndex, colIndex)}
                                                     ${col.key === 'id' ? 'text-xs text-slate-400 select-all' : ''}
-                                                    ${col.key === 'commissionGroup' ? 'text-slate-600' : ''}
+                                                    ${col.key === 'commissionGroup' ? 'text-slate-600 [.theme-dark_&]:text-slate-400' : ''}
                                                     cursor-default
                                                 `}
                                                 onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
@@ -1837,18 +1916,18 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                        {col.key === 'commissionGroup' ? (
                                                             <CustomSelect options={groupOptions} value={editorValue} onChange={(val) => { handleGroupChange(act, val); closeEditor(); }} startOpen={true} onCreateNew={handleCreateNewGroup} allowClear className="w-full" />
                                                         ) : col.key === 'regulations' ? (
-                                                            <RegulationsInput value={editorValue} onChange={setEditorValue} regulations={regulations} onOpenDictionary={() => setRegulationsModalOpen(true)} onInfoClick={(des, target) => handleShowRegulationInfo(des, target)} />
+                                                            <RegulationsInput value={editorValue} onChange={handleCustomEditorChange} regulations={regulations} onOpenDictionary={() => setRegulationsModalOpen(true)} onInfoClick={(des, target) => handleShowRegulationInfo(des, target)} />
                                                         ) : col.key === 'materials' ? (
-                                                            <MaterialsInput value={editorValue} onChange={setEditorValue} certificates={certificates} onNavigateToCertificate={onNavigateToCertificate} />
+                                                            <MaterialsInput value={editorValue} onChange={handleCustomEditorChange} certificates={certificates} onNavigateToCertificate={onNavigateToCertificate} />
                                                         ) : col.key === 'certs' ? (
-                                                            <SchemesInput value={editorValue} onChange={setEditorValue} schemes={schemes || []} />
+                                                            <SchemesInput value={editorValue} onChange={handleCustomEditorChange} schemes={schemes || []} />
                                                         ) : col.type === 'date' ? (
                                                             <div className="flex items-center w-full gap-1">
                                                                 <input 
                                                                     ref={editorRef as React.RefObject<HTMLInputElement>} 
                                                                     type="date" 
-                                                                    value={editorValue} 
-                                                                    onChange={handleEditorChange} 
+                                                                    defaultValue={editorValue} 
+                                                                    onChange={handleNativeEditorChange} 
                                                                     onKeyDown={handleEditorKeyDown} 
                                                                     className="w-full h-full bg-transparent outline-none p-1 text-sm rounded border border-blue-300 focus:ring-1 focus:ring-blue-500 [.theme-dark_&]:[color-scheme:dark]" 
                                                                 />
@@ -1856,12 +1935,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                                     <button 
                                                                         onMouseDown={(e) => {
                                                                             e.preventDefault(); 
-                                                                            setEditorValue(''); 
+                                                                            editorValueRef.current = '';
+                                                                            if (editorRef.current) editorRef.current.value = '';
                                                                             const updatedAct = { ...act, [col.key]: '' };
                                                                             handleSaveWithTemplateResolution(updatedAct);
                                                                             closeEditor();
                                                                         }}
-                                                                        className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded"
+                                                                        className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 [.theme-dark_&]:hover:bg-red-900/30 rounded"
                                                                         title="Сбросить (использовать по умолчанию)"
                                                                     >
                                                                         <CloseIcon className="w-4 h-4" />
@@ -1870,17 +1950,26 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                             </div>
                                                         ) : (
                                                             <div className="w-full h-full relative">
-                                                                <textarea ref={editorRef as React.RefObject<HTMLTextAreaElement>} value={editorValue} onChange={handleEditorChange} onKeyDown={handleEditorKeyDown} className="w-full h-full resize-none bg-transparent outline-none overflow-hidden pr-6" rows={1} placeholder={col.key === 'workDates' ? 'ДД.ММ.ГГГГ - ДД.ММ.ГГГГ' : ''} />
+                                                                <textarea 
+                                                                    ref={editorRef as React.RefObject<HTMLTextAreaElement>} 
+                                                                    defaultValue={editorValue} 
+                                                                    onChange={handleNativeEditorChange} 
+                                                                    onKeyDown={handleEditorKeyDown} 
+                                                                    className="w-full h-full resize-none bg-transparent outline-none overflow-hidden pr-6" 
+                                                                    rows={1} 
+                                                                    placeholder={col.key === 'workDates' ? 'ДД.ММ.ГГГГ - ДД.ММ.ГГГГ' : ''} 
+                                                                />
                                                                 {editorValue && ((col.key === 'additionalInfo' && settings.defaultAdditionalInfo) || (col.key === 'attachments' && settings.defaultAttachments)) && (
                                                                     <button 
                                                                         onMouseDown={(e) => {
                                                                             e.preventDefault(); 
-                                                                            setEditorValue(''); 
+                                                                            editorValueRef.current = '';
+                                                                            if (editorRef.current) editorRef.current.value = '';
                                                                             const updatedAct = { ...act, [col.key]: '' };
                                                                             handleSaveWithTemplateResolution(updatedAct);
                                                                             closeEditor();
                                                                         }}
-                                                                        className="absolute top-0 right-0 text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded"
+                                                                        className="absolute top-0 right-0 text-red-400 hover:text-red-600 p-1 hover:bg-red-50 [.theme-dark_&]:hover:bg-red-900/30 rounded"
                                                                         title="Сбросить (использовать по умолчанию)"
                                                                     >
                                                                         <CloseIcon className="w-3 h-3" />
@@ -1889,7 +1978,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                             </div>
                                                         )}
                                                         {dateError && col.key === 'workDates' && (
-                                                            <div className="absolute top-full left-0 z-50 bg-red-100 text-red-700 text-xs px-2 py-1 rounded shadow-md mt-1 border border-red-200">
+                                                            <div className="absolute top-full left-0 z-50 bg-red-100 text-red-700 text-xs px-2 py-1 rounded shadow-md mt-1 border border-red-200 [.theme-dark_&]:bg-red-900/90 [.theme-dark_&]:text-red-200 [.theme-dark_&]:border-red-800">
                                                                 {dateError}
                                                             </div>
                                                         )}
@@ -1920,16 +2009,16 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                             );
                         })}
 <tr className="h-10 group cursor-pointer" onClick={() => handleAddRows(1)}>
-    <td colSpan={columns.length + 1} className="p-0 border border-t-0 border-slate-300 border-dashed bg-slate-50 hover:bg-blue-50 transition-colors">
-        <div className="sticky left-0 w-max flex items-center gap-10 px-4 py-2 text-slate-500 group-hover:text-blue-600 select-none">
+    <td colSpan={columns.length + 1} className="p-0 border border-t-0 border-slate-300 [.theme-dark_&]:border-slate-700 border-dashed bg-slate-50 [.theme-dark_&]:bg-[#161b22] hover:bg-blue-50 [.theme-dark_&]:hover:bg-blue-900/20 transition-colors">
+        <div className="sticky left-0 w-max flex items-center gap-10 px-4 py-2 text-slate-500 [.theme-dark_&]:text-slate-400 group-hover:text-blue-600 [.theme-dark_&]:group-hover:text-blue-400 select-none">
             <div className="flex items-center gap-2 font-medium">
                 <PlusIcon className="w-5 h-5"/>
                 <span>Добавить новый акт</span>
             </div>
             <div className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                 <span className="text-xs">Добавить сразу:</span>
-                <input type="number" min="1" max="50" value={numRowsToAdd} onChange={(e) => setNumRowsToAdd(Math.max(1, parseInt(e.target.value) || 1))} className="w-12 h-7 px-1 text-center border border-slate-300 rounded text-sm focus:outline-none focus:border-blue-500 [.theme-dark_&]:[color-scheme:dark]" />
-                <button onClick={(e) => { e.stopPropagation(); handleAddRows(numRowsToAdd); }} className="bg-white border border-slate-300 px-3 py-1 rounded text-xs hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors">Добавить</button>
+                <input type="number" min="1" max="50" value={numRowsToAdd} onChange={(e) => setNumRowsToAdd(Math.max(1, parseInt(e.target.value) || 1))} className="w-12 h-7 px-1 text-center border border-slate-300 [.theme-dark_&]:border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500 [.theme-dark_&]:bg-[#0d1117] [.theme-dark_&]:text-slate-200 [.theme-dark_&]:[color-scheme:dark]" />
+                <button onClick={(e) => { e.stopPropagation(); handleAddRows(numRowsToAdd); }} className="bg-white [.theme-dark_&]:bg-[#21262d] border border-slate-300 [.theme-dark_&]:border-slate-600 px-3 py-1 rounded text-xs hover:bg-blue-600 hover:text-white hover:border-blue-600 [.theme-dark_&]:hover:bg-blue-600 transition-colors">Добавить</button>
             </div>
         </div>
     </td>
@@ -1950,26 +2039,53 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 </div>
             )}
 
-            {starPopoverState && pinnedColumns[starPopoverState.colKey] && (
-                <div className="absolute z-50 bg-white border border-yellow-300 shadow-xl rounded-lg p-3 w-64 animate-fade-in-up"
-                     style={{ top: starPopoverState.position.top, left: starPopoverState.position.left }}
-                     onMouseDown={e => e.stopPropagation()}>
-                    <div className="flex justify-between items-center mb-2">
-                        <span className="text-xs font-bold text-yellow-700 uppercase">Закреплено</span>
-                        <StarIcon className="w-4 h-4 text-yellow-500" filled />
+            {starPopoverState && pinnedColumns[starPopoverState.colKey] && (() => {
+                const pinInfo = pinnedColumns[starPopoverState.colKey];
+                const isComplex = typeof pinInfo.payload === 'object';
+                return (
+                    <div className="absolute z-50 bg-white [.theme-dark_&]:bg-slate-800 border border-amber-300 [.theme-dark_&]:border-amber-700/50 shadow-xl rounded-lg p-3 w-64 animate-fade-in-up"
+                         style={{ top: starPopoverState.position.top, left: starPopoverState.position.left }}
+                         onMouseDown={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs font-bold text-amber-700 [.theme-dark_&]:text-amber-500 uppercase">Значение закреплено</span>
+                            <StarIcon className="w-4 h-4 text-amber-500" filled />
+                        </div>
+                        <p className="text-[10px] text-slate-500 [.theme-dark_&]:text-slate-400 mb-3">
+                            Акт источник: <strong>№{pinInfo.rowIndexDisplay}</strong>
+                        </p>
+                        
+                        {!isComplex ? (
+                            <div className="mb-3">
+                                <label className="text-xs font-medium text-slate-700 [.theme-dark_&]:text-slate-300 mb-1 block">Ручной ввод значения:</label>
+                                <textarea 
+                                    className="w-full text-sm bg-white [.theme-dark_&]:bg-[#0d1117] text-slate-900 [.theme-dark_&]:text-slate-200 border border-slate-300 [.theme-dark_&]:border-slate-600 rounded p-1.5 focus:ring-1 focus:ring-amber-500 outline-none min-h-[60px] resize-y"
+                                    value={pinInfo.payload || ''}
+                                    onChange={(e) => {
+                                        const newVal = e.target.value;
+                                        setPinnedColumns(prev => ({
+                                            ...prev,
+                                            [starPopoverState.colKey]: {
+                                                ...pinInfo,
+                                                payload: newVal,
+                                                previewText: newVal.length > 40 ? newVal.substring(0, 40) + '...' : newVal
+                                            }
+                                        }));
+                                    }}
+                                />
+                            </div>
+                        ) : (
+                            <div className="bg-slate-50 [.theme-dark_&]:bg-slate-900/50 p-2 rounded border border-slate-100 [.theme-dark_&]:border-slate-700 text-xs text-slate-600 [.theme-dark_&]:text-slate-400 mb-3 italic break-words">
+                                "{pinInfo.previewText || '(Пусто)'}"
+                            </div>
+                        )}
+
+                        <button onClick={() => handleUnpin(starPopoverState.colKey)}
+                                className="w-full py-1.5 bg-red-50 [.theme-dark_&]:bg-red-900/20 text-red-600 [.theme-dark_&]:text-red-400 hover:bg-red-100 [.theme-dark_&]:hover:bg-red-900/40 rounded text-sm font-medium transition-colors border border-red-100 [.theme-dark_&]:border-red-900/50">
+                            Отменить привязку
+                        </button>
                     </div>
-                    <p className="text-sm text-slate-700 mb-1">
-                        Оригинальная строка: <strong>{pinnedColumns[starPopoverState.colKey].rowIndexDisplay}</strong>
-                    </p>
-                    <div className="bg-slate-50 p-2 rounded border border-slate-100 text-xs text-slate-600 mb-3 italic break-words">
-                        "{pinnedColumns[starPopoverState.colKey].previewText || '(Пусто)'}"
-                    </div>
-                    <button onClick={() => handleUnpin(starPopoverState.colKey)}
-                            className="w-full py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded text-sm font-medium transition-colors border border-red-100">
-                        Отменить привязку
-                    </button>
-                </div>
-            )}
+                );
+            })()}
 
             {datePopoverState && <DateEditorPopover act={datePopoverState.act} onActChange={(updatedAct) => { handleSaveWithTemplateResolution(updatedAct); setDatePopoverState(prev => prev ? { ...prev, act: updatedAct } : null); }} onClose={() => setDatePopoverState(null)} position={datePopoverState.position} />}
             {singleDatePopoverState && <SingleDateEditorPopover act={singleDatePopoverState.act} onActChange={(updatedAct) => { handleSaveWithTemplateResolution(updatedAct); setSingleDatePopoverState(prev => prev ? { ...prev, act: updatedAct } : null); }} onClose={() => setSingleDatePopoverState(null)} position={singleDatePopoverState.position} />}

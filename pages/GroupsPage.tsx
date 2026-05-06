@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { CommissionGroup, Person, ROLES, Organization } from '../types';
 import Modal from '../components/Modal';
@@ -65,8 +64,8 @@ const GroupForm: React.FC<{
         onClose();
     };
 
-    const inputClass = "mt-1 block w-full bg-white border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900";
-    const labelClass = "block text-sm font-medium text-slate-700";
+    const inputClass = "mt-1 block w-full bg-white [.theme-dark_&]:bg-[#0d1117] border border-slate-300 [.theme-dark_&]:border-slate-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-slate-900 [.theme-dark_&]:text-slate-200 [.theme-dark_&]:[color-scheme:dark]";
+    const labelClass = "block text-sm font-medium text-slate-700 [.theme-dark_&]:text-slate-300";
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -84,34 +83,42 @@ const GroupForm: React.FC<{
                 />
             </div>
 
-            <div className="border border-slate-200 rounded-md p-4">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4">Организации-участники</h3>
+            <div className="border border-slate-200 [.theme-dark_&]:border-slate-700 rounded-md p-4">
+                <h3 className="text-lg font-semibold text-slate-800 [.theme-dark_&]:text-slate-200 mb-4">Организации-участники</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
+                    <div className="flex flex-col h-full">
                         <label className={labelClass}>Застройщик (технический заказчик)</label>
-                        <CustomSelect options={orgOptions} value={formData.builderOrgId || ''} onChange={(value) => handleOrgChange('builderOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
+                        <div className="mt-auto pt-2">
+                            <CustomSelect options={orgOptions} value={formData.builderOrgId || ''} onChange={(value) => handleOrgChange('builderOrgId', value)} placeholder="Не выбрано" allowClear />
+                        </div>
                     </div>
-                    <div>
+                    <div className="flex flex-col h-full">
                         <label className={labelClass}>Лицо, осуществляющее строительство (Подрядчик)</label>
-                        <CustomSelect options={orgOptions} value={formData.contractorOrgId || ''} onChange={(value) => handleOrgChange('contractorOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
+                        <div className="mt-auto pt-2">
+                            <CustomSelect options={orgOptions} value={formData.contractorOrgId || ''} onChange={(value) => handleOrgChange('contractorOrgId', value)} placeholder="Не выбрано" allowClear />
+                        </div>
                     </div>
-                     <div className="md:col-span-2">
+                     <div className="md:col-span-2 flex flex-col h-full">
                         <label className={labelClass}>Лицо, осуществившее подготовку проекта</label>
-                        <CustomSelect options={orgOptions} value={formData.designerOrgId || ''} onChange={(value) => handleOrgChange('designerOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
+                        <div className="mt-auto pt-2">
+                            <CustomSelect options={orgOptions} value={formData.designerOrgId || ''} onChange={(value) => handleOrgChange('designerOrgId', value)} placeholder="Не выбрано" allowClear />
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div className="border border-slate-200 rounded-md p-4">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4">Состав комиссии</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="border border-slate-200 [.theme-dark_&]:border-slate-700 rounded-md p-4">
+                <h3 className="text-lg font-semibold text-slate-800 [.theme-dark_&]:text-slate-200 mb-4">Состав комиссии</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6">
                     {Object.entries(ROLES).filter(([key]) => !['i1','i2','i3'].includes(key)).map(([key, description]) => (
-                        <div key={key}>
+                        <div key={key} className="flex flex-col h-full">
                             <label className={labelClass}>{description}</label>
-                            <CustomSelect options={peopleOptions} value={formData.representatives[key] || ''} onChange={(value) => handleRepChange(key, value)} placeholder="Не выбрано" className="mt-1" allowClear />
+                            <div className="mt-auto pt-2">
+                                <CustomSelect options={peopleOptions} value={formData.representatives[key] || ''} onChange={(value) => handleRepChange(key, value)} placeholder="Не выбрано" allowClear />
+                            </div>
                         </div>
                     ))}
-                    <div className="md:col-span-2 border-t pt-4 mt-2">
+                    <div className="md:col-span-2 border-t border-slate-200 [.theme-dark_&]:border-slate-700 pt-4 mt-2">
                         <div className="flex items-center">
                             <input
                                 type="checkbox"
@@ -120,31 +127,35 @@ const GroupForm: React.FC<{
                                 onChange={(e) => setShowOtherReps(e.target.checked)}
                                 className="h-4 w-4 form-checkbox-custom"
                             />
-                            <label htmlFor="showOtherReps" className="ml-2 text-sm font-medium text-slate-700 cursor-pointer">
+                            <label htmlFor="showOtherReps" className="ml-2 text-sm font-medium text-slate-700 [.theme-dark_&]:text-slate-300 cursor-pointer">
                                 Добавить представителей иных организаций
                             </label>
                         </div>
                     </div>
                     {showOtherReps && Object.entries(ROLES).filter(([key]) => ['i1','i2','i3'].includes(key)).map(([key, description]) => (
-                        <div key={key}>
+                        <div key={key} className="flex flex-col h-full">
                             <label className={labelClass}>{description}</label>
-                            <CustomSelect options={peopleOptions} value={formData.representatives[key] || ''} onChange={(value) => handleRepChange(key, value)} placeholder="Не выбрано" className="mt-1" allowClear />
+                            <div className="mt-auto pt-2">
+                                <CustomSelect options={peopleOptions} value={formData.representatives[key] || ''} onChange={(value) => handleRepChange(key, value)} placeholder="Не выбрано" allowClear />
+                            </div>
                         </div>
                     ))}
                 </div>
             </div>
 
-            <div className="border border-slate-200 rounded-md p-4">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4">Произвели осмотр работ</h3>
-                <div>
+            <div className="border border-slate-200 [.theme-dark_&]:border-slate-700 rounded-md p-4">
+                <h3 className="text-lg font-semibold text-slate-800 [.theme-dark_&]:text-slate-200 mb-4">Произвели осмотр работ</h3>
+                <div className="flex flex-col h-full">
                     <label className={labelClass}>Лицо, выполнившее работы</label>
-                    <CustomSelect options={orgOptions} value={formData.workPerformerOrgId || ''} onChange={(value) => handleOrgChange('workPerformerOrgId', value)} placeholder="Не выбрано" className="mt-1" allowClear />
+                    <div className="mt-auto pt-2">
+                        <CustomSelect options={orgOptions} value={formData.workPerformerOrgId || ''} onChange={(value) => handleOrgChange('workPerformerOrgId', value)} placeholder="Не выбрано" allowClear />
+                    </div>
                 </div>
             </div>
 
             <div className="flex justify-end space-x-3 pt-4">
-                <button type="button" onClick={onClose} className="bg-slate-200 text-slate-800 px-4 py-2 rounded-md hover:bg-slate-300">Отмена</button>
-                <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Сохранить</button>
+                <button type="button" onClick={onClose} className="bg-slate-200 [.theme-dark_&]:bg-slate-700 text-slate-800 [.theme-dark_&]:text-slate-200 px-4 py-2 rounded-md hover:bg-slate-300 [.theme-dark_&]:hover:bg-slate-600 transition-colors">Отмена</button>
+                <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium">Сохранить</button>
             </div>
         </form>
     );
@@ -173,7 +184,7 @@ const GroupsPage: React.FC<GroupsPageProps> = ({ groups, people, organizations, 
         <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
             <div className="flex justify-between items-center mb-6 flex-shrink-0">
                 <h1 className="text-2xl font-bold text-slate-800">Группы комиссий</h1>
-                <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                <button onClick={() => handleOpenModal()} className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
                     <PlusIcon /> Создать группу
                 </button>
             </div>
@@ -215,8 +226,8 @@ const GroupsPage: React.FC<GroupsPageProps> = ({ groups, people, organizations, 
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium align-top">
                                     <div className="flex justify-end space-x-2">
-                                        <button onClick={() => handleOpenModal(group)} className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full" title="Редактировать"><EditIcon /></button>
-                                        <button onClick={() => onDelete(group.id)} className="p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full" title="Удалить"><DeleteIcon /></button>
+                                        <button onClick={() => handleOpenModal(group)} className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full transition-colors" title="Редактировать"><EditIcon /></button>
+                                        <button onClick={() => onDelete(group.id)} className="p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-full transition-colors" title="Удалить"><DeleteIcon /></button>
                                     </div>
                                 </td>
                             </tr>
