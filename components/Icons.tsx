@@ -190,3 +190,16 @@ export const MinimizeIcon: React.FC<{ className?: string }> = ({ className }) =>
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 21l8-8m0 0v6m0-6H5m16-10l-8 8m0 0v-6m0 6h6"></path>
     </svg>
 );
+
+export const FileTextIcon = ({ className = "w-4 h-4" }) => (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+);
+
+
+export const SaveIcon = ({ className = "w-4 h-4" }) => (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+    </svg>
+);

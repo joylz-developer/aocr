@@ -203,6 +203,12 @@ export interface ProjectSettings {
     organizationExtractionPrompt?: string;
     certificatePromptDateTo?: string;
     certificatePromptSupplier?: string;
+
+    // Новые поля для шаблонов деталей (массивы ключей в нужном порядке)
+    builderDetailsTemplate?: string[];
+    contractorDetailsTemplate?: string[];
+    designerDetailsTemplate?: string[];
+    repDetailsTemplate?: string[]; // Общий шаблон для всех представителей (ФИО, Должность и т.д.)
 }
 
 // Types for Import/Export feature
