@@ -19,6 +19,12 @@ import SchemesModal from './SchemesModal';
 const AUTO_NEXT_ID = 'AUTO_NEXT';
 const AUTO_NEXT_LABEL = '⬇️ Следующий по списку (Автоматически)';
 
+const FilterIcon = ({ className = "w-4 h-4" }) => (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+    </svg>
+);
+
 interface ActsTableProps {
     acts: Act[];
     people: Person[];
@@ -423,7 +429,6 @@ const resolvePreviewTemplate = (template: string, act: Act): string => {
 const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, groups, regulations, certificates = [], schemes = [], template, registryTemplate, settings, visibleColumns, columnOrder, onColumnOrderChange, activeCell, setActiveCell, selectedCells, setSelectedCells, onSave, onRequestDelete, onReorderActs, setCurrentPage, createNewAct, onNavigateToCertificate, onNavigateToScheme }) => {
     const [editingCell, setEditingCell] = useState<Coords | null>(null);
     const [editorValue, setEditorValue] = useState('');
-    // Реф для хранения значения без триггера ререндера (позволяет нативному Ctrl+Z работать)
     const editorValueRef = useRef<string>('');
     const currentEditingCellId = useRef<string | null>(null);
 
@@ -432,6 +437,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [isDraggingSelection, setIsDraggingSelection] = useState(false);
     const [isFilling, setIsFilling] = useState(false);
     const [fillTargetArea, setFillTargetArea] = useState<{ start: Coords, end: Coords } | null>(null);
+    
+    // Новые стейты для фильтрации
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [filters, setFilters] = useState<Record<string, any>>({});
     
     const [pinnedColumns, setPinnedColumns] = useState<Record<string, PinnedColumnInfo>>({});
     const [starPopoverState, setStarPopoverState] = useState<{colKey: string, position: {top: number, left: number}} | null>(null);
@@ -554,6 +563,50 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         };
     };
 
+    // ФИЛЬТРАЦИЯ
+    const hasActiveFilters = Object.values(filters).some(val => 
+        typeof val === 'string' ? val !== '' : (val.start || val.end)
+    );
+
+    const filteredActs = useMemo(() => {
+        return acts.filter(act => {
+            for (const [key, filterValue] of Object.entries(filters)) {
+                if (!filterValue || (typeof filterValue === 'object' && !filterValue.start && !filterValue.end)) continue;
+                
+                const col = columns.find(c => c.key === key);
+                const isDate = col?.type === 'date' || key === 'workDates';
+
+                if (isDate) {
+                    const { start, end } = filterValue as { start?: string, end?: string };
+                    
+                    if (key === 'workDates') {
+                        if (start && (!act.workStartDate || act.workStartDate < start)) return false;
+                        if (end && (!act.workEndDate || act.workEndDate > end)) return false;
+                    } else {
+                        const actDate = act[key as keyof Act] as string;
+                        if (start && (!actDate || actDate < start)) return false;
+                        if (end && (!actDate || actDate > end)) return false;
+                    }
+                } else {
+                    if (typeof filterValue === 'string') {
+                        let actValue = '';
+                        if (key === 'commissionGroup') {
+                            const group = groups.find(g => g.id === act.commissionGroupId);
+                            actValue = group ? group.name : '';
+                        } else {
+                            actValue = String(act[key as keyof Act] || '');
+                        }
+                        
+                        if (!actValue.toLowerCase().includes(filterValue.toLowerCase())) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        });
+    }, [acts, filters, columns, groups]);
+
     const selectedRows = useMemo(() => {
         const rowsFullySelected = new Set<number>();
         if (selectedCells.size === 0 || columns.length === 0) {
@@ -654,7 +707,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setDateError(null);
     }, []);
     
-    // Новая логика для неконтролируемых инпутов
     const handleNativeEditorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const val = e.target.value;
         setEditorValue(val);
@@ -666,7 +718,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     };
 
-    // Обычная логика для контролируемых кастомных компонентов (Селекты и т.д.)
     const handleCustomEditorChange = (newVal: string) => {
         setEditorValue(newVal);
         editorValueRef.current = newVal;
@@ -679,7 +730,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         const act = acts[rowIndex];
         const col = columns[colIndex];
         const updatedAct = { ...act };
-        const currentValue = editorValueRef.current; // Читаем актуальное значение из REF
+        const currentValue = editorValueRef.current; 
         
         if (col.key === 'workDates') {
             const parts = currentValue.split('-').map(s => s.trim());
@@ -864,7 +915,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         };
     };
 
-    const handleCellMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, rowIndex: number, colIndex: number) => {
+    const handleCellMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, absoluteRowIndex: number, colIndex: number) => {
         tableContainerRef.current?.focus({ preventScroll: true });
         setContextMenu(null); 
         if (e.detail > 1) e.preventDefault();
@@ -877,63 +928,82 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         setStarPopoverState(null);
         setSchemePopoverState(null);
         if (e.button === 2) {
-             const cellId = getCellId(rowIndex, colIndex);
+             const cellId = getCellId(absoluteRowIndex, colIndex);
              if (selectedCells.has(cellId)) return;
         }
-        const cellId = getCellId(rowIndex, colIndex);
+        const cellId = getCellId(absoluteRowIndex, colIndex);
         if (e.shiftKey && activeCell) {
-            const { minRow, maxRow, minCol, maxCol } = normalizeSelection(activeCell, { rowIndex, colIndex });
-            const selection = new Set<string>();
-            for (let r = minRow; r <= maxRow; r++) {
-                for (let c = minCol; c <= maxCol; c++) {
-                    selection.add(getCellId(r, c));
+            // Для shift-выделения находим видимые индексы
+            const startVisualRow = filteredActs.findIndex(a => a.id === acts[activeCell.rowIndex]?.id);
+            const endVisualRow = filteredActs.findIndex(a => a.id === acts[absoluteRowIndex]?.id);
+            
+            if (startVisualRow !== -1 && endVisualRow !== -1) {
+                const minV = Math.min(startVisualRow, endVisualRow);
+                const maxV = Math.max(startVisualRow, endVisualRow);
+                const minCol = Math.min(activeCell.colIndex, colIndex);
+                const maxCol = Math.max(activeCell.colIndex, colIndex);
+
+                const selection = new Set<string>();
+                for (let v = minV; v <= maxV; v++) {
+                    const absRow = acts.findIndex(a => a.id === filteredActs[v].id);
+                    for (let c = minCol; c <= maxCol; c++) {
+                        selection.add(getCellId(absRow, c));
+                    }
                 }
+                setSelectedCells(selection);
             }
-            setSelectedCells(selection);
         } else if (e.ctrlKey || e.metaKey) {
             const newSelectedCells = new Set(selectedCells);
             if (newSelectedCells.has(cellId)) { newSelectedCells.delete(cellId); } else { newSelectedCells.add(cellId); }
             setSelectedCells(newSelectedCells);
-            setActiveCell({ rowIndex, colIndex });
+            setActiveCell({ rowIndex: absoluteRowIndex, colIndex });
         } else {
             setSelectedCells(new Set([cellId]));
-            setActiveCell({ rowIndex, colIndex });
+            setActiveCell({ rowIndex: absoluteRowIndex, colIndex });
             setIsDraggingSelection(true);
         }
     };
     
-    const handleRowHeaderMouseDown = (e: React.MouseEvent, rowIndex: number) => {
+    const handleRowHeaderMouseDown = (e: React.MouseEvent, absoluteRowIndex: number) => {
         dragHandlePressedRef.current = true;
         tableContainerRef.current?.focus({ preventScroll: true });
-        const isRowSelected = selectedRows.has(rowIndex);
+        const isRowSelected = selectedRows.has(absoluteRowIndex);
         if (e.button === 2) { if (isRowSelected) return; }
         if (e.button === 0 && isRowSelected && !e.ctrlKey && !e.metaKey && !e.shiftKey) { return; }
+        
         const newSelectedCells = new Set<string>();
-        for (let c = 0; c < columns.length; c++) { newSelectedCells.add(getCellId(rowIndex, c)); }
+        for (let c = 0; c < columns.length; c++) { newSelectedCells.add(getCellId(absoluteRowIndex, c)); }
+        
         if (e.shiftKey && activeCell) {
-            const startRow = activeCell.rowIndex;
-            const endRow = rowIndex;
-            const minR = Math.min(startRow, endRow);
-            const maxR = Math.max(startRow, endRow);
-            const expandedSelection = new Set<string>();
-             for (let r = minR; r <= maxR; r++) {
-                for (let c = 0; c < columns.length; c++) { expandedSelection.add(getCellId(r, c)); }
+            const startVisualRow = filteredActs.findIndex(a => a.id === acts[activeCell.rowIndex]?.id);
+            const endVisualRow = filteredActs.findIndex(a => a.id === acts[absoluteRowIndex]?.id);
+            
+            if (startVisualRow !== -1 && endVisualRow !== -1) {
+                const minV = Math.min(startVisualRow, endVisualRow);
+                const maxV = Math.max(startVisualRow, endVisualRow);
+                const expandedSelection = new Set<string>();
+                for (let v = minV; v <= maxV; v++) {
+                    const absRow = acts.findIndex(a => a.id === filteredActs[v].id);
+                    for (let c = 0; c < columns.length; c++) { 
+                        expandedSelection.add(getCellId(absRow, c)); 
+                    }
+                }
+                setSelectedCells(expandedSelection);
             }
-            setSelectedCells(expandedSelection);
         } else if (e.ctrlKey || e.metaKey) {
              const updatedSelection = new Set(selectedCells);
-             const firstCellId = getCellId(rowIndex, 0);
+             const firstCellId = getCellId(absoluteRowIndex, 0);
              const isThisRowSelected = selectedCells.has(firstCellId); 
              for (let c = 0; c < columns.length; c++) {
-                 const id = getCellId(rowIndex, c);
+                 const id = getCellId(absoluteRowIndex, c);
                  if (isThisRowSelected) updatedSelection.delete(id);
                  else updatedSelection.add(id);
              }
              setSelectedCells(updatedSelection);
-             setActiveCell({ rowIndex, colIndex: 0 });
+             setActiveCell({ rowIndex: absoluteRowIndex, colIndex: 0 });
         } else {
             setSelectedCells(newSelectedCells);
-            setActiveCell({ rowIndex, colIndex: 0 });
+            setActiveCell({ rowIndex: absoluteRowIndex, colIndex: 0 });
         }
     };
 
@@ -988,12 +1058,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 return { rowIndex, colIndex };
             });
             if (coordsList.length === 0) return;
-            const minRow = Math.min(...coordsList.map(c => c.rowIndex));
-            const maxRow = Math.max(...coordsList.map(c => c.rowIndex));
+            
+            const selectedRowIndices = Array.from(new Set(coordsList.map(c => c.rowIndex))).sort((a,b) => a-b);
             const minCol = Math.min(...coordsList.map(c => c.colIndex));
             const maxCol = Math.max(...coordsList.map(c => c.colIndex));
+            
             const copyData = [];
-            for (let r = minRow; r <= maxRow; r++) {
+            for (const r of selectedRowIndices) {
                 const rowData = [];
                 for (let c = minCol; c <= maxCol; c++) {
                     if (selectedCells.has(getCellId(r, c))) {
@@ -1134,6 +1205,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     
     const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
         if (editingCell) { return; }
+
+        // ИСПРАВЛЕНИЕ: Игнорируем нажатия клавиш, если фокус находится в поле ввода (фильтры, добавление строк)
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+            return;
+        }
+
         if (e.key === 'Escape') {
             e.preventDefault();
             setSelectedCells(new Set());
@@ -1156,18 +1234,29 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
             e.preventDefault();
             if (!activeCell) {
-                if (acts.length > 0 && columns.length > 0) { setActiveCell({ rowIndex: 0, colIndex: 0 }); setSelectedCells(new Set([getCellId(0, 0)])); }
+                if (filteredActs.length > 0 && columns.length > 0) { 
+                    const firstAbsIndex = acts.findIndex(a => a.id === filteredActs[0].id);
+                    setActiveCell({ rowIndex: firstAbsIndex, colIndex: 0 }); 
+                    setSelectedCells(new Set([getCellId(firstAbsIndex, 0)])); 
+                }
                 return;
             }
-            let { rowIndex, colIndex } = activeCell;
-            if (e.key === 'ArrowUp') rowIndex = Math.max(0, rowIndex - 1);
-            if (e.key === 'ArrowDown') rowIndex = Math.min(acts.length - 1, rowIndex + 1);
+            
+            let { rowIndex: absRowIndex, colIndex } = activeCell;
+            let currentVisualRow = filteredActs.findIndex(a => a.id === acts[absRowIndex]?.id);
+            if (currentVisualRow === -1) currentVisualRow = 0;
+
+            if (e.key === 'ArrowUp') currentVisualRow = Math.max(0, currentVisualRow - 1);
+            if (e.key === 'ArrowDown') currentVisualRow = Math.min(filteredActs.length - 1, currentVisualRow + 1);
             if (e.key === 'ArrowLeft') colIndex = Math.max(0, colIndex - 1);
             if (e.key === 'ArrowRight') colIndex = Math.min(columns.length - 1, colIndex + 1);
-            const newCellId = getCellId(rowIndex, colIndex);
-            setActiveCell({ rowIndex, colIndex });
+            
+            const newAbsoluteRowIndex = acts.findIndex(a => a.id === filteredActs[currentVisualRow].id);
+
+            const newCellId = getCellId(newAbsoluteRowIndex, colIndex);
+            setActiveCell({ rowIndex: newAbsoluteRowIndex, colIndex });
             setSelectedCells(new Set([newCellId]));
-            const cellEl = document.querySelector(`td[data-row-index="${rowIndex}"][data-col-index="${colIndex}"]`);
+            const cellEl = document.querySelector(`td[data-row-index="${newAbsoluteRowIndex}"][data-col-index="${colIndex}"]`);
             cellEl?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
             return;
         }
@@ -1175,7 +1264,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             e.preventDefault();
             handleClearCells();
         }
-    }, [editingCell, selectedCells, handleClearCells, handleCopy, handlePaste, activeCell, setActiveCell, acts.length, columns.length, setSelectedCells]);
+    }, [editingCell, selectedCells, handleClearCells, handleCopy, handlePaste, activeCell, setActiveCell, filteredActs, columns.length, setSelectedCells, acts]);
 
     useEffect(() => {
         const scrollContainer = scrollContainerRef.current;
@@ -1274,7 +1363,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     }, [isFilling, selectedCells, fillTargetArea, acts, columns, groups, performBulkUpdate]);
 
     const handleRowDragStart = (e: React.DragEvent<HTMLTableRowElement>, rowIndex: number) => {
-        if (editingCell) { e.preventDefault(); return; }
+        if (editingCell || hasActiveFilters) { e.preventDefault(); return; }
         if (!dragHandlePressedRef.current) { e.preventDefault(); return; }
         let indicesToDrag = [rowIndex];
         if (selectedRows.has(rowIndex)) indicesToDrag = Array.from(selectedRows).sort((a,b) => a-b);
@@ -1285,7 +1374,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const handleRowDragOver = (e: React.DragEvent<HTMLTableRowElement>, rowIndex: number) => {
         e.preventDefault(); 
-        if (!draggedRowIndices) return;
+        if (!draggedRowIndices || hasActiveFilters) return;
         const rect = e.currentTarget.getBoundingClientRect();
         const midY = rect.top + rect.height / 2;
         const isTop = e.clientY < midY;
@@ -1299,7 +1388,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const handleRowDrop = (e: React.DragEvent<HTMLTableRowElement>) => {
         e.preventDefault();
-        if (!draggedRowIndices || dropTargetRowIndex === null || !dropPosition) { handleDragEnd(); return; }
+        if (!draggedRowIndices || dropTargetRowIndex === null || !dropPosition || hasActiveFilters) { handleDragEnd(); return; }
         let insertIndex = dropTargetRowIndex;
         if (dropPosition === 'bottom') insertIndex++;
         const draggedActs = draggedRowIndices.map(i => acts[i]);
@@ -1592,8 +1681,16 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         className="bg-slate-50 sticky top-0 z-10 shadow-sm"
                         onMouseLeave={() => setHoveredColIndex(null)}
                     >
-                        <tr>
-                            <th className="w-12 border border-slate-300 [.theme-dark_&]:border-slate-700 px-2 py-2 font-medium text-slate-500 [.theme-dark_&]:text-slate-400 text-center select-none bg-slate-100 [.theme-dark_&]:bg-[#161b22]">#</th>
+                        <tr className="bg-slate-50 [.theme-dark_&]:bg-[#161b22] border-b border-slate-300 [.theme-dark_&]:border-slate-700">
+                            <th className="w-12 border border-slate-300 [.theme-dark_&]:border-slate-700 px-2 py-2 font-medium text-slate-500 [.theme-dark_&]:text-slate-400 text-center select-none bg-slate-100 [.theme-dark_&]:bg-[#161b22] align-middle">
+                                <button 
+                                    onClick={() => setIsFilterOpen(!isFilterOpen)} 
+                                    className={`p-1.5 rounded transition-colors w-full h-full flex justify-center items-center ${isFilterOpen || hasActiveFilters ? 'text-blue-600 bg-blue-100 [.theme-dark_&]:bg-blue-900/50 [.theme-dark_&]:text-blue-400' : 'hover:bg-slate-200 [.theme-dark_&]:hover:bg-slate-700'}`}
+                                    title="Фильтры"
+                                >
+                                    <FilterIcon />
+                                </button>
+                            </th>
                             {columns.map((col, index) => {
                                 const isActiveColumn = activeCell?.colIndex === index;
                                 const isPinned = !!pinnedColumns[col.key];
@@ -1601,10 +1698,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                 const isHoveredColumn = hoveredColIndex === index;
                                 const isSelected = selectedColumns.has(index);
 
-                                // ИСПРАВЛЕНИЕ: Мы убираем градиент для скрытия иконок. 
-                                // Теперь иконки всегда видны, если колонка наведена, выделена или активна.
-                                // Для того, чтобы длинный текст не наезжал на иконки, используется padding.
-
+                                // Строгое определение фона заголовка
                                 let bgClass = "bg-slate-100 [.theme-dark_&]:bg-[#161b22] text-slate-600 [.theme-dark_&]:text-slate-300";
 
                                 if (isDraggingOver) {
@@ -1626,10 +1720,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                             ${col.widthClass}
                                             ${bgClass}
                                             ${draggedColKey === col.key ? 'opacity-50' : ''}
-                                            grabbable group/th
+                                            grabbable group/th align-middle
                                         `}
-                                        draggable={!editingCell}
-                                        onDragStart={(e) => handleColumnDragStart(e, col.key)}
+                                        draggable={!editingCell && !hasActiveFilters}
+                                        onDragStart={(e) => {
+                                            if (hasActiveFilters) { e.preventDefault(); return; }
+                                            handleColumnDragStart(e, col.key)
+                                        }}
                                         onDragOver={(e) => handleColumnDragOver(e, col.key)}
                                         onDrop={handleColumnDrop}
                                         onDragEnd={handleDragEnd}
@@ -1638,8 +1735,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         onMouseEnter={() => setHoveredColIndex(index)}
                                     >
                                         <div className="relative flex items-center justify-between w-full h-full min-w-max">
-                                            {/* Добавляем pr-10 только если иконки показываются, чтобы текст не прыгал, 
-                                                сделаем отступ всегда постоянным для тех колонок где могут быть иконки, либо фиксированным */}
                                             <span className="truncate pr-10">{col.label}</span>
                                             
                                             <div className={`absolute right-0 top-1/2 -translate-y-1/2 flex items-center space-x-1 px-1 transition-opacity duration-200 
@@ -1670,6 +1765,54 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                 );
                             })}
                         </tr>
+                        {isFilterOpen && (
+                            <tr className="bg-slate-100 [.theme-dark_&]:bg-slate-800 shadow-inner">
+                                <th className="border border-slate-300 [.theme-dark_&]:border-slate-700 px-1 py-1 align-middle text-center bg-slate-100 [.theme-dark_&]:bg-[#161b22]">
+                                    {hasActiveFilters && (
+                                        <button 
+                                            onClick={() => setFilters({})} 
+                                            className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-1.5 rounded [.theme-dark_&]:bg-red-900/30 [.theme-dark_&]:text-red-400 transition-colors mx-auto"
+                                            title="Сбросить все фильтры"
+                                        >
+                                            <CloseIcon className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </th>
+                                {columns.map((col) => {
+                                    const isDate = col.type === 'date' || col.key === 'workDates';
+                                    return (
+                                        <th key={`filter-${col.key}`} className="p-1 border border-slate-300 [.theme-dark_&]:border-slate-700 font-normal align-top bg-slate-50 [.theme-dark_&]:bg-[#161b22]">
+                                            {isDate ? (
+                                                <div className="flex flex-col gap-1">
+                                                    <input 
+                                                        type="date" 
+                                                        title="От"
+                                                        value={filters[col.key]?.start || ''} 
+                                                        onChange={e => setFilters({...filters, [col.key]: { ...filters[col.key], start: e.target.value }})} 
+                                                        className="w-full text-xs p-1 rounded border border-slate-300 [.theme-dark_&]:border-slate-600 bg-white [.theme-dark_&]:bg-[#0d1117] text-slate-700 [.theme-dark_&]:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500 [.theme-dark_&]:[color-scheme:dark]" 
+                                                    />
+                                                    <input 
+                                                        type="date" 
+                                                        title="До"
+                                                        value={filters[col.key]?.end || ''} 
+                                                        onChange={e => setFilters({...filters, [col.key]: { ...filters[col.key], end: e.target.value }})} 
+                                                        className="w-full text-xs p-1 rounded border border-slate-300 [.theme-dark_&]:border-slate-600 bg-white [.theme-dark_&]:bg-[#0d1117] text-slate-700 [.theme-dark_&]:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500 [.theme-dark_&]:[color-scheme:dark]" 
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="Поиск..." 
+                                                    value={filters[col.key] || ''} 
+                                                    onChange={e => setFilters({...filters, [col.key]: e.target.value})} 
+                                                    className="w-full text-xs p-1.5 rounded border border-slate-300 [.theme-dark_&]:border-slate-600 bg-white [.theme-dark_&]:bg-[#0d1117] text-slate-700 [.theme-dark_&]:text-slate-200 outline-none focus:ring-1 focus:ring-blue-500" 
+                                                />
+                                            )}
+                                        </th>
+                                    );
+                                })}
+                            </tr>
+                        )}
                     </thead>
                     <tbody
                         onMouseLeave={() => setHoveredColIndex(null)}
@@ -1680,9 +1823,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                             }
                         }}
                     >
-                        {acts.map((act, rowIndex) => {
-                            const isRowSelected = selectedRows.has(rowIndex);
-                            const isRowDragged = draggedRowIndices?.includes(rowIndex);
+                        {filteredActs.map((act, visualRowIndex) => {
+                            const absoluteIndex = acts.findIndex(a => a.id === act.id);
+                            const isRowSelected = selectedRows.has(absoluteIndex);
+                            const isRowDragged = draggedRowIndices?.includes(absoluteIndex);
                             
                             return (
                                 <tr 
@@ -1691,41 +1835,44 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         group
                                         ${isRowSelected ? 'bg-blue-50 [.theme-dark_&]:bg-blue-900/20' : 'hover:bg-slate-50 [.theme-dark_&]:hover:bg-slate-800/50'}
                                         ${isRowDragged ? 'opacity-40' : ''}
-                                        ${actPickerState?.sourceRowIndex === rowIndex ? 'act-picker-source-row' : ''}
+                                        ${actPickerState?.sourceRowIndex === absoluteIndex ? 'act-picker-source-row' : ''}
                                     `}
-                                    draggable={!editingCell}
-                                    onDragStart={(e) => handleRowDragStart(e, rowIndex)}
-                                    onDragOver={(e) => handleRowDragOver(e, rowIndex)}
+                                    draggable={!editingCell && !hasActiveFilters}
+                                    onDragStart={(e) => {
+                                        if (hasActiveFilters) { e.preventDefault(); return; }
+                                        handleRowDragStart(e, absoluteIndex);
+                                    }}
+                                    onDragOver={(e) => handleRowDragOver(e, absoluteIndex)}
                                     onDrop={handleRowDrop}
                                     onDragEnd={handleDragEnd}
                                 >
                                     <td 
                                         className={`
-                                            row-drag-handle border border-slate-300 [.theme-dark_&]:border-slate-700 px-1 py-1 text-center text-xs select-none relative group/handle cursor-grab active:cursor-grabbing
+                                            row-drag-handle border border-slate-300 [.theme-dark_&]:border-slate-700 px-1 py-1 text-center text-xs select-none relative group/handle
                                             ${isRowSelected ? 'bg-blue-100 border-blue-200 z-20 [.theme-dark_&]:bg-blue-900/40 [.theme-dark_&]:border-blue-800' : 'bg-slate-50 text-slate-400 [.theme-dark_&]:bg-[#161b22] [.theme-dark_&]:text-slate-500'}
+                                            ${hasActiveFilters ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}
                                         `}
-                                        onMouseDown={(e) => handleRowHeaderMouseDown(e, rowIndex)}
+                                        onMouseDown={(e) => handleRowHeaderMouseDown(e, absoluteIndex)}
                                         onMouseUp={handleRowHeaderMouseUp}
                                     >
                                        <div className="pointer-events-none flex items-center justify-between h-full w-full pl-1">
-                                            <div className={`p-0.5 rounded flex-shrink-0 ${isRowSelected ? 'text-blue-500' : 'text-slate-300 group-hover:text-slate-500'}`}>
+                                            <div className={`p-0.5 rounded flex-shrink-0 ${isRowSelected ? 'text-blue-500' : 'text-slate-300 group-hover:text-slate-500'} ${hasActiveFilters ? 'opacity-20' : ''}`}>
                                                 <GripVerticalIcon className="w-4 h-4" />
                                             </div>
-                                            <span className={`flex-grow text-center ${isRowSelected ? 'font-semibold text-blue-700 [.theme-dark_&]:text-blue-400' : ''}`}>{rowIndex + 1}</span>
+                                            <span className={`flex-grow text-center ${isRowSelected ? 'font-semibold text-blue-700 [.theme-dark_&]:text-blue-400' : ''}`}>{absoluteIndex + 1}</span>
                                        </div>
                                     </td>
                                     {columns.map((col, colIndex) => {
-                                        const cellId = getCellId(rowIndex, colIndex);
+                                        const cellId = getCellId(absoluteIndex, colIndex);
                                         const isSelected = selectedCells.has(cellId);
-                                        const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colIndex === colIndex;
+                                        const isEditing = editingCell?.rowIndex === absoluteIndex && editingCell?.colIndex === colIndex;
                                         const isCopied = copiedCells?.has(cellId);
                                         const isPinned = !!pinnedColumns[col.key];
                                         
-                                        // ВЫЧИСЛЕНИЕ "УМНЫХ" ГРАНИЦ ДЛЯ ВЫДЕЛЕНИЯ
-                                        const isTopSelected = selectedCells.has(getCellId(rowIndex - 1, colIndex));
-                                        const isBottomSelected = selectedCells.has(getCellId(rowIndex + 1, colIndex));
-                                        const isLeftSelected = selectedCells.has(getCellId(rowIndex, colIndex - 1));
-                                        const isRightSelected = selectedCells.has(getCellId(rowIndex, colIndex + 1));
+                                        const isTopSelected = selectedCells.has(getCellId(absoluteIndex - 1, colIndex));
+                                        const isBottomSelected = selectedCells.has(getCellId(absoluteIndex + 1, colIndex));
+                                        const isLeftSelected = selectedCells.has(getCellId(absoluteIndex, colIndex - 1));
+                                        const isRightSelected = selectedCells.has(getCellId(absoluteIndex, colIndex + 1));
 
                                         let selectionShadow = undefined;
                                         if (isSelected) {
@@ -1859,7 +2006,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 </div>
                                             );
                                         } else if (col.key === 'nextWork' && act.nextWorkActId === AUTO_NEXT_ID) {
-                                            const nextAct = acts[rowIndex + 1];
+                                            const nextAct = acts[absoluteIndex + 1];
                                             if (nextAct) {
                                                 const hasContent = nextAct.number || nextAct.workName;
                                                 if (hasContent) {
@@ -1891,7 +2038,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         return (
                                             <td
                                                 key={col.key}
-                                                data-row-index={rowIndex}
+                                                data-row-index={absoluteIndex}
                                                 data-col-index={colIndex}
                                                 onMouseEnter={() => setHoveredColIndex(colIndex)}
                                                 className={`
@@ -1899,14 +2046,14 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                     ${isPinned && !isSelected && !isEditing ? 'bg-amber-50/40 [.theme-dark_&]:bg-amber-900/20' : ''}
                                                     ${isSelected ? 'bg-blue-100 z-10 [.theme-dark_&]:bg-blue-900/30' : ''}
                                                     ${isCopied ? 'relative' : ''}
-                                                    ${getHighlightClass(rowIndex, colIndex)}
+                                                    ${getHighlightClass(absoluteIndex, colIndex)}
                                                     ${col.key === 'id' ? 'text-xs text-slate-400 select-all' : ''}
                                                     ${col.key === 'commissionGroup' ? 'text-slate-600 [.theme-dark_&]:text-slate-400' : ''}
                                                     cursor-default
                                                 `}
-                                                onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
-                                                onDoubleClick={(e) => handleCellDoubleClick(e, rowIndex, colIndex)}
-                                                onContextMenu={(e) => handleContextMenu(e, rowIndex, colIndex)}
+                                                onMouseDown={(e) => handleCellMouseDown(e, absoluteIndex, colIndex)}
+                                                onDoubleClick={(e) => handleCellDoubleClick(e, absoluteIndex, colIndex)}
+                                                onContextMenu={(e) => handleContextMenu(e, absoluteIndex, colIndex)}
                                                 style={{ height: '1px', boxShadow: selectionShadow }} 
                                             >
                                                 {isCopied && <div className="copied-cell-overlay" />}
@@ -2008,21 +2155,30 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                 </tr>
                             );
                         })}
-<tr className="h-10 group cursor-pointer" onClick={() => handleAddRows(1)}>
-    <td colSpan={columns.length + 1} className="p-0 border border-t-0 border-slate-300 [.theme-dark_&]:border-slate-700 border-dashed bg-slate-50 [.theme-dark_&]:bg-[#161b22] hover:bg-blue-50 [.theme-dark_&]:hover:bg-blue-900/20 transition-colors">
-        <div className="sticky left-0 w-max flex items-center gap-10 px-4 py-2 text-slate-500 [.theme-dark_&]:text-slate-400 group-hover:text-blue-600 [.theme-dark_&]:group-hover:text-blue-400 select-none">
-            <div className="flex items-center gap-2 font-medium">
-                <PlusIcon className="w-5 h-5"/>
-                <span>Добавить новый акт</span>
-            </div>
-            <div className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                <span className="text-xs">Добавить сразу:</span>
-                <input type="number" min="1" max="50" value={numRowsToAdd} onChange={(e) => setNumRowsToAdd(Math.max(1, parseInt(e.target.value) || 1))} className="w-12 h-7 px-1 text-center border border-slate-300 [.theme-dark_&]:border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500 [.theme-dark_&]:bg-[#0d1117] [.theme-dark_&]:text-slate-200 [.theme-dark_&]:[color-scheme:dark]" />
-                <button onClick={(e) => { e.stopPropagation(); handleAddRows(numRowsToAdd); }} className="bg-white [.theme-dark_&]:bg-[#21262d] border border-slate-300 [.theme-dark_&]:border-slate-600 px-3 py-1 rounded text-xs hover:bg-blue-600 hover:text-white hover:border-blue-600 [.theme-dark_&]:hover:bg-blue-600 transition-colors">Добавить</button>
-            </div>
-        </div>
-    </td>
-</tr>
+                        {filteredActs.length === 0 && acts.length > 0 && (
+                            <tr>
+                                <td colSpan={columns.length + 1} className="text-center py-8 text-slate-500 [.theme-dark_&]:text-slate-400 bg-slate-50 [.theme-dark_&]:bg-[#161b22]">
+                                    По вашему запросу ничего не найдено.
+                                </td>
+                            </tr>
+                        )}
+                        {(!isFilterOpen || filteredActs.length > 0) && (
+                            <tr className="h-10 group cursor-pointer" onClick={() => handleAddRows(1)}>
+                                <td colSpan={columns.length + 1} className="p-0 border border-t-0 border-slate-300 [.theme-dark_&]:border-slate-700 border-dashed bg-slate-50 [.theme-dark_&]:bg-[#161b22] hover:bg-blue-50 [.theme-dark_&]:hover:bg-blue-900/20 transition-colors">
+                                    <div className="sticky left-0 w-max flex items-center gap-10 px-4 py-2 text-slate-500 [.theme-dark_&]:text-slate-400 group-hover:text-blue-600 [.theme-dark_&]:group-hover:text-blue-400 select-none">
+                                        <div className="flex items-center gap-2 font-medium">
+                                            <PlusIcon className="w-5 h-5"/>
+                                            <span>Добавить новый акт</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                                            <span className="text-xs">Добавить сразу:</span>
+                                            <input type="number" min="1" max="50" value={numRowsToAdd} onChange={(e) => setNumRowsToAdd(Math.max(1, parseInt(e.target.value) || 1))} className="w-12 h-7 px-1 text-center border border-slate-300 [.theme-dark_&]:border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500 [.theme-dark_&]:bg-[#0d1117] [.theme-dark_&]:text-slate-200 [.theme-dark_&]:[color-scheme:dark]" />
+                                            <button onClick={(e) => { e.stopPropagation(); handleAddRows(numRowsToAdd); }} className="bg-white [.theme-dark_&]:bg-[#21262d] border border-slate-300 [.theme-dark_&]:border-slate-600 px-3 py-1 rounded text-xs hover:bg-blue-600 hover:text-white hover:border-blue-600 [.theme-dark_&]:hover:bg-blue-600 transition-colors">Добавить</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
                 {fillHandleCoords && !editingCell && (
