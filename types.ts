@@ -204,11 +204,18 @@ export interface ProjectSettings {
     certificatePromptDateTo?: string;
     certificatePromptSupplier?: string;
 
-    // Новые поля для шаблонов деталей (массивы ключей в нужном порядке)
+// ШАБЛОНЫ ДЕТАЛЕЙ (Порядок вывода данных)
     builderDetailsTemplate?: string[];
     contractorDetailsTemplate?: string[];
     designerDetailsTemplate?: string[];
-    repDetailsTemplate?: string[]; // Общий шаблон для всех представителей (ФИО, Должность и т.д.)
+    
+    // Индивидуальные настройки для комиссии
+    tnzDetailsTemplate?: string[];
+    gDetailsTemplate?: string[];
+    tngDetailsTemplate?: string[];
+    prDetailsTemplate?: string[];
+    pdDetailsTemplate?: string[];
+    otherRepsDetailsTemplate?: string[]; // Один общий для i1, i2, i3
 }
 
 // Types for Import/Export feature

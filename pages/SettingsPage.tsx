@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ProjectSettings, ROLES, AiModelConfig } from '../types';
 import { generateContent } from '../services/aiService';
-import { ImportIcon, ExportIcon, TemplateIcon, DownloadIcon, QuestionMarkCircleIcon, CloudUploadIcon, DeleteIcon, CopyIcon, SparklesIcon } from '../components/Icons';
+import { ImportIcon, ExportIcon, TemplateIcon, DownloadIcon, QuestionMarkCircleIcon, CloudUploadIcon, DeleteIcon, CopyIcon, SparklesIcon, GripVerticalIcon, CloseIcon, PlusIcon } from '../components/Icons';
 
 interface SettingsPageProps {
     settings: ProjectSettings;
@@ -18,27 +18,112 @@ interface SettingsPageProps {
     registryUpdateDate?: string;
 }
 
-// --- Tooltip Logic ---
-const TagTooltip: React.FC<{ tag: string; description: string }> = ({ tag, description }) => {
-    const [isVisible, setIsVisible] = useState(false);
-    const [copied, setCopied] = useState(false);
-    const [coords, setCoords] = useState({ top: 0, left: 0 });
-    const triggerRef = useRef<HTMLSpanElement>(null);
+const ORG_FIELDS = [
+    { id: 'name', label: 'Наименование' },
+    { id: 'inn', label: 'ИНН' },
+    { id: 'ogrn', label: 'ОГРН' },
+    { id: 'kpp', label: 'КПП' },
+    { id: 'address', label: 'Адрес' },
+    { id: 'phone', label: 'Телефон' },
+    { id: 'sro', label: 'СРО' },
+];
 
-    const handleMouseEnter = () => {
-        if (triggerRef.current) {
-            const rect = triggerRef.current.getBoundingClientRect();
-            let top = rect.top - 10;
-            let left = rect.left + rect.width / 2;
-            
-            if (top < 50) top = rect.bottom + 10;
-            if (left < 100) left = 100;
-            if (left > window.innerWidth - 100) left = window.innerWidth - 100;
+const PERSON_FIELDS = [
+    { id: 'position', label: 'Должность' },
+    { id: 'name', label: 'ФИО' },
+    { id: 'organization', label: 'Организация' },
+    { id: 'authDoc', label: 'Основание (Приказ)' },
+    { id: 'nrs', label: 'НРС' },
+];
 
-            setCoords({ top, left });
-            setIsVisible(true);
-        }
+const TemplateBuilder = ({ 
+    title, 
+    description,
+    availableFields, 
+    currentTemplate, 
+    onChange 
+}: { 
+    title: string, 
+    description: string,
+    availableFields: {id: string, label: string}[], 
+    currentTemplate: string[] | undefined, 
+    onChange: (newTemplate: string[]) => void 
+}) => {
+    const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+
+    const activeFields = currentTemplate && currentTemplate.length > 0 ? currentTemplate : availableFields.map(f => f.id);
+    const inactiveFields = availableFields.filter(f => !activeFields.includes(f.id));
+
+    const handleDragStart = (index: number) => setDraggedIdx(index);
+    const handleDragOver = (e: React.DragEvent, index: number) => {
+        e.preventDefault();
+        if (draggedIdx === null || draggedIdx === index) return;
+        const newList = [...activeFields];
+        const item = newList.splice(draggedIdx, 1)[0];
+        newList.splice(index, 0, item);
+        setDraggedIdx(index);
+        onChange(newList);
     };
+
+    const handleRemove = (id: string) => onChange(activeFields.filter(f => f !== id));
+    const handleAdd = (id: string) => onChange([...activeFields, id]);
+
+    return (
+        <div className="mb-6 p-4 border border-slate-200 [.theme-dark_&]:border-slate-700 rounded-lg bg-slate-50/50 [.theme-dark_&]:bg-slate-900/20">
+            <div className="mb-3">
+                <h4 className="text-sm font-bold text-slate-700 [.theme-dark_&]:text-slate-200">{title}</h4>
+                <p className="text-xs text-slate-500">{description}</p>
+            </div>
+
+            <div className="mb-4 p-3 bg-white [.theme-dark_&]:bg-[#0d1117] border border-slate-200 [.theme-dark_&]:border-slate-700 rounded min-h-[60px] flex flex-wrap gap-2 items-start shadow-inner">
+                {activeFields.length === 0 && <span className="text-xs text-slate-400 italic py-1">Вы удалили все поля. Выберите из списка ниже.</span>}
+                {activeFields.map((fieldId, idx) => {
+                    const field = availableFields.find(f => f.id === fieldId);
+                    if (!field) return null;
+                    return (
+                        <div
+                            key={fieldId}
+                            draggable
+                            onDragStart={() => handleDragStart(idx)}
+                            onDragOver={(e) => handleDragOver(e, idx)}
+                            onDragEnd={() => setDraggedIdx(null)}
+                            className={`
+                                flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium cursor-move select-none transition-all
+                                ${draggedIdx === idx ? 'opacity-40 scale-95 border-blue-400 bg-blue-50' : 'bg-blue-50 [.theme-dark_&]:bg-blue-900/30 border-blue-200 [.theme-dark_&]:border-blue-800 text-blue-700 [.theme-dark_&]:text-blue-300 shadow-sm'}
+                            `}
+                        >
+                            <GripVerticalIcon className="w-3 h-3 text-blue-400 opacity-50" />
+                            {field.label}
+                            <button type="button" onClick={() => handleRemove(fieldId)} className="ml-1 text-blue-400 hover:text-red-500 transition-colors bg-white/50 [.theme-dark_&]:bg-black/20 rounded p-0.5">
+                                <CloseIcon className="w-3 h-3" />
+                            </button>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {inactiveFields.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2 pt-3 border-t border-slate-200 [.theme-dark_&]:border-slate-700">
+                    <span className="text-xs font-medium text-slate-500 w-full mb-1">Доступные поля:</span>
+                    {inactiveFields.map(field => (
+                        <button
+                            key={field.id}
+                            type="button"
+                            onClick={() => handleAdd(field.id)}
+                            className="flex items-center gap-1 px-2 py-1 rounded border border-slate-200 [.theme-dark_&]:border-slate-600 bg-white [.theme-dark_&]:bg-slate-800 text-slate-600 [.theme-dark_&]:text-slate-300 text-xs hover:border-green-400 hover:text-green-600 [.theme-dark_&]:hover:text-green-400 transition-colors shadow-sm"
+                        >
+                            <PlusIcon className="w-3 h-3" /> {field.label}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// МАКСИМАЛЬНО ЛЕГКИЙ КОМПОНЕНТ КАРТОЧКИ ТЕГА (без теней и transition-all)
+const TagCard: React.FC<{ tag: string; description: string }> = ({ tag, description }) => {
+    const [copied, setCopied] = useState(false);
 
     const handleCopy = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -48,27 +133,18 @@ const TagTooltip: React.FC<{ tag: string; description: string }> = ({ tag, descr
     };
 
     return (
-        <>
-            <code
-                ref={triggerRef}
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={() => setIsVisible(false)}
-                onClick={handleCopy}
-                className="bg-slate-100 text-blue-700 px-1.5 py-0.5 rounded-md cursor-pointer hover:bg-blue-200 transition-colors font-mono relative inline-block mx-0.5"
-                title="Нажмите, чтобы скопировать"
-            >
+        <div 
+            onClick={handleCopy}
+            className="flex flex-col gap-1 bg-slate-50 border border-slate-200 p-2.5 rounded cursor-pointer hover:border-blue-400 hover:bg-blue-50/50"
+            title="Нажмите, чтобы скопировать"
+        >
+            <code className="text-blue-700 font-bold font-mono text-xs w-max">
                 {copied ? 'Скопировано!' : tag}
             </code>
-            {isVisible && (
-                <div 
-                    className="fixed z-50 px-3 py-2 bg-slate-800 text-white text-xs rounded-md shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-full w-max max-w-xs text-center"
-                    style={{ top: coords.top, left: coords.left }}
-                >
-                    {description}
-                    <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-0 h-0 border-l-4 border-l-transparent border-r-4 border-r-transparent border-t-4 border-t-slate-800 -mb-1"></div>
-                </div>
-            )}
-        </>
+            <span className="text-[11px] text-slate-600 leading-tight">
+                {description}
+            </span>
+        </div>
     );
 };
 
@@ -85,11 +161,11 @@ const CopyableCode: React.FC<{ children: React.ReactNode; textToCopy: string; ti
         <div className="mb-3">
             {title && <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">{title}</p>}
             <div 
-                className="group relative bg-white p-3 rounded border border-slate-200 text-xs font-mono text-slate-600 cursor-pointer hover:border-blue-400 hover:shadow-sm transition-all"
+                className="group relative bg-white p-3 rounded border border-slate-200 text-xs font-mono text-slate-600 cursor-pointer hover:border-blue-400 hover:shadow-sm"
                 onClick={handleCopy}
                 title="Нажмите, чтобы скопировать код"
             >
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100">
                     {copied ? (
                         <span className="text-green-600 font-bold bg-green-50 px-1 rounded">Скопировано!</span>
                     ) : (
@@ -169,7 +245,7 @@ const TagGenerator: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm relative opacity-90 hover:opacity-100 transition-opacity">
+                <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm relative opacity-90 hover:opacity-100">
                     <h5 className="font-bold text-base text-slate-700 mb-4 flex items-center gap-2">
                         <span className="bg-slate-100 text-slate-500 rounded-full w-6 h-6 flex items-center justify-center text-xs border border-slate-200">2</span>
                         Простой текст (одной строкой)
@@ -281,7 +357,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 }) => {
     const [activeTab, setActiveTab] = useState<SettingsTab>('general');
     
-    // Состояния для модалки со справкой
     const [isHelpOpen, setIsHelpOpen] = useState(false);
     const [helpType, setHelpType] = useState<'main' | 'registry'>('main');
 
@@ -411,14 +486,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             <div className="p-6 pb-0 flex-shrink-0">
                 <h1 className="text-2xl font-bold text-slate-800 mb-6">Настройки</h1>
                 
-                {/* Main Tabs */}
+                {/* Вкладки */}
                 <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg mb-4">
                     <button
                         type="button"
                         onClick={() => setActiveTab('general')}
                         className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex-1 ${activeTab === 'general' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
                     >
-                        Общие настройки
+                        Общие
                     </button>
                     <button
                         type="button"
@@ -445,8 +520,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             </div>
 
             <div className="flex-grow overflow-y-auto px-6 pb-20">
+                
+                {/* 1. ВКЛАДКА: ОБЩИЕ */}
                 {activeTab === 'general' && (
-                    <div className="space-y-6">
+                    <div className="space-y-6 max-w-4xl">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label htmlFor="historyDepth" className={labelClass}>
@@ -485,8 +562,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                     </div>
                 )}
 
+                {/* 2. ВКЛАДКА: НАСТРОЙКИ АКТА */}
                 {activeTab === 'act' && (
-                    <div className="space-y-6">
+                    <div className="space-y-6 max-w-4xl">
                         <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Настройки формы акта</h3>
 
                         <SettingToggle id="showAdditionalInfo" label='Показывать поле "Дополнительные сведения"' formData={formData} handleChange={handleChange}>
@@ -539,242 +617,329 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                                 />
                             </div>
                         </SettingToggle>
+
+                        {/* НАСТРОЙКИ ВЫВОДА ДАННЫХ */}
+                        <div className="pt-6 border-t border-slate-200 mt-8">
+                            <div className="mb-6">
+                                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                    Организации
+                                </h3>
+                                <p className="text-sm text-slate-500 mt-1">Сконфигурируйте порядок данных для реквизитов организаций в шаблоне Word.</p>
+                            </div>
+                            
+                            <TemplateBuilder 
+                                title="Застройщик {builder_details}" 
+                                description="Настройка вывода для Застройщика (технического заказчика)"
+                                availableFields={ORG_FIELDS}
+                                currentTemplate={(formData as any).builderDetailsTemplate || []}
+                                onChange={(newTemplate) => setFormData({...formData, builderDetailsTemplate: newTemplate} as any)}
+                            />
+
+                            <TemplateBuilder 
+                                title="Подрядчик {contractor_details}" 
+                                description="Настройка вывода для Лица, осуществляющего строительство"
+                                availableFields={ORG_FIELDS}
+                                currentTemplate={(formData as any).contractorDetailsTemplate || []}
+                                onChange={(newTemplate) => setFormData({...formData, contractorDetailsTemplate: newTemplate} as any)}
+                            />
+
+                            <TemplateBuilder 
+                                title="Проектировщик {designer_details}" 
+                                description="Настройка вывода для Проектировщика"
+                                availableFields={ORG_FIELDS}
+                                currentTemplate={(formData as any).designerDetailsTemplate || []}
+                                onChange={(newTemplate) => setFormData({...formData, designerDetailsTemplate: newTemplate} as any)}
+                            />
+                        </div>
+
+                        <div className="pt-6 border-t border-slate-200 mt-8">
+                            <div className="mb-6">
+                                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                    Комиссия (Представители)
+                                </h3>
+                                <p className="text-sm text-slate-500 mt-1">Настройте порядок вывода данных индивидуально для каждого представителя.</p>
+                            </div>
+                            
+                            <TemplateBuilder 
+                                title="Представитель застройщика {tnz_details}" 
+                                description={ROLES.tnz}
+                                availableFields={PERSON_FIELDS}
+                                currentTemplate={(formData as any).tnzDetailsTemplate || []}
+                                onChange={(newTemplate) => setFormData({...formData, tnzDetailsTemplate: newTemplate} as any)}
+                            />
+
+                            <TemplateBuilder 
+                                title="Представитель подрядчика {g_details}" 
+                                description={ROLES.g}
+                                availableFields={PERSON_FIELDS}
+                                currentTemplate={(formData as any).gDetailsTemplate || []}
+                                onChange={(newTemplate) => setFormData({...formData, gDetailsTemplate: newTemplate} as any)}
+                            />
+
+                            <TemplateBuilder 
+                                title="Представитель подрядчика (строй. контроль) {tng_details}" 
+                                description={ROLES.tng}
+                                availableFields={PERSON_FIELDS}
+                                currentTemplate={(formData as any).tngDetailsTemplate || []}
+                                onChange={(newTemplate) => setFormData({...formData, tngDetailsTemplate: newTemplate} as any)}
+                            />
+
+                            <TemplateBuilder 
+                                title="Проектировщик {pr_details}" 
+                                description={ROLES.pr}
+                                availableFields={PERSON_FIELDS}
+                                currentTemplate={(formData as any).prDetailsTemplate || []}
+                                onChange={(newTemplate) => setFormData({...formData, prDetailsTemplate: newTemplate} as any)}
+                            />
+
+                            <TemplateBuilder 
+                                title="Лицо, выполнившее работы {pd_details}" 
+                                description={ROLES.pd}
+                                availableFields={PERSON_FIELDS}
+                                currentTemplate={(formData as any).pdDetailsTemplate || []}
+                                onChange={(newTemplate) => setFormData({...formData, pdDetailsTemplate: newTemplate} as any)}
+                            />
+
+                            <TemplateBuilder 
+                                title="Иные представители {i1_details}, {i2_details}, {i3_details}" 
+                                description="Общий шаблон для всех иных представителей"
+                                availableFields={PERSON_FIELDS}
+                                currentTemplate={(formData as any).otherRepsDetailsTemplate || []}
+                                onChange={(newTemplate) => setFormData({...formData, otherRepsDetailsTemplate: newTemplate} as any)}
+                            />
+                        </div>
                     </div>
                 )}
 
+                {/* 3. ВКЛАДКА: AI */}
                 {activeTab === 'ai' && (
-                    <div className="space-y-6">
-                        <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Настройки AI (Распознавание документов)</h3>
+                    <div className="space-y-8 max-w-4xl">
                         
-                        <div>
-                            <label htmlFor="activeAiModelId" className={labelClass}>
-                                Активная AI Модель
-                            </label>
-                            <select
-                                id="activeAiModelId"
-                                name="activeAiModelId"
-                                value={formData.activeAiModelId || ''}
-                                onChange={handleActiveModelChange}
-                                className={inputClass}
-                            >
-                                <option value="">-- Не выбрана --</option>
-                                {formData.aiModels?.map(model => (
-                                    <option key={model.id} value={model.id}>{model.name} ({model.modelId})</option>
-                                ))}
-                                {!formData.activeAiModelId && (formData.geminiApiKey || formData.openAiApiKey) && (
-                                    <option value="" disabled>-- Используются устаревшие настройки --</option>
-                                )}
-                            </select>
-                        </div>
-
-                        <div className="mt-6 border border-slate-200 rounded-md p-4 bg-slate-50">
-                            <div className="flex justify-between items-center mb-4">
-                                <h4 className="text-sm font-medium text-slate-700">Настроенные модели</h4>
-                                {!editingModel && (
-                                    <button
-                                        type="button"
-                                        onClick={handleAddNewModel}
-                                        className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-200 transition-colors font-medium"
-                                    >
-                                        + Добавить модель
-                                    </button>
-                                )}
-                            </div>
+                        <div className="space-y-4">
+                            <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Настройки AI (Модели и API)</h3>
                             
-                            {editingModel ? (
-                                <div className="bg-white p-4 border border-blue-200 rounded-md shadow-sm">
-                                    <h5 className="text-sm font-medium text-slate-800 mb-4 border-b border-slate-100 pb-2">
-                                        {formData.aiModels?.some(m => m.id === editingModel.id) ? 'Редактирование модели' : 'Новая модель'}
-                                    </h5>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-600 mb-1">Название (для вас)</label>
-                                            <input
-                                                type="text"
-                                                value={editingModel.name}
-                                                onChange={(e) => setEditingModel({...editingModel, name: e.target.value})}
-                                                placeholder="Например: Мой Gemini"
-                                                className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-600 mb-1">Провайдер API</label>
-                                            <select
-                                                value={editingModel.provider}
-                                                onChange={(e) => setEditingModel({...editingModel, provider: e.target.value as 'gemini'|'openai'})}
-                                                className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none bg-white"
-                                            >
-                                                <option value="openai">OpenRouter / OpenAI Compatible</option>
-                                                <option value="gemini">Google Gemini API (Native)</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-600 mb-1">ID Модели</label>
-                                            <input
-                                                type="text"
-                                                value={editingModel.modelId}
-                                                onChange={(e) => setEditingModel({...editingModel, modelId: e.target.value})}
-                                                placeholder={editingModel.provider === 'gemini' ? "gemini-2.5-flash" : "qwen/qwen-2.5-vl-72b-instruct"}
-                                                className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none font-mono"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-600 mb-1">API Ключ</label>
-                                            <input
-                                                type="password"
-                                                value={editingModel.apiKey}
-                                                onChange={(e) => setEditingModel({...editingModel, apiKey: e.target.value})}
-                                                placeholder="sk-or-v1-..."
-                                                className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none font-mono"
-                                            />
-                                        </div>
-                                        {editingModel.provider === 'openai' && (
-                                            <div className="md:col-span-2">
-                                                <label className="block text-xs font-medium text-slate-600 mb-1">Base URL</label>
+                            <div>
+                                <label htmlFor="activeAiModelId" className={labelClass}>
+                                    Активная AI Модель
+                                </label>
+                                <select
+                                    id="activeAiModelId"
+                                    name="activeAiModelId"
+                                    value={formData.activeAiModelId || ''}
+                                    onChange={handleActiveModelChange}
+                                    className={inputClass}
+                                >
+                                    <option value="">-- Не выбрана --</option>
+                                    {formData.aiModels?.map(model => (
+                                        <option key={model.id} value={model.id}>{model.name} ({model.modelId})</option>
+                                    ))}
+                                    {!formData.activeAiModelId && (formData.geminiApiKey || formData.openAiApiKey) && (
+                                        <option value="" disabled>-- Используются устаревшие настройки --</option>
+                                    )}
+                                </select>
+                            </div>
+
+                            <div className="mt-6 border border-slate-200 rounded-md p-4 bg-slate-50">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h4 className="text-sm font-medium text-slate-700">Настроенные модели</h4>
+                                    {!editingModel && (
+                                        <button
+                                            type="button"
+                                            onClick={handleAddNewModel}
+                                            className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-200 transition-colors font-medium"
+                                        >
+                                            + Добавить модель
+                                        </button>
+                                    )}
+                                </div>
+                                
+                                {editingModel ? (
+                                    <div className="bg-white p-4 border border-blue-200 rounded-md shadow-sm">
+                                        <h5 className="text-sm font-medium text-slate-800 mb-4 border-b border-slate-100 pb-2">
+                                            {formData.aiModels?.some(m => m.id === editingModel.id) ? 'Редактирование модели' : 'Новая модель'}
+                                        </h5>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-600 mb-1">Название (для вас)</label>
                                                 <input
                                                     type="text"
-                                                    value={editingModel.baseUrl}
-                                                    onChange={(e) => setEditingModel({...editingModel, baseUrl: e.target.value})}
-                                                    placeholder="https://openrouter.ai/api/v1"
+                                                    value={editingModel.name}
+                                                    onChange={(e) => setEditingModel({...editingModel, name: e.target.value})}
+                                                    placeholder="Например: Мой Gemini"
+                                                    className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-600 mb-1">Провайдер API</label>
+                                                <select
+                                                    value={editingModel.provider}
+                                                    onChange={(e) => setEditingModel({...editingModel, provider: e.target.value as 'gemini'|'openai'})}
+                                                    className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none bg-white"
+                                                >
+                                                    <option value="openai">OpenRouter / OpenAI Compatible</option>
+                                                    <option value="gemini">Google Gemini API (Native)</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-slate-600 mb-1">ID Модели</label>
+                                                <input
+                                                    type="text"
+                                                    value={editingModel.modelId}
+                                                    onChange={(e) => setEditingModel({...editingModel, modelId: e.target.value})}
+                                                    placeholder={editingModel.provider === 'gemini' ? "gemini-2.5-flash" : "qwen/qwen-2.5-vl-72b-instruct"}
                                                     className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none font-mono"
                                                 />
                                             </div>
-                                        )}
-                                    </div>
-                                    <div className="mt-4 flex justify-end gap-2 pt-4 border-t border-slate-100">
-                                        <button
-                                            type="button"
-                                            onClick={handleCancelEdit}
-                                            className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
-                                        >
-                                            Отмена
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={handleSaveModel}
-                                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
-                                        >
-                                            Сохранить модель
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : (!formData.aiModels || formData.aiModels.length === 0) ? (
-                                <div className="text-center py-6 bg-white border border-slate-200 rounded-md">
-                                    <p className="text-sm text-slate-500 mb-2">Нет добавленных моделей</p>
-                                    <button type="button" onClick={handleAddNewModel} className="text-sm text-blue-600 hover:underline">Добавить первую модель</button>
-                                </div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {formData.aiModels.map(model => (
-                                        <div key={model.id} className="bg-white p-3 border border-slate-200 rounded-md flex justify-between items-center shadow-sm hover:border-blue-300 transition-colors">
                                             <div>
-                                                <div className="font-medium text-sm text-slate-800 flex items-center gap-2">
-                                                    {model.name}
-                                                    {formData.activeAiModelId === model.id && (
-                                                        <span className="bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Активная</span>
-                                                    )}
-                                                </div>
-                                                <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                                                    <span className="bg-slate-100 px-1.5 py-0.5 rounded">{model.provider === 'gemini' ? 'Gemini API' : 'OpenRouter'}</span>
-                                                    <span className="font-mono">{model.modelId}</span>
-                                                </div>
+                                                <label className="block text-xs font-medium text-slate-600 mb-1">API Ключ</label>
+                                                <input
+                                                    type="password"
+                                                    value={editingModel.apiKey}
+                                                    onChange={(e) => setEditingModel({...editingModel, apiKey: e.target.value})}
+                                                    placeholder="sk-or-v1-..."
+                                                    className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none font-mono"
+                                                />
                                             </div>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleEditModel(model)}
-                                                    className="text-blue-600 hover:bg-blue-50 p-1.5 rounded transition-colors"
-                                                    title="Редактировать"
-                                                >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                                                    </svg>
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveAiModel(model.id)}
-                                                    className="text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors"
-                                                    title="Удалить"
-                                                >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                                                    </svg>
-                                                </button>
-                                            </div>
+                                            {editingModel.provider === 'openai' && (
+                                                <div className="md:col-span-2">
+                                                    <label className="block text-xs font-medium text-slate-600 mb-1">Base URL</label>
+                                                    <input
+                                                        type="text"
+                                                        value={editingModel.baseUrl}
+                                                        onChange={(e) => setEditingModel({...editingModel, baseUrl: e.target.value})}
+                                                        placeholder="https://openrouter.ai/api/v1"
+                                                        className="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:outline-none font-mono"
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
-                                    ))}
-                                </div>
-                            )}
-                            
-                            {!editingModel && (
-                                <p className="text-xs text-slate-500 mt-4">
-                                    Найдите ID моделей на <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">OpenRouter Models</a>.
-                                </p>
-                            )}
+                                        <div className="mt-4 flex justify-end gap-2 pt-4 border-t border-slate-100">
+                                            <button
+                                                type="button"
+                                                onClick={handleCancelEdit}
+                                                className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
+                                            >
+                                                Отмена
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleSaveModel}
+                                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                                            >
+                                                Сохранить модель
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (!formData.aiModels || formData.aiModels.length === 0) ? (
+                                    <div className="text-center py-6 bg-white border border-slate-200 rounded-md">
+                                        <p className="text-sm text-slate-500 mb-2">Нет добавленных моделей</p>
+                                        <button type="button" onClick={handleAddNewModel} className="text-sm text-blue-600 hover:underline">Добавить первую модель</button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {formData.aiModels.map(model => (
+                                            <div key={model.id} className="bg-white p-3 border border-slate-200 rounded-md flex justify-between items-center shadow-sm hover:border-blue-300 transition-colors">
+                                                <div>
+                                                    <div className="font-medium text-sm text-slate-800 flex items-center gap-2">
+                                                        {model.name}
+                                                        {formData.activeAiModelId === model.id && (
+                                                            <span className="bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Активная</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
+                                                        <span className="bg-slate-100 px-1.5 py-0.5 rounded">{model.provider === 'gemini' ? 'Gemini API' : 'OpenRouter'}</span>
+                                                        <span className="font-mono">{model.modelId}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleEditModel(model)}
+                                                        className="text-blue-600 hover:bg-blue-50 p-1.5 rounded transition-colors"
+                                                        title="Редактировать"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                                        </svg>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveAiModel(model.id)}
+                                                        className="text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors"
+                                                        title="Удалить"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                
+                                {!editingModel && (
+                                    <p className="text-xs text-slate-500 mt-4">
+                                        Найдите ID моделей на <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">OpenRouter Models</a>.
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="pt-2">
+                                <button
+                                    type="button"
+                                    onClick={handleTestConnection}
+                                    disabled={testStatus === 'loading'}
+                                    className="px-4 py-2 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 text-sm font-medium flex items-center gap-2"
+                                >
+                                    {testStatus === 'loading' ? 'Проверка...' : 'Проверить подключение'}
+                                </button>
+                                {testMessage && (
+                                    <p className={`text-xs mt-2 ${testStatus === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                                        {testMessage}
+                                    </p>
+                                )}
+                            </div>
                         </div>
 
-                        <div className="pt-2 pb-6">
-                            <button
-                                type="button"
-                                onClick={handleTestConnection}
-                                disabled={testStatus === 'loading'}
-                                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 text-sm font-medium flex items-center gap-2"
-                            >
-                                {testStatus === 'loading' ? 'Проверка...' : 'Проверить подключение'}
-                            </button>
-                            {testMessage && (
-                                <p className={`text-xs mt-2 ${testStatus === 'success' ? 'text-green-600' : 'text-red-600'}`}>
-                                    {testMessage}
-                                </p>
-                            )}
-                        </div>
-
-                        <div className="space-y-4 pt-4 border-t border-slate-200">
-                            <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Промпты для Сертификатов</h3>
-                            <p className="text-xs text-slate-500 mb-4">Настройте инструкции для нейросети при распознавании сертификатов и паспортов качества.</p>
+                        <div className="space-y-4 pt-6 border-t border-slate-200">
+                            <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Промпты для AI-Распознавания</h3>
                             
                             <div>
                                 <label htmlFor="certificatePromptNumber" className={labelClass}>Номер документа</label>
-                                <textarea id="certificatePromptNumber" name="certificatePromptNumber" value={formData.certificatePromptNumber || ''} onChange={handleChange} rows={6} className={`${inputClass} min-h-[150px] font-mono text-xs`} />
+                                <textarea id="certificatePromptNumber" name="certificatePromptNumber" value={formData.certificatePromptNumber || ''} onChange={handleChange} rows={6} className={`${inputClass} min-h-[100px] font-mono text-xs`} />
                             </div>
                             <div>
                                 <label htmlFor="certificatePromptDate" className={labelClass}>Дата от</label>
-                                <textarea id="certificatePromptDate" name="certificatePromptDate" value={formData.certificatePromptDate || ''} onChange={handleChange} rows={6} className={`${inputClass} min-h-[150px] font-mono text-xs`} />
+                                <textarea id="certificatePromptDate" name="certificatePromptDate" value={formData.certificatePromptDate || ''} onChange={handleChange} rows={6} className={`${inputClass} min-h-[100px] font-mono text-xs`} />
                             </div>
                             <div>
                                 <label htmlFor="certificatePromptDateTo" className={labelClass}>Дата до</label>
-                                <textarea id="certificatePromptDateTo" name="certificatePromptDateTo" value={(formData as any).certificatePromptDateTo || ''} onChange={handleChange} rows={6} className={`${inputClass} min-h-[150px] font-mono text-xs`} />
+                                <textarea id="certificatePromptDateTo" name="certificatePromptDateTo" value={(formData as any).certificatePromptDateTo || ''} onChange={handleChange} rows={6} className={`${inputClass} min-h-[100px] font-mono text-xs`} />
                             </div>
                             <div>
                                 <label htmlFor="certificatePromptSupplier" className={labelClass}>Поставщик</label>
-                                <textarea id="certificatePromptSupplier" name="certificatePromptSupplier" value={(formData as any).certificatePromptSupplier || ''} onChange={handleChange} rows={6} className={`${inputClass} min-h-[150px] font-mono text-xs`} />
+                                <textarea id="certificatePromptSupplier" name="certificatePromptSupplier" value={(formData as any).certificatePromptSupplier || ''} onChange={handleChange} rows={6} className={`${inputClass} min-h-[100px] font-mono text-xs`} />
                             </div>
                             <div>
                                 <label htmlFor="certificatePromptMaterials" className={labelClass}>Материалы</label>
-                                <textarea id="certificatePromptMaterials" name="certificatePromptMaterials" value={formData.certificatePromptMaterials || ''} onChange={handleChange} rows={6} className={`${inputClass} min-h-[150px] font-mono text-xs`} />
+                                <textarea id="certificatePromptMaterials" name="certificatePromptMaterials" value={formData.certificatePromptMaterials || ''} onChange={handleChange} rows={6} className={`${inputClass} min-h-[100px] font-mono text-xs`} />
                             </div>
-                        </div>
-
-                        <div className="space-y-4 pt-4 border-t border-slate-200">
-                            <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Промпт для Людей</h3>
                             <div>
                                 <label htmlFor="personExtractionPrompt" className={labelClass}>Промпт (Люди)</label>
-                                <textarea id="personExtractionPrompt" name="personExtractionPrompt" value={formData.personExtractionPrompt || ''} onChange={handleChange} className={`${inputClass} min-h-[150px] font-mono text-xs`} />
+                                <textarea id="personExtractionPrompt" name="personExtractionPrompt" value={formData.personExtractionPrompt || ''} onChange={handleChange} className={`${inputClass} min-h-[100px] font-mono text-xs`} />
                             </div>
-                        </div>
-
-                        <div className="space-y-4 pt-4 border-t border-slate-200">
-                            <h3 className="text-base font-medium text-slate-800 border-b border-slate-100 pb-2 mb-4">Промпт для Организаций</h3>
                             <div>
                                 <label htmlFor="organizationExtractionPrompt" className={labelClass}>Промпт (Организации)</label>
-                                <textarea id="organizationExtractionPrompt" name="organizationExtractionPrompt" value={formData.organizationExtractionPrompt || ''} onChange={handleChange} className={`${inputClass} min-h-[150px] font-mono text-xs`} />
+                                <textarea id="organizationExtractionPrompt" name="organizationExtractionPrompt" value={formData.organizationExtractionPrompt || ''} onChange={handleChange} className={`${inputClass} min-h-[100px] font-mono text-xs`} />
                             </div>
                         </div>
                     </div>
                 )}
 
+                {/* 4. ВКЛАДКА: ДАННЫЕ И ШАБЛОНЫ */}
                 {activeTab === 'data' && (
-                    <div className="space-y-6 mt-2">
+                    <div className="space-y-6 mt-2 max-w-4xl">
                         
                         {/* 1. Блок Управление данными */}
                         <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm relative">
@@ -912,11 +1077,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             </div>
 
             {/* =========================================
-                МОДАЛЬНОЕ ОКНО СО СПРАВКОЙ ПО ТЕГАМ
+                МОДАЛЬНОЕ ОКНО СО СПРАВКОЙ ПО ТЕГАМ (Оптимизировано от лагов)
             ========================================= */}
             {isHelpOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-                    <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-xl shadow-2xl flex flex-col overflow-hidden">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
+                    <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-xl shadow-2xl flex flex-col overflow-hidden">
                         <div className="flex justify-between items-center p-4 border-b border-slate-200 bg-slate-50">
                             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                                 <QuestionMarkCircleIcon className="w-6 h-6 text-blue-600" />
@@ -951,83 +1116,71 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                                 </button>
                             </div>
 
-                            <div className="prose max-w-none text-slate-700 text-sm leading-relaxed pb-4">
+                            <div className="text-slate-700 text-sm leading-relaxed pb-4">
                                 {helpType === 'main' ? (
                                     <>
-                                        <p>Используйте эти теги в основном шаблоне акта (.docx). При наведении на тег появится подсказка.</p>
+                                        <p className="mb-4">Используйте эти теги в основном шаблоне акта (.docx). Они будут автоматически заменены на реальные данные при скачивании.</p>
                                         
-                                        <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg mb-6 mt-4">
-                                            <h4 className="font-semibold text-blue-800 mb-1">Использование в полях по умолчанию</h4>
-                                            <p className="text-xs text-blue-700 mb-2">
-                                                Теги можно использовать не только в Word-шаблоне, но и в настройках приложения (например, в полях "Приложения" или "Доп. сведения"). При генерации документа программа заменит их на данные.
-                                            </p>
-                                            <div className="text-xs">
-                                                <strong className="text-blue-900">Пример для поля "Приложения":</strong>
-                                                <code className="block mt-1 bg-white border border-blue-200 p-2 rounded text-slate-700">
-                                                    Исполнительная схема; {'{certs}'};{'\n'}
-                                                    {'{materials}'}
-                                                </code>
-                                            </div>
-                                        </div>
-
-                                        <h4 className="font-semibold mt-4 mb-2 text-slate-800">Основные данные</h4>
-                                        <div className="flex flex-wrap gap-2 mb-6">
-                                            <TagTooltip tag="{act_number}" description="Номер акта" />
-                                            <TagTooltip tag="{object_name}" description="Наименование объекта строительства" />
-                                            <TagTooltip tag="{act_day}" description="День подписания акта" />
-                                            <TagTooltip tag="{act_month}" description="Месяц подписания" />
-                                            <TagTooltip tag="{act_year}" description="Год подписания" />
-                                            <TagTooltip tag="{copies_count}" description="Количество экземпляров" />
-                                            <TagTooltip tag="{additional_info}" description="Дополнительные сведения" />
-                                            <TagTooltip tag="{attachments}" description="Текст из поля Приложения (одной строкой с переносами)" />
+                                        <h4 className="font-semibold mt-4 mb-3 text-slate-800 border-b pb-1">Основные данные</h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+                                            <TagCard tag="{act_number}" description="Номер акта" />
+                                            <TagCard tag="{object_name}" description="Наименование объекта строительства" />
+                                            <TagCard tag="{act_day}" description="День подписания акта" />
+                                            <TagCard tag="{act_month}" description="Месяц подписания" />
+                                            <TagCard tag="{act_year}" description="Год подписания" />
+                                            <TagCard tag="{copies_count}" description="Количество экземпляров" />
+                                            <TagCard tag="{additional_info}" description="Дополнительные сведения" />
+                                            <TagCard tag="{attachments}" description="Текст из поля Приложения" />
                                         </div>
 
                                         <TagGenerator />
 
-                                        <h4 className="font-semibold mt-6 mb-2 text-slate-800">Организации-участники</h4>
-                                        <div className="flex flex-wrap gap-2 mb-6">
-                                            <TagTooltip tag="{builder_details}" description="Реквизиты Застройщика" />
-                                            <TagTooltip tag="{contractor_details}" description="Реквизиты Лица, осуществляющего строительство" />
-                                            <TagTooltip tag="{designer_details}" description="Реквизиты Проектировщика" />
-                                        </div>
-
-                                        <h4 className="font-semibold mt-6 mb-2 text-slate-800">Произвели осмотр работ</h4>
-                                        <div className="flex flex-wrap gap-2 mb-6">
-                                            <TagTooltip tag="{work_performer}" description="Реквизиты Лица, выполнившего работы" />
-                                        </div>
-
-                                        <h4 className="font-semibold mt-6 mb-2 text-slate-800">Работы, Материалы, Даты</h4>
-                                        <div className="flex flex-wrap gap-2 mb-6">
-                                            <TagTooltip tag="{work_name}" description="Наименование выполненных работ" />
-                                            <TagTooltip tag="{project_docs}" description="Проектная документация" />
+                                        <h4 className="font-semibold mt-8 mb-3 text-slate-800 border-b pb-1">Работы, Материалы, Даты</h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+                                            <TagCard tag="{work_name}" description="Наименование выполненных работ" />
+                                            <TagCard tag="{project_docs}" description="Проектная документация" />
                                             
-                                            <TagTooltip tag="{materials}" description="Автоматически: 'Текст материалов' ИЛИ 'ссылка на реестр' (если материалов > порога)" />
-                                            <TagTooltip tag="{materials_raw}" description="Всегда полный список материалов текстом" />
+                                            <TagCard tag="{materials}" description="Автоматически: Текст или ссылка на реестр" />
+                                            <TagCard tag="{materials_raw}" description="Всегда полный список материалов текстом" />
                                             
-                                            <TagTooltip tag="{material_docs}" description="Уникальные документов (паспортов). Смарт: если материалов много, будет ссылка на реестр." />
-                                            <TagTooltip tag="{material_docs_raw}" description="Все уникальные документы (без названий) всегда полным списком." />
+                                            <TagCard tag="{material_docs}" description="Уникальные паспорта. Смарт: ссылка на реестр при лимите." />
+                                            <TagCard tag="{material_docs_raw}" description="Все уникальные паспорта всегда текстом." />
 
-                                            <TagTooltip tag="{certs}" description="Документы о качестве/схемы" />
-                                            <TagTooltip tag="{regulations}" description="Нормативные документы" />
-                                            <TagTooltip tag="{next_work}" description="Разрешенные следующие работы" />
-                                            <TagTooltip tag="{work_start_day}" description="День начала работ" />
-                                            <TagTooltip tag="{work_end_day}" description="День окончания работ" />
+                                            <TagCard tag="{certs}" description="Документы о качестве/схемы" />
+                                            <TagCard tag="{regulations}" description="Нормативные документы" />
+                                            <TagCard tag="{next_work}" description="Разрешенные следующие работы" />
+                                            
+                                            <TagCard tag="{work_start_day}" description="День начала работ" />
+                                            <TagCard tag="{work_start_month}" description="Месяц начала работ" />
+                                            <TagCard tag="{work_start_year}" description="Год начала работ" />
+                                            
+                                            <TagCard tag="{work_end_day}" description="День окончания работ" />
+                                            <TagCard tag="{work_end_month}" description="Месяц окончания работ" />
+                                            <TagCard tag="{work_end_year}" description="Год окончания работ" />
                                         </div>
 
-                                        <h4 className="font-semibold mt-6 mb-2 text-slate-800">Комиссия (Представители)</h4>
-                                        <p className="text-xs text-slate-500 mb-3">Используйте <code>{`{#tnz}...{/tnz}`}</code> для скрытия пустых полей.</p>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                        <h4 className="font-semibold mt-8 mb-3 text-slate-800 border-b pb-1">Организации-участники</h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+                                            <TagCard tag="{builder_details}" description="Реквизиты Застройщика" />
+                                            <TagCard tag="{contractor_details}" description="Реквизиты Лица, осуществляющего строительство" />
+                                            <TagCard tag="{designer_details}" description="Реквизиты Проектировщика" />
+                                            <TagCard tag="{work_performer}" description="Реквизиты Лица, выполнившего работы" />
+                                        </div>
+
+                                        <h4 className="font-semibold mt-8 mb-3 text-slate-800 border-b pb-1">Комиссия (Представители)</h4>
+                                        <p className="text-xs text-slate-500 mb-3">Используйте <code>{`{#tnz}...{/tnz}`}</code> вокруг блока текста, чтобы скрыть его, если этот представитель не выбран.</p>
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
                                             {Object.entries(ROLES).map(([key, label]) => (
                                                 <div key={key} className="border border-slate-200 bg-slate-50 p-3 rounded">
                                                     <div className="font-semibold mb-2 text-slate-800">{label} ({key})</div>
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        <TagTooltip tag={`{${key}_details}`} description={`Должность, ФИО, Документ`} />
-                                                        <TagTooltip tag={`{${key}_details_short}`} description={`Должность, Фамилия И.О., Документ`} />
-                                                        <TagTooltip tag={`{${key}_name}`} description="Полное ФИО" />
-                                                        <TagTooltip tag={`{${key}_name_short}`} description="Фамилия И.О." />
-                                                        <TagTooltip tag={`{${key}_position}`} description="Должность" />
-                                                        <TagTooltip tag={`{${key}_org}`} description="Организация" />
-                                                        <TagTooltip tag={`{${key}_auth_doc}`} description="Документ о полномочиях" />
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <TagCard tag={`{${key}_details}`} description={`Полная строка по шаблону`} />
+                                                        <TagCard tag={`{${key}_details_short}`} description={`Краткая строка`} />
+                                                        <TagCard tag={`{${key}_name}`} description="Полное ФИО" />
+                                                        <TagCard tag={`{${key}_name_short}`} description="Фамилия И.О." />
+                                                        <TagCard tag={`{${key}_position}`} description="Должность" />
+                                                        <TagCard tag={`{${key}_org}`} description="Организация" />
+                                                        <TagCard tag={`{${key}_auth_doc}`} description="Основание" />
                                                     </div>
                                                 </div>
                                             ))}
@@ -1035,18 +1188,18 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                                     </>
                                 ) : (
                                     <>
-                                        <p>Используйте эти теги в шаблоне реестра (.docx). Обязательно создайте таблицу для списка материалов.</p>
+                                        <p className="mb-4">Используйте эти теги в шаблоне реестра (.docx). Обязательно создайте таблицу для списка материалов.</p>
                                         
-                                        <h4 className="font-semibold mt-4 mb-2 text-slate-800">Шапка реестра (Общие данные)</h4>
-                                        <div className="flex flex-wrap gap-2 mb-6">
-                                            <TagTooltip tag="{act_number}" description="Номер акта, к которому относится реестр" />
-                                            <TagTooltip tag="{object_name}" description="Наименование объекта" />
-                                            <TagTooltip tag="{act_day}" description="День подписания акта" />
-                                            <TagTooltip tag="{act_month}" description="Месяц подписания" />
-                                            <TagTooltip tag="{act_year}" description="Год подписания" />
+                                        <h4 className="font-semibold mt-4 mb-3 text-slate-800 border-b pb-1">Шапка реестра (Общие данные)</h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+                                            <TagCard tag="{act_number}" description="Номер акта" />
+                                            <TagCard tag="{object_name}" description="Наименование объекта" />
+                                            <TagCard tag="{act_day}" description="День подписания акта" />
+                                            <TagCard tag="{act_month}" description="Месяц подписания" />
+                                            <TagCard tag="{act_year}" description="Год подписания" />
                                         </div>
 
-                                        <h4 className="font-semibold mt-6 mb-2 text-slate-800">Таблица материалов (Цикл строки)</h4>
+                                        <h4 className="font-semibold mt-6 mb-2 text-slate-800 border-b pb-1">Таблица материалов (Цикл строки)</h4>
                                         <p className="text-xs text-slate-500 mb-3">
                                             Чтобы строка таблицы повторялась для каждого материала, нужно использовать "обнимающие" теги:
                                         </p>
@@ -1086,27 +1239,27 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                                             </p>
                                         </div>
 
-                                        <div className="flex flex-wrap gap-2 mb-6">
-                                            <TagTooltip tag="{index}" description="Порядковый номер (1, 2, 3...)" />
-                                            <TagTooltip tag="{name}" description="Полная строка материала (как в акте)" />
-                                            <TagTooltip tag="{material_name}" description="Только наименование материала (до скобок)" />
-                                            <TagTooltip tag="{cert_doc}" description="Документ о качестве (текст внутри скобок)" />
-                                            <TagTooltip tag="{date}" description="Дата (пустая ячейка для ручного заполнения)" />
-                                            <TagTooltip tag="{amount}" description="Кол-во листов (пустая ячейка)" />
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+                                            <TagCard tag="{index}" description="Порядковый номер (1, 2, 3...)" />
+                                            <TagCard tag="{name}" description="Полная строка материала (как в акте)" />
+                                            <TagCard tag="{material_name}" description="Только наименование (до скобок)" />
+                                            <TagCard tag="{cert_doc}" description="Документ о качестве (текст в скобках)" />
+                                            <TagCard tag="{date}" description="Дата (пустая ячейка для ручного заполнения)" />
+                                            <TagCard tag="{amount}" description="Кол-во листов (из базы сертификатов)" />
                                         </div>
 
-                                        <h4 className="font-semibold mt-6 mb-2 text-slate-800">Комиссия (Представители)</h4>
+                                        <h4 className="font-semibold mt-8 mb-3 text-slate-800 border-b pb-1">Комиссия (Представители)</h4>
                                         <p className="text-xs text-slate-500 mb-3">
                                             Те же теги, что и в основном акте. Используйте их для блока подписей внизу реестра.
                                         </p>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs">
                                             {Object.entries(ROLES).map(([key, label]) => (
                                                 <div key={key} className="border border-slate-200 bg-slate-50 p-3 rounded">
                                                     <div className="font-semibold mb-2 text-slate-800">{label} ({key})</div>
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        <TagTooltip tag={`{${key}_details_short}`} description={`Должность, Фамилия И.О., Документ`} />
-                                                        <TagTooltip tag={`{${key}_name_short}`} description="Фамилия И.О." />
-                                                        <TagTooltip tag={`{${key}_position}`} description="Должность" />
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <TagCard tag={`{${key}_details_short}`} description={`Должность, Фамилия И.О., Документ`} />
+                                                        <TagCard tag={`{${key}_name_short}`} description="Фамилия И.О." />
+                                                        <TagCard tag={`{${key}_position}`} description="Должность" />
                                                     </div>
                                                 </div>
                                             ))}

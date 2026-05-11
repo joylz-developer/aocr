@@ -679,25 +679,52 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     }, [acts, onReorderActs]);
 
-    const getOrgDetailsString = useCallback((org: Organization): string => {
-        return `${org.name}, ИНН ${org.inn}, ОГРН ${org.ogrn}, ${org.address}`;
-    }, []);
+    // ИСПРАВЛЕНИЕ: Динамическая сборка реквизитов организации по шаблону
+    const getOrgDetailsString = useCallback((org: Organization, templateType: 'builder' | 'contractor' | 'designer' | 'performer'): string => {
+        let template: string[] | undefined;
+        if (templateType === 'builder') template = settings.builderDetailsTemplate;
+        else if (templateType === 'contractor') template = settings.contractorDetailsTemplate;
+        else if (templateType === 'designer') template = settings.designerDetailsTemplate;
+        
+        // Если шаблон пуст или не настроен, используем стандартный порядок
+        const activeTemplate = template && template.length > 0 ? template : ['name', 'inn', 'ogrn', 'address'];
+
+        return activeTemplate.map(key => {
+            switch(key) {
+                case 'name': return org.name;
+                case 'inn': return org.inn ? `ИНН ${org.inn}` : '';
+                case 'ogrn': return org.ogrn ? `ОГРН ${org.ogrn}` : '';
+                case 'kpp': return org.kpp ? `КПП ${org.kpp}` : '';
+                case 'address': return org.address;
+                case 'phone': return org.phone ? `тел. ${org.phone}` : '';
+                case 'sro': return org.sro ? `СРО: ${org.sro}` : '';
+                default: return '';
+            }
+        }).filter(Boolean).join(', ');
+    }, [settings]);
 
     const handleGroupChange = (act: Act, groupId: string) => {
         const selectedGroup = groups.find(g => g.id === groupId);
         const orgMap = new Map(organizations.map(org => [org.id, org]));
         const updatedAct = { ...act };
         updatedAct.commissionGroupId = groupId || undefined;
+        
         if (selectedGroup) {
             updatedAct.representatives = { ...selectedGroup.representatives };
             updatedAct.builderOrgId = selectedGroup.builderOrgId;
             updatedAct.contractorOrgId = selectedGroup.contractorOrgId;
             updatedAct.designerOrgId = selectedGroup.designerOrgId;
             updatedAct.workPerformerOrgId = selectedGroup.workPerformerOrgId;
-            updatedAct.builderDetails = selectedGroup.builderOrgId && orgMap.has(selectedGroup.builderOrgId) ? getOrgDetailsString(orgMap.get(selectedGroup.builderOrgId)!) : '';
-            updatedAct.contractorDetails = selectedGroup.contractorOrgId && orgMap.has(selectedGroup.contractorOrgId) ? getOrgDetailsString(orgMap.get(selectedGroup.contractorOrgId)!) : '';
-            updatedAct.designerDetails = selectedGroup.designerOrgId && orgMap.has(selectedGroup.designerOrgId) ? getOrgDetailsString(orgMap.get(selectedGroup.designerOrgId)!) : '';
-            updatedAct.workPerformer = selectedGroup.workPerformerOrgId && orgMap.has(selectedGroup.workPerformerOrgId) ? getOrgDetailsString(orgMap.get(selectedGroup.workPerformerOrgId)!) : '';
+            
+            // Теперь собираем строки строго по вашим шаблонам
+            updatedAct.builderDetails = selectedGroup.builderOrgId && orgMap.has(selectedGroup.builderOrgId) 
+                ? getOrgDetailsString(orgMap.get(selectedGroup.builderOrgId)!, 'builder') : '';
+            updatedAct.contractorDetails = selectedGroup.contractorOrgId && orgMap.has(selectedGroup.contractorOrgId) 
+                ? getOrgDetailsString(orgMap.get(selectedGroup.contractorOrgId)!, 'contractor') : '';
+            updatedAct.designerDetails = selectedGroup.designerOrgId && orgMap.has(selectedGroup.designerOrgId) 
+                ? getOrgDetailsString(orgMap.get(selectedGroup.designerOrgId)!, 'designer') : '';
+            updatedAct.workPerformer = selectedGroup.workPerformerOrgId && orgMap.has(selectedGroup.workPerformerOrgId) 
+                ? getOrgDetailsString(orgMap.get(selectedGroup.workPerformerOrgId)!, 'performer') : '';
         }
         handleSaveWithTemplateResolution(updatedAct);
     };
@@ -1198,6 +1225,21 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                         actToGenerate.nextWork = ''; 
                     }
                 }
+
+                // РЕФРЕШ ДАННЫХ ОБ ОРГАНИЗАЦИЯХ ПЕРЕД СКАЧИВАНИЕМ
+                const group = groups.find(g => g.id === act.commissionGroupId);
+                const builderId = act.builderOrgId || group?.builderOrgId;
+                const contractorId = act.contractorOrgId || group?.contractorOrgId;
+                const designerId = act.designerOrgId || group?.designerOrgId;
+                const performerId = act.workPerformerOrgId || group?.workPerformerOrgId;
+
+                const orgMap = new Map(organizations.map(org => [org.id, org]));
+
+                if (builderId && orgMap.has(builderId)) actToGenerate.builderDetails = getOrgDetailsString(orgMap.get(builderId)!, 'builder');
+                if (contractorId && orgMap.has(contractorId)) actToGenerate.contractorDetails = getOrgDetailsString(orgMap.get(contractorId)!, 'contractor');
+                if (designerId && orgMap.has(designerId)) actToGenerate.designerDetails = getOrgDetailsString(orgMap.get(designerId)!, 'designer');
+                if (performerId && orgMap.has(performerId)) actToGenerate.workPerformer = getOrgDetailsString(orgMap.get(performerId)!, 'performer');
+
                 generateDocument(template, registryTemplate, actToGenerate, people, settings, certificates); 
             }
         });
@@ -1206,7 +1248,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
         if (editingCell) { return; }
 
-        // ИСПРАВЛЕНИЕ: Игнорируем нажатия клавиш, если фокус находится в поле ввода (фильтры, добавление строк)
         const target = e.target as HTMLElement;
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
             return;
@@ -1698,7 +1739,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                 const isHoveredColumn = hoveredColIndex === index;
                                 const isSelected = selectedColumns.has(index);
 
-                                // Строгое определение фона заголовка
                                 let bgClass = "bg-slate-100 [.theme-dark_&]:bg-[#161b22] text-slate-600 [.theme-dark_&]:text-slate-300";
 
                                 if (isDraggingOver) {
