@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { Act, Person, Organization, ImportSettings, ImportData, ProjectSettings, CommissionGroup, Page, DeletedActEntry, Regulation, Certificate, Theme, DeletedCertificateEntry, ExportSettings, CertificateFile, ConstructionObject, ExecutiveScheme } from './types';
-import TemplateUploader from './components/TemplateUploader';
 import ImportModal from './components/ImportModal';
 import ExportModal from './components/ExportModal';
 import ConfirmationModal from './components/ConfirmationModal';
@@ -102,6 +101,10 @@ const ToastNotification: React.FC<{ message: string | null; onClose: () => void 
 const App: React.FC = () => {
     const [template, setTemplate] = useLocalStorage<string | null>('docx_template', null);
     const [registryTemplate, setRegistryTemplate] = useLocalStorage<string | null>('docx_registry_template', null);
+    
+    // ИСПРАВЛЕНИЕ: Добавлены состояния для отслеживания даты загрузки шаблонов
+    const [templateUpdateDate, setTemplateUpdateDate] = useLocalStorage<string | null>('template_update_date', null);
+    const [registryUpdateDate, setRegistryUpdateDate] = useLocalStorage<string | null>('registry_update_date', null);
     
     // Core Data
     const [constructionObjects, setConstructionObjects] = useLocalStorage<ConstructionObject[]>('construction_objects', []);
@@ -396,9 +399,12 @@ const App: React.FC = () => {
         setNotification(`Объект "${sourceObj.name}" успешно склонирован!`);
     };
 
+    // ИСПРАВЛЕНИЕ: Добавлены вызовы setTemplateUpdateDate и setRegistryUpdateDate
     const handleTemplateUpload = (file: File) => {
         fileToBase64(file).then(base64 => {
             setTemplate(base64);
+            setTemplateUpdateDate(new Date().toLocaleString('ru-RU')); // Сохраняем дату и время
+            setNotification("Основной шаблон успешно загружен.");
         }).catch(err => {
             console.error("Template upload failed", err);
             alert("Ошибка загрузки шаблона");
@@ -408,6 +414,7 @@ const App: React.FC = () => {
     const handleRegistryTemplateUpload = (file: File) => {
         fileToBase64(file).then(base64 => {
             setRegistryTemplate(base64);
+            setRegistryUpdateDate(new Date().toLocaleString('ru-RU')); // Сохраняем дату и время
             setNotification("Шаблон реестра успешно загружен.");
         }).catch(err => {
             console.error("Registry template upload failed", err);
@@ -536,7 +543,6 @@ const App: React.FC = () => {
         }
     };
     
-    // --- ЛОГИКА СОХРАНЕНИЯ СХЕМ И СИНХРОНИЗАЦИИ С АКТАМИ ---
     const handleSaveScheme = (scheme: ExecutiveScheme) => {
         if (!currentObjectId) return;
         const schemeToSave = { ...scheme, constructionObjectId: currentObjectId };
@@ -546,7 +552,6 @@ const App: React.FC = () => {
         if (existingIndex >= 0) {
             const oldScheme = schemes[existingIndex];
             
-            // Если данные поменялись, ищем их в актах и заменяем
             if (oldScheme.name !== schemeToSave.name || oldScheme.number !== schemeToSave.number || oldScheme.amount !== schemeToSave.amount) {
                 setActs(prevActs => prevActs.map(act => {
                     if (act.constructionObjectId !== currentObjectId || !act.certs) return act;
@@ -719,9 +724,11 @@ const App: React.FC = () => {
         }
         if (importSettings.template && importData.template) {
             setTemplate(importData.template);
+            setTemplateUpdateDate(new Date().toLocaleString('ru-RU'));
         }
         if (importSettings.registryTemplate && importData.registryTemplate) {
             setRegistryTemplate(importData.registryTemplate);
+            setRegistryUpdateDate(new Date().toLocaleString('ru-RU'));
         }
 
         const processImport = <T extends { id: string, constructionObjectId?: string }>(
@@ -822,291 +829,298 @@ const App: React.FC = () => {
             />
 
             <main className="flex-1 h-full overflow-hidden relative">
-                {!template && currentPage === 'acts' ? (
-                    <TemplateUploader onUpload={handleTemplateUpload} />
-                ) : (
-                    <>
-                        {currentPage === 'objects' && (
-                            <ObjectsPage 
-                                constructionObjects={constructionObjects}
-                                currentObjectId={currentObjectId}
-                                onObjectChange={setCurrentObjectId}
-                                onAddObject={handleAddObject}
-                                onUpdateObject={handleUpdateObject}
-                                onDeleteObject={handleDeleteObject}
-                                onCloneObject={handleCloneObject}
-                            />
-                        )}
-                        {currentPage === 'acts' && (
-                            <ActsPage
-                                acts={currentActs}
-                                people={currentPeople}
-                                organizations={currentOrganizations}
-                                groups={currentGroups}
-                                regulations={currentRegulations}
-                                certificates={currentCertificates}
-                                schemes={currentSchemes}
-                                template={template}
-                                registryTemplate={registryTemplate}
-                                settings={settings}
-                                onSave={handleSaveAct}
-                                onMoveToTrash={(ids) => {
-                                    const actsToDelete = acts.filter(a => ids.includes(a.id));
-                                    setDeletedActs(prev => [...actsToDelete.map(a => ({ act: a, deletedOn: new Date().toISOString() })), ...prev]);
-                                    setActs(prev => prev.filter(a => !ids.includes(a.id)));
-                                }}
-                                onPermanentlyDelete={(ids) => setActs(prev => prev.filter(a => !ids.includes(a.id)))}
-                                onReorderActs={(newActs) => {
-                                    setActs(prev => {
-                                        const other = prev.filter(a => a.constructionObjectId !== currentObjectId);
-                                        const currentObj = constructionObjects.find(o => o.id === currentObjectId);
-                                        const actsWithObjectId = newActs.map(a => ({
-                                            ...a,
-                                            constructionObjectId: currentObjectId || undefined,
-                                            objectName: currentObj ? currentObj.name : a.objectName
-                                        }));
-                                        return [...other, ...actsWithObjectId];
-                                    });
-                                }}
-                                setCurrentPage={setCurrentPage}
-                                onNavigateToCertificate={(id) => {
-                                    setOpenCertificateId(id);
-                                    setCurrentPage('certificates');
-                                }}
-                                onNavigateToScheme={() => setCurrentPage('schemes')}
-                            />
-                        )}
-                        {currentPage === 'people' && (
-                            <PeoplePage
-                                people={currentPeople}
-                                allPeople={people}
-                                organizations={currentOrganizations}
-                                constructionObjects={constructionObjects}
-                                currentObjectId={currentObjectId}
-                                settings={settings}
-                                onSave={handleSavePerson}
-                                onDelete={handleDeletePerson}
-                                onImport={handleImportFromObject}
-                            />
-                        )}
-                        {currentPage === 'organizations' && (
-                            <OrganizationsPage
-                                organizations={currentOrganizations}
-                                allOrganizations={organizations}
-                                constructionObjects={constructionObjects}
-                                currentObjectId={currentObjectId}
-                                settings={settings}
-                                onSave={handleSaveOrganization}
-                                onDelete={handleDeleteOrganization}
-                                onImport={handleImportFromObject}
-                            />
-                        )}
-                        {currentPage === 'groups' && (
-                            <GroupsPage
-                                groups={currentGroups}
-                                people={currentPeople}
-                                organizations={currentOrganizations}
-                                onSave={handleSaveGroup}
-                                onDelete={handleDeleteGroup}
-                            />
-                        )}
-                        {currentPage === 'regulations' && (
-                            <RegulationsPage
-                                regulations={currentRegulations}
-                                onSaveRegulations={handleSaveRegulations}
-                            />
-                        )}
-                        {currentPage === 'certificates' && (
-                            <CertificatesPage
-                                certificates={currentCertificates}
-                                allCertificates={certificates}
-                                acts={currentActs}
-                                constructionObjects={constructionObjects}
-                                currentObjectId={currentObjectId}
-                                settings={settings}
-                                onSave={handleSaveCertificate}
-                                onDelete={handleDeleteCertificate}
-                                onUnlink={handleUnlinkCertificate}
-                                onImport={handleImportFromObject}
-                                initialOpenId={openCertificateId}
-                                onClearInitialOpenId={() => setOpenCertificateId(null)}
-                            />
-                        )}
-                        {currentPage === 'schemes' && (
-                            <SchemesPage
-                                schemes={currentSchemes}
-                                acts={currentActs}
-                                onSave={handleSaveScheme}
-                                onDelete={handleDeleteScheme}
-                            />
-                        )}
-                        {currentPage === 'settings' && (
-                            <SettingsPage
-                                settings={settings}
-                                onSave={(s) => setSettings(s)}
-                                onImport={() => {
-                                    const input = document.createElement('input');
-                                    input.type = 'file';
-                                    input.accept = '.zip,.json';
-                                    input.onchange = (e) => {
-                                        const file = (e.target as HTMLInputElement).files?.[0];
-                                        if (file) {
-                                            const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed';
-                                            if (isZip) {
-                                                const reader = new FileReader();
-                                                reader.onload = (ev) => {
-                                                    try {
-                                                        const zip = new PizZip(ev.target?.result as ArrayBuffer);
-                                                        let json: any = null;
+                <>
+                    {currentPage === 'objects' && (
+                        <ObjectsPage 
+                            constructionObjects={constructionObjects}
+                            currentObjectId={currentObjectId}
+                            onObjectChange={setCurrentObjectId}
+                            onAddObject={handleAddObject}
+                            onUpdateObject={handleUpdateObject}
+                            onDeleteObject={handleDeleteObject}
+                            onCloneObject={handleCloneObject}
+                        />
+                    )}
+                    {currentPage === 'acts' && (
+                        <ActsPage
+                            acts={currentActs}
+                            people={currentPeople}
+                            organizations={currentOrganizations}
+                            groups={currentGroups}
+                            regulations={currentRegulations}
+                            certificates={currentCertificates}
+                            schemes={currentSchemes}
+                            template={template}
+                            registryTemplate={registryTemplate}
+                            settings={settings}
+                            onSave={handleSaveAct}
+                            onMoveToTrash={(ids) => {
+                                const actsToDelete = acts.filter(a => ids.includes(a.id));
+                                setDeletedActs(prev => [...actsToDelete.map(a => ({ act: a, deletedOn: new Date().toISOString() })), ...prev]);
+                                setActs(prev => prev.filter(a => !ids.includes(a.id)));
+                            }}
+                            onPermanentlyDelete={(ids) => setActs(prev => prev.filter(a => !ids.includes(a.id)))}
+                            onReorderActs={(newActs) => {
+                                setActs(prev => {
+                                    const other = prev.filter(a => a.constructionObjectId !== currentObjectId);
+                                    const currentObj = constructionObjects.find(o => o.id === currentObjectId);
+                                    const actsWithObjectId = newActs.map(a => ({
+                                        ...a,
+                                        constructionObjectId: currentObjectId || undefined,
+                                        objectName: currentObj ? currentObj.name : a.objectName
+                                    }));
+                                    return [...other, ...actsWithObjectId];
+                                });
+                            }}
+                            setCurrentPage={setCurrentPage}
+                            onNavigateToCertificate={(id) => {
+                                setOpenCertificateId(id);
+                                setCurrentPage('certificates');
+                            }}
+                            onNavigateToScheme={() => setCurrentPage('schemes')}
+                        />
+                    )}
+                    {currentPage === 'people' && (
+                        <PeoplePage
+                            people={currentPeople}
+                            allPeople={people}
+                            organizations={currentOrganizations}
+                            constructionObjects={constructionObjects}
+                            currentObjectId={currentObjectId}
+                            settings={settings}
+                            onSave={handleSavePerson}
+                            onDelete={handleDeletePerson}
+                            onImport={handleImportFromObject}
+                        />
+                    )}
+                    {currentPage === 'organizations' && (
+                        <OrganizationsPage
+                            organizations={currentOrganizations}
+                            allOrganizations={organizations}
+                            constructionObjects={constructionObjects}
+                            currentObjectId={currentObjectId}
+                            settings={settings}
+                            onSave={handleSaveOrganization}
+                            onDelete={handleDeleteOrganization}
+                            onImport={handleImportFromObject}
+                        />
+                    )}
+                    {currentPage === 'groups' && (
+                        <GroupsPage
+                            groups={currentGroups}
+                            people={currentPeople}
+                            organizations={currentOrganizations}
+                            onSave={handleSaveGroup}
+                            onDelete={handleDeleteGroup}
+                        />
+                    )}
+                    {currentPage === 'regulations' && (
+                        <RegulationsPage
+                            regulations={currentRegulations}
+                            onSaveRegulations={handleSaveRegulations}
+                        />
+                    )}
+                    {currentPage === 'certificates' && (
+                        <CertificatesPage
+                            certificates={currentCertificates}
+                            allCertificates={certificates}
+                            acts={currentActs}
+                            constructionObjects={constructionObjects}
+                            currentObjectId={currentObjectId}
+                            settings={settings}
+                            onSave={handleSaveCertificate}
+                            onDelete={handleDeleteCertificate}
+                            onUnlink={handleUnlinkCertificate}
+                            onImport={handleImportFromObject}
+                            initialOpenId={openCertificateId}
+                            onClearInitialOpenId={() => setOpenCertificateId(null)}
+                        />
+                    )}
+                    {currentPage === 'schemes' && (
+                        <SchemesPage
+                            schemes={currentSchemes}
+                            acts={currentActs}
+                            onSave={handleSaveScheme}
+                            onDelete={handleDeleteScheme}
+                        />
+                    )}
+                    {currentPage === 'settings' && (
+                        <SettingsPage
+                            settings={settings}
+                            onSave={(s) => setSettings(s)}
+                            onImport={() => {
+                                const input = document.createElement('input');
+                                input.type = 'file';
+                                input.accept = '.zip,.json';
+                                input.onchange = (e) => {
+                                    const file = (e.target as HTMLInputElement).files?.[0];
+                                    if (file) {
+                                        const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed';
+                                        if (isZip) {
+                                            const reader = new FileReader();
+                                            reader.onload = (ev) => {
+                                                try {
+                                                    const zip = new PizZip(ev.target?.result as ArrayBuffer);
+                                                    let json: any = null;
+                                                    
+                                                    const backupFile = zip.file('backup.json') || zip.file('backup_restore.json');
+                                                    if (backupFile) {
+                                                        json = JSON.parse(backupFile.asText());
+                                                    } else {
+                                                        const actsFile = zip.file('acts.json');
+                                                        const peopleFile = zip.file('people.json');
+                                                        const orgsFile = zip.file('organizations.json');
+                                                        const groupsFile = zip.file('groups.json');
+                                                        const settingsFile = zip.file('settings.json');
+                                                        const regsFile = zip.file('regulations.json');
+                                                        const objectsFile = zip.file('constructionObjects.json');
+                                                        const schemesFile = zip.file('schemes.json');
                                                         
-                                                        const backupFile = zip.file('backup.json') || zip.file('backup_restore.json');
-                                                        if (backupFile) {
-                                                            json = JSON.parse(backupFile.asText());
-                                                        } else {
-                                                            const actsFile = zip.file('acts.json');
-                                                            const peopleFile = zip.file('people.json');
-                                                            const orgsFile = zip.file('organizations.json');
-                                                            const groupsFile = zip.file('groups.json');
-                                                            const settingsFile = zip.file('settings.json');
-                                                            const regsFile = zip.file('regulations.json');
-                                                            const objectsFile = zip.file('constructionObjects.json');
-                                                            const schemesFile = zip.file('schemes.json');
+                                                        if (actsFile || peopleFile || settingsFile || groupsFile) {
+                                                            json = {};
+                                                            if (actsFile) json.acts = JSON.parse(actsFile.asText());
+                                                            if (peopleFile) json.people = JSON.parse(peopleFile.asText());
+                                                            if (orgsFile) json.organizations = JSON.parse(orgsFile.asText());
+                                                            if (groupsFile) json.groups = JSON.parse(groupsFile.asText());
+                                                            if (settingsFile) json.projectSettings = JSON.parse(settingsFile.asText());
+                                                            if (regsFile) json.regulations = JSON.parse(regsFile.asText());
+                                                            if (objectsFile) json.constructionObjects = JSON.parse(objectsFile.asText());
+                                                            if (schemesFile) json.schemes = JSON.parse(schemesFile.asText());
                                                             
-                                                            if (actsFile || peopleFile || settingsFile || groupsFile) {
-                                                                json = {};
-                                                                if (actsFile) json.acts = JSON.parse(actsFile.asText());
-                                                                if (peopleFile) json.people = JSON.parse(peopleFile.asText());
-                                                                if (orgsFile) json.organizations = JSON.parse(orgsFile.asText());
-                                                                if (groupsFile) json.groups = JSON.parse(groupsFile.asText());
-                                                                if (settingsFile) json.projectSettings = JSON.parse(settingsFile.asText());
-                                                                if (regsFile) json.regulations = JSON.parse(regsFile.asText());
-                                                                if (objectsFile) json.constructionObjects = JSON.parse(objectsFile.asText());
-                                                                if (schemesFile) json.schemes = JSON.parse(schemesFile.asText());
-                                                                
-                                                                const templateFile = zip.file('template.docx');
-                                                                if (templateFile) {
-                                                                    json.template = window.btoa(templateFile.asBinary());
-                                                                }
-                                                            } else {
-                                                                const jsonFileNames = Object.keys(zip.files).filter(name => name.endsWith('.json'));
-                                                                for (const name of jsonFileNames) {
-                                                                    try {
-                                                                        const parsed = JSON.parse(zip.file(name)!.asText());
-                                                                        if (parsed && !Array.isArray(parsed) && (parsed.acts || parsed.people || parsed.projectSettings)) {
-                                                                            json = parsed;
-                                                                            break;
-                                                                        }
-                                                                    } catch (e) {}
-                                                                }
+                                                            const templateFile = zip.file('template.docx');
+                                                            if (templateFile) {
+                                                                json.template = window.btoa(templateFile.asBinary());
                                                             }
-                                                        }
-
-                                                        if (json) {
-                                                            const certInfoPaths = Object.keys(zip.files).filter(path => path.startsWith('certificates/') && path.endsWith('info.json'));
-                                                            if (certInfoPaths.length > 0) {
-                                                                const loadedCerts: Certificate[] = [];
-                                                                certInfoPaths.forEach(infoPath => {
-                                                                    try {
-                                                                        const infoFile = zip.file(infoPath);
-                                                                        if (!infoFile) return;
-                                                                        const info = JSON.parse(infoFile.asText());
-                                                                        
-                                                                        const folderPath = infoPath.substring(0, infoPath.length - 'info.json'.length);
-                                                                        const filePaths = Object.keys(zip.files).filter(p => p.startsWith(folderPath) && p !== infoPath && !zip.files[p].dir);
-                                                                        
-                                                                        const files: CertificateFile[] = [];
-                                                                        filePaths.forEach(fp => {
-                                                                            const f = zip.file(fp);
-                                                                            if (!f) return;
-                                                                            const fileName = fp.substring(folderPath.length);
-                                                                            const ext = fileName.split('.').pop()?.toLowerCase() || 'png';
-                                                                            const type = ext === 'pdf' ? 'pdf' : 'image';
-                                                                            
-                                                                            const base64 = window.btoa(f.asBinary());
-                                                                            const mimeType = type === 'pdf' ? 'application/pdf' : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-                                                                            const dataUrl = `data:${mimeType};base64,${base64}`;
-                                                                            
-                                                                            files.push({
-                                                                                id: crypto.randomUUID(),
-                                                                                type,
-                                                                                name: fileName,
-                                                                                data: dataUrl
-                                                                            });
-                                                                        });
-                                                                        
-                                                                        loadedCerts.push({
-                                                                            ...info,
-                                                                            files
-                                                                        });
-                                                                    } catch (e) {
-                                                                        console.error("Failed to parse cert", e);
-                                                                    }
-                                                                });
-                                                                
-                                                                if (!json.certificates) json.certificates = [];
-                                                                loadedCerts.forEach(lc => {
-                                                                    const existingIdx = json.certificates.findIndex((c: any) => c.id === lc.id);
-                                                                    if (existingIdx >= 0) {
-                                                                        json.certificates[existingIdx] = lc;
-                                                                    } else {
-                                                                        json.certificates.push(lc);
-                                                                    }
-                                                                });
-                                                            }
-                                                            setImportData(json);
                                                         } else {
-                                                            alert('Файл с данными не найден в архиве. Убедитесь, что вы загружаете правильный файл экспорта.');
+                                                            const jsonFileNames = Object.keys(zip.files).filter(name => name.endsWith('.json'));
+                                                            for (const name of jsonFileNames) {
+                                                                try {
+                                                                    const parsed = JSON.parse(zip.file(name)!.asText());
+                                                                    if (parsed && !Array.isArray(parsed) && (parsed.acts || parsed.people || parsed.projectSettings)) {
+                                                                        json = parsed;
+                                                                        break;
+                                                                    }
+                                                                } catch (e) {}
+                                                            }
                                                         }
-                                                    } catch (err: any) {
-                                                        alert('Ошибка чтения архива или неверный формат: ' + err.message);
                                                     }
-                                                };
-                                                reader.readAsArrayBuffer(file);
-                                            } else {
-                                                const reader = new FileReader();
-                                                reader.onload = (ev) => {
-                                                    try {
-                                                        const json = JSON.parse(ev.target?.result as string);
+
+                                                    if (json) {
+                                                        const certInfoPaths = Object.keys(zip.files).filter(path => path.startsWith('certificates/') && path.endsWith('info.json'));
+                                                        if (certInfoPaths.length > 0) {
+                                                            const loadedCerts: Certificate[] = [];
+                                                            certInfoPaths.forEach(infoPath => {
+                                                                try {
+                                                                    const infoFile = zip.file(infoPath);
+                                                                    if (!infoFile) return;
+                                                                    const info = JSON.parse(infoFile.asText());
+                                                                    
+                                                                    const folderPath = infoPath.substring(0, infoPath.length - 'info.json'.length);
+                                                                    const filePaths = Object.keys(zip.files).filter(p => p.startsWith(folderPath) && p !== infoPath && !zip.files[p].dir);
+                                                                    
+                                                                    const files: CertificateFile[] = [];
+                                                                    filePaths.forEach(fp => {
+                                                                        const f = zip.file(fp);
+                                                                        if (!f) return;
+                                                                        const fileName = fp.substring(folderPath.length);
+                                                                        const ext = fileName.split('.').pop()?.toLowerCase() || 'png';
+                                                                        const type = ext === 'pdf' ? 'pdf' : 'image';
+                                                                        
+                                                                        const base64 = window.btoa(f.asBinary());
+                                                                        const mimeType = type === 'pdf' ? 'application/pdf' : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+                                                                        const dataUrl = `data:${mimeType};base64,${base64}`;
+                                                                        
+                                                                        files.push({
+                                                                            id: crypto.randomUUID(),
+                                                                            type,
+                                                                            name: fileName,
+                                                                            data: dataUrl
+                                                                        });
+                                                                    });
+                                                                    
+                                                                    loadedCerts.push({
+                                                                        ...info,
+                                                                        files
+                                                                    });
+                                                                } catch (e) {
+                                                                    console.error("Failed to parse cert", e);
+                                                                }
+                                                            });
+                                                            
+                                                            if (!json.certificates) json.certificates = [];
+                                                            loadedCerts.forEach(lc => {
+                                                                const existingIdx = json.certificates.findIndex((c: any) => c.id === lc.id);
+                                                                if (existingIdx >= 0) {
+                                                                    json.certificates[existingIdx] = lc;
+                                                                } else {
+                                                                    json.certificates.push(lc);
+                                                                }
+                                                            });
+                                                        }
                                                         setImportData(json);
-                                                    } catch (err: any) { 
-                                                        alert('Ошибка чтения JSON файла: ' + err.message + '\nВозможно, вы пытаетесь загрузить архив как текстовый файл?'); 
+                                                    } else {
+                                                        alert('Файл с данными не найден в архиве. Убедитесь, что вы загружаете правильный файл экспорта.');
                                                     }
-                                                };
-                                                reader.readAsText(file);
-                                            }
+                                                } catch (err: any) {
+                                                    alert('Ошибка чтения архива или неверный формат: ' + err.message);
+                                                }
+                                            };
+                                            reader.readAsArrayBuffer(file);
+                                        } else {
+                                            const reader = new FileReader();
+                                            reader.onload = (ev) => {
+                                                try {
+                                                    const json = JSON.parse(ev.target?.result as string);
+                                                    setImportData(json);
+                                                } catch (err: any) { 
+                                                    alert('Ошибка чтения JSON файла: ' + err.message + '\nВозможно, вы пытаетесь загрузить архив как текстовый файл?'); 
+                                                }
+                                            };
+                                            reader.readAsText(file);
                                         }
-                                    };
-                                    input.click();
-                                }}
-                                onExport={() => setShowExportModal(true)}
-                                onChangeTemplate={() => setTemplate(null)}
-                                onDownloadTemplate={handleDownloadTemplate}
-                                onUploadRegistryTemplate={handleRegistryTemplateUpload}
-                                isTemplateLoaded={!!template}
-                                isRegistryTemplateLoaded={!!registryTemplate}
-                            />
-                        )}
-                        {currentPage === 'trash' && (
-                            <TrashPage
-                                deletedActs={currentDeletedActs}
-                                deletedCertificates={currentDeletedCertificates}
-                                onRestore={(entries) => {
-                                    setActs(prev => [...prev, ...entries.map(e => e.act)]);
-                                    setDeletedActs(prev => prev.filter(d => !entries.find(e => e.act.id === d.act.id)));
-                                }}
-                                onPermanentlyDelete={(ids) => setDeletedActs(prev => prev.filter(d => !ids.includes(d.act.id)))}
-                                onRestoreCertificates={(entries) => {
-                                    setCertificates(prev => [...prev, ...entries.map(e => e.certificate)]);
-                                    setDeletedCertificates(prev => prev.filter(d => !entries.find(e => e.certificate.id === d.certificate.id)));
-                                }}
-                                onPermanentlyDeleteCertificates={(ids) => setDeletedCertificates(prev => prev.filter(d => !ids.includes(d.certificate.id)))}
-                                requestConfirmation={(title, message, onConfirm) => {
-                                    setConfirmationRequest({ title, message, onConfirm });
-                                }}
-                            />
-                        )}
-                    </>
-                )}
+                                    }
+                                };
+                                input.click();
+                            }}
+                            onExport={() => setShowExportModal(true)}
+                            onDownloadTemplate={handleDownloadTemplate}
+                            onUploadRegistryTemplate={handleRegistryTemplateUpload}
+                            isTemplateLoaded={!!template}
+                            isRegistryTemplateLoaded={!!registryTemplate}
+                            onUploadTemplate={handleTemplateUpload} 
+                            templateUpdateDate={templateUpdateDate || undefined}
+                            registryUpdateDate={registryUpdateDate || undefined}
+                            onDeleteTemplate={(type) => {
+                                if (type === 'main') {
+                                    setTemplate(null);
+                                    setTemplateUpdateDate(null);
+                                } else {
+                                    setRegistryTemplate(null);
+                                    setRegistryUpdateDate(null);
+                                }
+                            }}
+                        />
+                    )}
+                    {currentPage === 'trash' && (
+                        <TrashPage
+                            deletedActs={currentDeletedActs}
+                            deletedCertificates={currentDeletedCertificates}
+                            onRestore={(entries) => {
+                                setActs(prev => [...prev, ...entries.map(e => e.act)]);
+                                setDeletedActs(prev => prev.filter(d => !entries.find(e => e.act.id === d.act.id)));
+                            }}
+                            onPermanentlyDelete={(ids) => setDeletedActs(prev => prev.filter(d => !ids.includes(d.act.id)))}
+                            onRestoreCertificates={(entries) => {
+                                setCertificates(prev => [...prev, ...entries.map(e => e.certificate)]);
+                                setDeletedCertificates(prev => prev.filter(d => !entries.find(e => e.certificate.id === d.certificate.id)));
+                            }}
+                            onPermanentlyDeleteCertificates={(ids) => setDeletedCertificates(prev => prev.filter(d => !ids.includes(d.certificate.id)))}
+                            requestConfirmation={(title, message, onConfirm) => {
+                                setConfirmationRequest({ title, message, onConfirm });
+                            }}
+                        />
+                    )}
+                </>
             </main>
 
             {importData && (

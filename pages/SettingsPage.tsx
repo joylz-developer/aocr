@@ -8,7 +8,8 @@ interface SettingsPageProps {
     onSave: (settings: ProjectSettings) => void;
     onImport: () => void;
     onExport: () => void;
-    onChangeTemplate: () => void;
+    onChangeTemplate?: () => void; 
+    onUploadTemplate?: (file: File) => void; 
     onDownloadTemplate: (type?: 'main' | 'registry') => void;
     onUploadRegistryTemplate: (file: File) => void;
     isTemplateLoaded: boolean;
@@ -121,7 +122,6 @@ const TemplateBuilder = ({
     );
 };
 
-// МАКСИМАЛЬНО ЛЕГКИЙ КОМПОНЕНТ КАРТОЧКИ ТЕГА (без теней и transition-all)
 const TagCard: React.FC<{ tag: string; description: string }> = ({ tag, description }) => {
     const [copied, setCopied] = useState(false);
 
@@ -161,11 +161,11 @@ const CopyableCode: React.FC<{ children: React.ReactNode; textToCopy: string; ti
         <div className="mb-3">
             {title && <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">{title}</p>}
             <div 
-                className="group relative bg-white p-3 rounded border border-slate-200 text-xs font-mono text-slate-600 cursor-pointer hover:border-blue-400 hover:shadow-sm"
+                className="group relative bg-white p-3 rounded border border-slate-200 text-xs font-mono text-slate-600 cursor-pointer hover:border-blue-400 hover:shadow-sm transition-all"
                 onClick={handleCopy}
                 title="Нажмите, чтобы скопировать код"
             >
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100">
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     {copied ? (
                         <span className="text-green-600 font-bold bg-green-50 px-1 rounded">Скопировано!</span>
                     ) : (
@@ -269,45 +269,6 @@ const TagGenerator: React.FC = () => {
     );
 };
 
-const VariableHelpTooltip: React.FC = () => {
-    const [isVisible, setIsVisible] = useState(false);
-
-    const variables = [
-        { name: '{act_number}', desc: 'Номер акта' },
-        { name: '{materials}', desc: 'Список материалов' },
-        { name: '{material_docs}', desc: 'Список уникальных документов (паспортов)' },
-        { name: '{certs}', desc: 'Исполнительные схемы' },
-        { name: '{work_start_date}', desc: 'Дата начала работ' },
-        { name: '{work_end_date}', desc: 'Дата окончания работ' },
-        { name: '{project_docs}', desc: 'Проектная документация' },
-        { name: '{regulations}', desc: 'Нормативные документы' },
-        { name: '{object_name}', desc: 'Наименование объекта' },
-        { name: '{work_name}', desc: 'Наименование работ' },
-    ];
-
-    return (
-        <div className="relative inline-flex ml-2" onMouseEnter={() => setIsVisible(true)} onMouseLeave={() => setIsVisible(false)}>
-            <button type="button" className="text-slate-400 hover:text-blue-600 focus:outline-none" aria-label="Показать доступные переменные">
-                <QuestionMarkCircleIcon className="w-4 h-4" />
-            </button>
-            {isVisible && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-80 bg-slate-800 text-white text-sm rounded-lg shadow-lg p-3 z-10">
-                    <h4 className="font-bold mb-2 text-xs uppercase tracking-wider text-slate-400">Можно использовать теги:</h4>
-                    <ul className="space-y-1 mb-2">
-                        {variables.map(v => (
-                             <li key={v.name} className="flex justify-between">
-                                <code className="text-cyan-300">{v.name}</code>
-                                <span className="text-slate-300 text-right text-xs">{v.desc}</span>
-                            </li>
-                        ))}
-                    </ul>
-                    <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-0 h-0 border-l-8 border-l-transparent border-r-8 border-r-transparent border-t-8 border-t-slate-800 -mb-2"></div>
-                </div>
-            )}
-        </div>
-    );
-};
-
 interface SettingToggleProps {
     id: keyof ProjectSettings;
     label: string;
@@ -346,7 +307,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     onSave, 
     onImport, 
     onExport, 
-    onChangeTemplate, 
+    onUploadTemplate,
     onDownloadTemplate, 
     onUploadRegistryTemplate, 
     isTemplateLoaded, 
@@ -363,7 +324,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     const [formData, setFormData] = useState<ProjectSettings>(settings);
     const [isSaved, setIsSaved] = useState(false);
     const [editingModel, setEditingModel] = useState<AiModelConfig | null>(null);
+    
+    // Ссылки на скрытые input-файлы
     const registryInputRef = useRef<HTMLInputElement>(null);
+    const mainInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         setFormData(settings);
@@ -447,6 +411,18 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         setIsSaved(true);
         setTimeout(() => setIsSaved(false), 3000);
     };
+
+    // НОВАЯ ФУНКЦИЯ: Загрузка основного шаблона
+    const handleMainFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            if (onUploadTemplate) {
+                onUploadTemplate(e.target.files[0]);
+            } else {
+                alert("Ошибка: Функция onUploadTemplate не привязана в App.tsx. Шаблон загрузить не удалось.");
+            }
+            if (mainInputRef.current) mainInputRef.current.value = '';
+        }
+    }
     
     const handleRegistryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
@@ -571,7 +547,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                             <div className="mt-2">
                                 <label htmlFor="defaultAdditionalInfo" className="flex items-center text-xs font-medium text-slate-600 mb-1">
                                     <span>Значение по умолчанию</span>
-                                    <VariableHelpTooltip />
                                 </label>
                                 <textarea id="defaultAdditionalInfo" name="defaultAdditionalInfo" value={formData.defaultAdditionalInfo || ''} onChange={handleChange} className={`${inputClass} text-sm`} rows={6} placeholder="Например: Работы выполнены в соответствии с..." />
                             </div>
@@ -581,7 +556,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                             <div className="mt-2">
                                 <label htmlFor="defaultAttachments" className="flex items-center text-xs font-medium text-slate-600 mb-1">
                                     <span>Значение по умолчанию</span>
-                                    <VariableHelpTooltip />
                                 </label>
                                 <textarea id="defaultAttachments" name="defaultAttachments" value={formData.defaultAttachments || ''} onChange={handleChange} className={`${inputClass} text-sm`} rows={6} placeholder="Например: Исполнительная схема; {certs};" />
                                 <p className="text-xs text-slate-500 mt-1">
@@ -604,7 +578,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                             <div className="mt-2">
                                 <label htmlFor="defaultActDate" className="flex items-center text-xs font-medium text-slate-600 mb-1">
                                     <span>Значение по умолчанию</span>
-                                    <VariableHelpTooltip />
                                 </label>
                                 <input 
                                     type="text" 
@@ -964,6 +937,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
                         {/* 2. Блок Шаблон Акта */}
                         <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm relative">
+                            <input type="file" ref={mainInputRef} onChange={handleMainFileChange} className="hidden" accept=".docx" />
+                            
                             <div className="flex justify-between items-start mb-3">
                                 <div className="flex items-start gap-3">
                                     <div className={`p-3 rounded-full ${isTemplateLoaded ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`}>
@@ -993,7 +968,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                             <p className="text-sm text-slate-600 mb-4 mt-2">Основной шаблон документа .docx. Используется для генерации актов.</p>
                             
                             <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-100">
-                                <button type="button" onClick={onChangeTemplate} className="flex items-center gap-2 bg-blue-600 text-white border border-blue-600 px-4 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
+                                <button type="button" onClick={() => mainInputRef.current?.click()} className="flex items-center gap-2 bg-blue-600 text-white border border-blue-600 px-4 py-2 rounded text-sm hover:bg-blue-700 transition-colors">
                                     <CloudUploadIcon className="w-4 h-4" /> {isTemplateLoaded ? 'Заменить' : 'Загрузить'}
                                 </button>
                                 
@@ -1002,7 +977,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                                         <button type="button" onClick={() => onDownloadTemplate('main')} className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded text-sm hover:bg-slate-50 transition-colors">
                                             <DownloadIcon className="w-4 h-4" /> Скачать
                                         </button>
-                                        <button type="button" onClick={() => onDeleteTemplate?.('main')} className="flex items-center gap-2 bg-white text-red-600 border border-red-200 px-4 py-2 rounded text-sm hover:bg-red-50 transition-colors">
+                                        <button type="button" onClick={() => onDeleteTemplate && onDeleteTemplate('main')} className="flex items-center gap-2 bg-white text-red-600 border border-red-200 px-4 py-2 rounded text-sm hover:bg-red-50 transition-colors">
                                             <DeleteIcon className="w-4 h-4" /> Удалить
                                         </button>
                                     </>
@@ -1054,7 +1029,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                                         <button type="button" onClick={() => onDownloadTemplate('registry')} className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded text-sm hover:bg-slate-50 transition-colors">
                                             <DownloadIcon className="w-4 h-4" /> Скачать
                                         </button>
-                                        <button type="button" onClick={() => onDeleteTemplate?.('registry')} className="flex items-center gap-2 bg-white text-red-600 border border-red-200 px-4 py-2 rounded text-sm hover:bg-red-50 transition-colors">
+                                        <button type="button" onClick={() => onDeleteTemplate && onDeleteTemplate('registry')} className="flex items-center gap-2 bg-white text-red-600 border border-red-200 px-4 py-2 rounded text-sm hover:bg-red-50 transition-colors">
                                             <DeleteIcon className="w-4 h-4" /> Удалить
                                         </button>
                                     </>
