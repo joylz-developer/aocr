@@ -1,9 +1,8 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { saveAs } from 'file-saver';
-import { Act, Person, ProjectSettings, Certificate, ROLES } from '../types';
+import { Act, Person, ProjectSettings, Certificate, ROLES, Regulation, ExecutiveScheme } from '../types';
 
-// Вспомогательная функция для преобразования base64 в бинарный формат
 function base64ToBinaryString(base64: string) {
     const marker = ';base64,';
     const markerIndex = base64.indexOf(marker);
@@ -14,7 +13,6 @@ function base64ToBinaryString(base64: string) {
     return atob(raw);
 }
 
-// Форматирование ФИО в короткий формат (Иванов Иван Иванович -> Иванов И.И.)
 const getShortName = (fullName: string) => {
     if (!fullName) return '';
     const parts = fullName.trim().split(/\s+/);
@@ -25,7 +23,6 @@ const getShortName = (fullName: string) => {
     return `${parts[0]} ${parts[1][0]}.`;
 };
 
-// Месяцы прописью для дат
 const MONTHS = [
     'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
     'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'
@@ -47,13 +44,11 @@ const formatDateStandard = (dateStr: string) => {
     return `${d}.${m}.${y}`;
 };
 
-// Функция для сборки строк представителей по настроенному шаблону
 const formatPersonDetails = (personId: string | undefined, template: string[] | undefined, peopleList: Person[]) => {
     if (!personId) return '';
     const person = peopleList.find(p => p.id === personId);
     if (!person) return '';
 
-    // Если шаблон пуст, используем стандартный порядок
     const activeTemplate = template && template.length > 0 ? template : ['position', 'name', 'authDoc'];
 
     return activeTemplate.map(key => {
@@ -68,13 +63,16 @@ const formatPersonDetails = (personId: string | undefined, template: string[] | 
     }).filter(Boolean).join(', ');
 };
 
+// ИСПРАВЛЕНИЕ: Добавлены значения по умолчанию (= []), чтобы предотвратить падение генератора
 export const generateDocument = async (
     templateBase64: string,
     registryTemplateBase64: string | null,
     act: Act,
-    people: Person[],
+    people: Person[] = [],
     settings: ProjectSettings,
-    certificates: Certificate[]
+    certificates: Certificate[] = [],
+    regulationsList: Regulation[] = [],
+    schemesList: ExecutiveScheme[] = [] 
 ) => {
     try {
         let finalActDate = act.date;
@@ -86,6 +84,41 @@ export const generateDocument = async (
         const actDate = parseDateParts(finalActDate);
         const startDate = parseDateParts(act.workStartDate);
         const endDate = parseDateParts(act.workEndDate);
+
+        // Форматирование СП и ГОСТ
+        const formattedRegulations = (act.regulations || '')
+            .split(';')
+            .map(s => s.trim())
+            .filter(Boolean)
+            .map(designation => {
+                const foundReg = regulationsList.find(r => r.designation === designation);
+                if (foundReg && foundReg.title) {
+                    return `${designation} «${foundReg.title}»`;
+                }
+                return designation;
+            })
+            .join('; ');
+
+        // ОЧИСТКА: Последующие работы
+        let finalNextWork = act.nextWork || '';
+        const matchNW = finalNextWork.match(/^Работы по акту №.*?\((.*)\)$/);
+        if (matchNW) {
+            finalNextWork = matchNW[1].trim(); 
+        }
+
+        // ОЧИСТКА И ФОРМАТИРОВАНИЕ: Исполнительные схемы
+        const formattedCerts = (act.certs || '')
+            .split(';')
+            .map(s => s.trim())
+            .filter(Boolean)
+            .map(certStr => {
+                const foundScheme = schemesList.find(sch => certStr.includes(sch.number) || certStr.includes(sch.name));
+                if (foundScheme) {
+                    return `Исполнительная схема №${foundScheme.number} - ${foundScheme.name} (${foundScheme.amount} л.)`;
+                }
+                return certStr; // Если это обычный паспорт качества - оставляем как есть
+            })
+            .join('; ');
 
         // Обработка материалов и реестра
         const materialsArray = (act.materials || '').split(';').map(m => m.trim()).filter(Boolean);
@@ -117,7 +150,6 @@ export const generateDocument = async (
             repsData[`${role}_org`] = person?.organization || '';
             repsData[`${role}_auth_doc`] = person?.authDoc || '';
             
-            // Динамический шаблон в зависимости от роли
             let templateToUse = settings.otherRepsDetailsTemplate;
             if (role === 'tnz') templateToUse = settings.tnzDetailsTemplate;
             else if (role === 'g') templateToUse = settings.gDetailsTemplate;
@@ -138,15 +170,14 @@ export const generateDocument = async (
             object_name: act.objectName || '',
             work_name: act.workName || '',
             project_docs: act.projectDocs || '',
-            regulations: act.regulations || '',
-            next_work: act.nextWork || '',
+            regulations: formattedRegulations,
+            next_work: finalNextWork, 
             
             act_day: actDate.day,
             act_month: actDate.month,
             act_year: actDate.year,
             date: formatDateStandard(finalActDate),
 
-            // ИСПРАВЛЕНИЕ: Добавлены все составные части дат начала и окончания
             work_start_day: startDate.day,
             work_start_month: startDate.month,
             work_start_year: startDate.year,
@@ -166,7 +197,7 @@ export const generateDocument = async (
             materials_raw: act.materials || '',
             material_docs: useRegistry ? materialsOutput : uniqueDocs.join('; '),
             material_docs_raw: uniqueDocs.join('; '),
-            certs: act.certs || '',
+            certs: formattedCerts, 
 
             builder_details: act.builderDetails || '',
             contractor_details: act.contractorDetails || '',

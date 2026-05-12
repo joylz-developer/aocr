@@ -679,14 +679,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
     }, [acts, onReorderActs]);
 
-    // ИСПРАВЛЕНИЕ: Динамическая сборка реквизитов организации по шаблону
     const getOrgDetailsString = useCallback((org: Organization, templateType: 'builder' | 'contractor' | 'designer' | 'performer'): string => {
         let template: string[] | undefined;
         if (templateType === 'builder') template = settings.builderDetailsTemplate;
         else if (templateType === 'contractor') template = settings.contractorDetailsTemplate;
         else if (templateType === 'designer') template = settings.designerDetailsTemplate;
         
-        // Если шаблон пуст или не настроен, используем стандартный порядок
         const activeTemplate = template && template.length > 0 ? template : ['name', 'inn', 'ogrn', 'address'];
 
         return activeTemplate.map(key => {
@@ -716,7 +714,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
             updatedAct.designerOrgId = selectedGroup.designerOrgId;
             updatedAct.workPerformerOrgId = selectedGroup.workPerformerOrgId;
             
-            // Теперь собираем строки строго по вашим шаблонам
             updatedAct.builderDetails = selectedGroup.builderOrgId && orgMap.has(selectedGroup.builderOrgId) 
                 ? getOrgDetailsString(orgMap.get(selectedGroup.builderOrgId)!, 'builder') : '';
             updatedAct.contractorDetails = selectedGroup.contractorOrgId && orgMap.has(selectedGroup.contractorOrgId) 
@@ -835,7 +832,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 initialValue = act.certs || '';
             } else if (col.key === 'nextWork' && act.nextWorkActId === AUTO_NEXT_ID) {
                 const nextAct = acts[rowIndex + 1];
-                initialValue = nextAct ? `Работы по акту №${nextAct.number || 'б/н'} (${nextAct.workName || '...'})` : '';
+                initialValue = nextAct ? nextAct.workName || '...' : '';
             } else {
                 const columnKey = col.key as Exclude<keyof Act, 'representatives' | 'builderDetails' | 'contractorDetails' | 'designerDetails' | 'workPerformer' | 'builderOrgId' | 'contractorOrgId' | 'designerOrgId' | 'workPerformerOrgId' | 'commissionGroupId' | 'workDates' | 'nextWorkActId'>;
                 initialValue = act[columnKey] || '';
@@ -960,7 +957,6 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         }
         const cellId = getCellId(absoluteRowIndex, colIndex);
         if (e.shiftKey && activeCell) {
-            // Для shift-выделения находим видимые индексы
             const startVisualRow = filteredActs.findIndex(a => a.id === acts[activeCell.rowIndex]?.id);
             const endVisualRow = filteredActs.findIndex(a => a.id === acts[absoluteRowIndex]?.id);
             
@@ -1211,6 +1207,277 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
         performBulkUpdate(modifiedActsMap);
     }, [selectedCells, acts, columns, performBulkUpdate]);
 
+    // ИСПРАВЛЕНИЕ: Логика сохранения схем с новым форматом "Исполнительная схема №..."
+    const handleSaveScheme = (scheme: ExecutiveScheme) => {
+        if (!currentObjectId) return;
+        const schemeToSave = { ...scheme, constructionObjectId: currentObjectId };
+        
+        const existingIndex = schemes.findIndex(s => s.id === schemeToSave.id);
+        
+        if (existingIndex >= 0) {
+            const oldScheme = schemes[existingIndex];
+            
+            if (oldScheme.name !== schemeToSave.name || oldScheme.number !== schemeToSave.number || oldScheme.amount !== schemeToSave.amount) {
+                setActs(prevActs => prevActs.map(act => {
+                    if (act.constructionObjectId !== currentObjectId || !act.certs) return act;
+                    
+                    const chunks = act.certs.split(';').map(s => s.trim()).filter(Boolean);
+                    let hasChanges = false;
+                    
+                    const newChunks = chunks.map(chunk => {
+                        if (chunk.includes(oldScheme.number) && chunk.includes(oldScheme.name)) {
+                            hasChanges = true;
+                            // ИСПРАВЛЕНИЕ: Новый формат схемы
+                            return `Исполнительная схема №${schemeToSave.number} - ${schemeToSave.name} (${schemeToSave.amount} л.)`;
+                        }
+                        return chunk;
+                    });
+                    
+                    if (hasChanges) {
+                        return { ...act, certs: newChunks.join('; ') };
+                    }
+                    return act;
+                }));
+            }
+
+            setSchemes(prev => {
+                const newArr = [...prev];
+                newArr[existingIndex] = schemeToSave;
+                return newArr;
+            });
+        } else {
+            setSchemes(prev => [...prev, schemeToSave]);
+        }
+    };
+
+    const handleDeleteScheme = (id: string) => {
+        setSchemes(prev => prev.filter(s => s.id !== id));
+    };
+
+    const handleUnlinkCertificate = (cert: Certificate, mode: 'remove_entry' | 'remove_reference') => {
+        const searchStr = `(сертификат № ${cert.number}`;
+        setActs(prevActs => prevActs.map(act => {
+            if (act.constructionObjectId !== currentObjectId) return act;
+            if (!act.materials.includes(searchStr)) return act;
+            const materials = act.materials.split(';').map(s => s.trim());
+            const newMaterials = materials.map(mat => {
+                if (mat.includes(searchStr)) {
+                    if (mode === 'remove_reference') {
+                        return mat.split('(')[0].trim();
+                    } else {
+                        return null; 
+                    }
+                }
+                return mat;
+            }).filter(Boolean); 
+            return { ...act, materials: newMaterials.join('; ') };
+        }));
+    };
+
+    const handleImportFromObject = (items: (Person | Organization | Certificate | ExecutiveScheme)[]) => {
+        if (!currentObjectId || items.length === 0) return;
+
+        const isPerson = (i: any): i is Person => 'position' in i;
+        const isOrg = (i: any): i is Organization => 'inn' in i;
+        const isScheme = (i: any): i is ExecutiveScheme => 'amount' in i && !('validUntil' in i);
+        
+        if (isOrg(items[0])) {
+            const orgsToImport = items as Organization[];
+            const newOrgs: Organization[] = [];
+            
+            orgsToImport.forEach(srcOrg => {
+                const exists = currentOrganizations.some(curr => curr.inn === srcOrg.inn);
+                if (!exists) {
+                    newOrgs.push({
+                        ...srcOrg,
+                        id: crypto.randomUUID(),
+                        constructionObjectId: currentObjectId
+                    });
+                }
+            });
+            
+            if (newOrgs.length > 0) {
+                setOrganizations(prev => [...prev, ...newOrgs]);
+                setNotification(`Скопировано ${newOrgs.length} организаций.`);
+            } else {
+                setNotification("Все выбранные организации уже существуют в текущем объекте (проверка по ИНН).");
+            }
+        }
+        else if (isPerson(items[0])) {
+            const peopleToImport = items as Person[];
+            const newPeople: Person[] = [];
+            const newOrgs: Organization[] = []; 
+            
+            peopleToImport.forEach(srcPerson => {
+                const sourceOrg = organizations.find(o => o.name === srcPerson.organization && o.constructionObjectId === srcPerson.constructionObjectId);
+                
+                if (srcPerson.organization) {
+                    let targetOrg = currentOrganizations.find(o => o.name === srcPerson.organization);
+                    if (!targetOrg && sourceOrg) {
+                        targetOrg = currentOrganizations.find(o => o.inn === sourceOrg.inn);
+                    }
+                    if (!targetOrg && sourceOrg) {
+                        const newOrg = { ...sourceOrg, id: crypto.randomUUID(), constructionObjectId: currentObjectId };
+                        if (!newOrgs.some(no => no.inn === newOrg.inn)) {
+                            newOrgs.push(newOrg);
+                        }
+                    }
+                }
+                
+                newPeople.push({
+                    ...srcPerson,
+                    id: crypto.randomUUID(),
+                    constructionObjectId: currentObjectId
+                });
+            });
+            
+            if (newOrgs.length > 0) setOrganizations(prev => [...prev, ...newOrgs]);
+            if (newPeople.length > 0) setPeople(prev => [...prev, ...newPeople]);
+            setNotification(`Скопировано ${newPeople.length} участников и ${newOrgs.length} связанных организаций.`);
+        } 
+        else if (isScheme(items[0])) {
+             const schemesToImport = items as ExecutiveScheme[];
+             const newSchemes = schemesToImport.map(s => ({
+                 ...s,
+                 id: crypto.randomUUID(),
+                 constructionObjectId: currentObjectId
+             }));
+             setSchemes(prev => [...prev, ...newSchemes]);
+             setNotification(`Скопировано ${newSchemes.length} схем.`);
+        }
+        else {
+             const certsToImport = items as Certificate[];
+             const newCerts = certsToImport.map(c => ({
+                 ...c,
+                 id: crypto.randomUUID(),
+                 constructionObjectId: currentObjectId
+             }));
+             setCertificates(prev => [...prev, ...newCerts]);
+             setNotification(`Скопировано ${newCerts.length} сертификатов.`);
+        }
+    };
+
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+    const handleGlobalImport = (importSettings: ImportSettings) => {
+        if (!importData) return;
+        
+        let targetObjectId = currentObjectId;
+
+        if (importData.projectSettings && (importData.projectSettings as any).objectName) {
+            const legacyName = (importData.projectSettings as any).objectName;
+            let existingObj = constructionObjects.find(o => o.name === legacyName);
+            if (!existingObj) {
+                existingObj = { id: crypto.randomUUID(), name: legacyName, shortName: legacyName };
+                setConstructionObjects(prev => [...prev, existingObj!]);
+            }
+            targetObjectId = existingObj.id;
+            setCurrentObjectId(targetObjectId);
+        } else if (!targetObjectId && constructionObjects.length > 0) {
+            targetObjectId = constructionObjects[0].id;
+            setCurrentObjectId(targetObjectId);
+        } else if (!targetObjectId) {
+            const newObj = { id: crypto.randomUUID(), name: 'Импортированный объект', shortName: 'Импорт' };
+            setConstructionObjects([newObj]);
+            targetObjectId = newObj.id;
+            setCurrentObjectId(targetObjectId);
+        }
+
+        if (importSettings.projectSettings && importData.projectSettings) {
+            const newSettings = { ...importData.projectSettings };
+            delete (newSettings as any).objectName;
+            setSettings(newSettings);
+        }
+        if (importSettings.template && importData.template) {
+            setTemplate(importData.template);
+        }
+        if (importSettings.registryTemplate && importData.registryTemplate) {
+            setRegistryTemplate(importData.registryTemplate);
+        }
+
+        const processImport = <T extends { id: string, constructionObjectId?: string }>(
+            categorySettings: ImportSettingsCategory | undefined,
+            importedItems: T[] | undefined,
+            setItems: React.Dispatch<React.SetStateAction<T[]>>
+        ) => {
+            if (!categorySettings?.import || !importedItems) return;
+
+            const selectedItems = importedItems
+                .filter(item => !categorySettings.selectedIds || categorySettings.selectedIds.includes(item.id))
+                .map(item => ({
+                    ...item,
+                    constructionObjectId: item.constructionObjectId || targetObjectId
+                }));
+
+            if (categorySettings.mode === 'replace') {
+                setItems(selectedItems as any);
+            } else {
+                setItems(prev => {
+                    const newItems = [...prev];
+                    selectedItems.forEach(importedItem => {
+                        const existingIndex = newItems.findIndex(item => item.id === importedItem.id);
+                        if (existingIndex >= 0) {
+                            newItems[existingIndex] = importedItem as any;
+                        } else {
+                            newItems.push(importedItem as any);
+                        }
+                    });
+                    return newItems;
+                });
+            }
+        };
+
+        const processDeletedActsImport = (
+            categorySettings: ImportSettingsCategory | undefined,
+            importedItems: DeletedActEntry[] | undefined,
+            setItems: React.Dispatch<React.SetStateAction<DeletedActEntry[]>>
+        ) => {
+            if (!categorySettings?.import || !importedItems) return;
+
+            const selectedItems = importedItems
+                .filter(item => !categorySettings.selectedIds || categorySettings.selectedIds.includes(item.act.id))
+                .map(item => ({
+                    ...item,
+                    act: {
+                        ...item.act,
+                        constructionObjectId: item.act.constructionObjectId || targetObjectId
+                    }
+                }));
+
+            if (categorySettings.mode === 'replace') {
+                setItems(selectedItems);
+            } else {
+                setItems(prev => {
+                    const newItems = [...prev];
+                    selectedItems.forEach(importedItem => {
+                        const existingIndex = newItems.findIndex(item => item.act.id === importedItem.act.id);
+                        if (existingIndex >= 0) {
+                            newItems[existingIndex] = importedItem;
+                        } else {
+                            newItems.push(importedItem);
+                        }
+                    });
+                    return newItems;
+                });
+            }
+        };
+
+        processImport(importSettings.constructionObjects, importData.constructionObjects, setConstructionObjects);
+        processImport(importSettings.acts, importData.acts, setActs);
+        processImport(importSettings.people, importData.people, setPeople);
+        processImport(importSettings.organizations, importData.organizations, setOrganizations);
+        processImport(importSettings.groups, importData.groups, setGroups);
+        processImport(importSettings.regulations, importData.regulations, setRegulations);
+        processImport(importSettings.certificates, importData.certificates, setCertificates);
+        processImport(importSettings.schemes, importData.schemes, setSchemes);
+        
+        processDeletedActsImport(importSettings.deletedActs, importData.deletedActs, setDeletedActs);
+
+        setImportData(null);
+        setNotification('Данные успешно импортированы!');
+    };
+
+    // ИСПРАВЛЕНИЕ: Передаем список regulations в генератор, и подставляем чистый nextWork
     const handleBulkDownload = () => {
         if (!template) { alert('Сначала загрузите шаблон.'); return; }
         Array.from(selectedRows).forEach(rowIndex => {
@@ -1220,13 +1487,13 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 if (act.nextWorkActId === AUTO_NEXT_ID) {
                     const nextAct = acts[rowIndex + 1];
                     if (nextAct && (nextAct.number || nextAct.workName)) { 
-                        actToGenerate.nextWork = `Работы по акту №${nextAct.number || 'б/н'} (${nextAct.workName || '...'})`; 
+                        // ИСПРАВЛЕНИЕ: Только название работ
+                        actToGenerate.nextWork = nextAct.workName || ''; 
                     } else { 
                         actToGenerate.nextWork = ''; 
                     }
                 }
 
-                // РЕФРЕШ ДАННЫХ ОБ ОРГАНИЗАЦИЯХ ПЕРЕД СКАЧИВАНИЕМ
                 const group = groups.find(g => g.id === act.commissionGroupId);
                 const builderId = act.builderOrgId || group?.builderOrgId;
                 const contractorId = act.contractorOrgId || group?.contractorOrgId;
@@ -1240,7 +1507,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 if (designerId && orgMap.has(designerId)) actToGenerate.designerDetails = getOrgDetailsString(orgMap.get(designerId)!, 'designer');
                 if (performerId && orgMap.has(performerId)) actToGenerate.workPerformer = getOrgDetailsString(orgMap.get(performerId)!, 'performer');
 
-                generateDocument(template, registryTemplate, actToGenerate, people, settings, certificates); 
+                generateDocument(template, registryTemplate, actToGenerate, people, settings, certificates, regulations, schemes || []); 
             }
         });
     };
@@ -2354,7 +2621,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                 />
             )}
 
-            {nextWorkPopoverState && <NextWorkPopover acts={acts} currentActId={acts[nextWorkPopoverState.rowIndex].id} position={nextWorkPopoverState.position} onClose={() => setNextWorkPopoverState(null)} onSelect={(selectedActOrId) => { const sourceAct = acts[nextWorkPopoverState.rowIndex]; if (sourceAct) { const updatedAct = { ...sourceAct }; if (selectedActOrId === AUTO_NEXT_ID) { updatedAct.nextWorkActId = AUTO_NEXT_ID; updatedAct.nextWork = ''; } else if (selectedActOrId && typeof selectedActOrId === 'object') { const selectedAct = selectedActOrId as Act; updatedAct.nextWork = `Работы по акту №${selectedAct.number || 'б/н'} (${selectedAct.workName || '...'})`; updatedAct.nextWorkActId = selectedAct.id; } else if (typeof selectedActOrId === 'string') { updatedAct.nextWork = selectedActOrId; updatedAct.nextWorkActId = undefined; } else { updatedAct.nextWork = ''; updatedAct.nextWorkActId = undefined; } handleSaveWithTemplateResolution(updatedAct); } setNextWorkPopoverState(null); }} />}
+            {nextWorkPopoverState && <NextWorkPopover acts={acts} currentActId={acts[nextWorkPopoverState.rowIndex].id} position={nextWorkPopoverState.position} onClose={() => setNextWorkPopoverState(null)} onSelect={(selectedActOrId) => { const sourceAct = acts[nextWorkPopoverState.rowIndex]; if (sourceAct) { const updatedAct = { ...sourceAct }; if (selectedActOrId === AUTO_NEXT_ID) { updatedAct.nextWorkActId = AUTO_NEXT_ID; updatedAct.nextWork = ''; } else if (selectedActOrId && typeof selectedActOrId === 'object') { const selectedAct = selectedActOrId as Act; updatedAct.nextWork = selectedAct.workName || ''; updatedAct.nextWorkActId = selectedAct.id; } else if (typeof selectedActOrId === 'string') { updatedAct.nextWork = selectedActOrId; updatedAct.nextWorkActId = undefined; } else { updatedAct.nextWork = ''; updatedAct.nextWorkActId = undefined; } handleSaveWithTemplateResolution(updatedAct); } setNextWorkPopoverState(null); }} />}
             {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}> <MenuItem label="Копировать" shortcut="Ctrl+C" icon={<CopyIcon className="w-4 h-4" />} onClick={() => { handleCopy(); setContextMenu(null); }} disabled={selectedCells.size === 0} /> <MenuItem label="Вставить" shortcut="Ctrl+V" icon={<PasteIcon className="w-4 h-4" />} onClick={() => { handlePaste(); setContextMenu(null); }} /> <MenuSeparator /> <MenuItem label="Очистить ячейки" shortcut="Del" onClick={() => { handleClearCells(); setContextMenu(null); }} disabled={selectedCells.size === 0} /> <MenuSeparator /> <MenuItem label="Вставить строку выше" icon={<RowAboveIcon className="w-4 h-4" />} onClick={() => { const newAct = applyPinsToNewAct(createNewAct()); onSave(newAct, contextMenu.rowIndex); setContextMenu(null); }} /> <MenuItem label="Вставить строку ниже" icon={<RowBelowIcon className="w-4 h-4" />} onClick={() => { const newAct = applyPinsToNewAct(createNewAct()); onSave(newAct, contextMenu.rowIndex + 1); setContextMenu(null); }} /> <MenuSeparator /> <MenuItem label="Удалить акт(ы)" icon={<DeleteIcon className="w-4 h-4 text-red-600" />} className="text-red-600 hover:bg-red-50" onClick={() => { const rowIndices = Array.from(affectedRowsFromSelection); const indicesToDelete = rowIndices.includes(contextMenu.rowIndex) ? rowIndices : [contextMenu.rowIndex]; const idsToDelete = indicesToDelete.map(idx => acts[idx].id); onRequestDelete(idsToDelete); setContextMenu(null); }} /> </ContextMenu>}
             {regulationsModalOpen && <RegulationsModal isOpen={regulationsModalOpen} onClose={() => setRegulationsModalOpen(false)} regulations={regulations} onSelect={handleRegulationsSelect} />}
             {fullRegulationDetails && <Modal isOpen={!!fullRegulationDetails} onClose={() => setFullRegulationDetails(null)} title="" hideHeader={true}> <RegulationDetails regulation={fullRegulationDetails} onClose={() => setFullRegulationDetails(null)} /> </Modal>}
