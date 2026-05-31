@@ -63,7 +63,6 @@ const formatPersonDetails = (personId: string | undefined, template: string[] | 
     }).filter(Boolean).join(', ');
 };
 
-// ИСПРАВЛЕНИЕ: Добавлены значения по умолчанию (= []), чтобы предотвратить падение генератора
 export const generateDocument = async (
     templateBase64: string,
     registryTemplateBase64: string | null,
@@ -85,7 +84,6 @@ export const generateDocument = async (
         const startDate = parseDateParts(act.workStartDate);
         const endDate = parseDateParts(act.workEndDate);
 
-        // Форматирование СП и ГОСТ
         const formattedRegulations = (act.regulations || '')
             .split(';')
             .map(s => s.trim())
@@ -97,16 +95,14 @@ export const generateDocument = async (
                 }
                 return designation;
             })
-            .join('; ');
+            .join('\n'); // Соединяем только чистым переносом строки
 
-        // ОЧИСТКА: Последующие работы
         let finalNextWork = act.nextWork || '';
         const matchNW = finalNextWork.match(/^Работы по акту №.*?\((.*)\)$/);
         if (matchNW) {
             finalNextWork = matchNW[1].trim(); 
         }
 
-        // ОЧИСТКА И ФОРМАТИРОВАНИЕ: Исполнительные схемы
         const formattedCerts = (act.certs || '')
             .split(';')
             .map(s => s.trim())
@@ -116,27 +112,35 @@ export const generateDocument = async (
                 if (foundScheme) {
                     return `Исполнительная схема №${foundScheme.number} - ${foundScheme.name} (${foundScheme.amount} л.)`;
                 }
-                return certStr; // Если это обычный паспорт качества - оставляем как есть
+                if (!certStr.toLowerCase().includes('схема')) {
+                    const match = certStr.match(/^(.*?)\s*№\s*(.*?)\s*\((.*?)\)$/);
+                    if (match) {
+                        return `Исполнительная схема №${match[2].trim()} - ${match[1].trim()} (${match[3].trim()})`;
+                    }
+                }
+                return certStr; 
             })
-            .join('; ');
+            .join('\n');
 
-        // Обработка материалов и реестра
         const materialsArray = (act.materials || '').split(';').map(m => m.trim()).filter(Boolean);
         const threshold = settings.registryThreshold || 5;
         const useRegistry = materialsArray.length > threshold && registryTemplateBase64;
 
-        let materialsOutput = act.materials;
+        let materialsOutput = '';
         if (useRegistry) {
             materialsOutput = `согласно Реестру документов о качестве (Приложение №1 к настоящему акту)`;
+        } else {
+            materialsOutput = materialsArray.join('\n');
         }
 
         const certDocsRaw = materialsArray.map(m => {
             const match = m.match(/\((.*?)\)/);
             return match ? match[1] : '';
         }).filter(Boolean);
-        const uniqueDocs = Array.from(new Set(certDocsRaw));
+        
+        const uniqueDocs = Array.from(new Set(certDocsRaw)).filter(Boolean);
+        const uniqueDocsStr = uniqueDocs.join('\n');
 
-        // Подготовка данных представителей комиссии
         const repsData: Record<string, any> = {};
         
         Object.keys(ROLES).forEach(role => {
@@ -164,7 +168,32 @@ export const generateDocument = async (
                 : '';
         });
 
-        // Сборка объекта данных для Word
+        const resolveTags = (text: string) => {
+            if (!text) return '';
+            return text.replace(/\{(\w+)\}/g, (match, key) => {
+                switch(key) {
+                    case 'act_number': return act.number || 'б/н';
+                    case 'object_name': return act.objectName || '';
+                    case 'work_name': return act.workName || '';
+                    case 'project_docs': return act.projectDocs || '';
+                    case 'work_start_date': return formatDateStandard(act.workStartDate);
+                    case 'work_end_date': return formatDateStandard(act.workEndDate);
+                    case 'materials': return materialsOutput;
+                    case 'materials_raw': return materialsArray.join('\n');
+                    case 'material_docs': return useRegistry ? materialsOutput : uniqueDocsStr;
+                    case 'material_docs_raw': return uniqueDocsStr;
+                    case 'certs': return formattedCerts; 
+                    case 'regulations': return formattedRegulations;
+                    case 'next_work': return finalNextWork;
+                    default: return match;
+                }
+            });
+        };
+
+        // Очищаем пустые переносы в самом конце
+        const finalAttachments = resolveTags(act.attachments || settings.defaultAttachments || '').split('\n').map(s => s.trim()).filter(Boolean).join('\n');
+        const finalAdditionalInfo = resolveTags(act.additionalInfo || settings.defaultAdditionalInfo || '').split('\n').map(s => s.trim()).filter(Boolean).join('\n');
+
         const data = {
             act_number: act.number || 'б/н',
             object_name: act.objectName || '',
@@ -190,13 +219,14 @@ export const generateDocument = async (
             work_end_date: formatDateStandard(act.workEndDate),
 
             copies_count: act.copiesCount || settings.defaultCopiesCount || 4,
-            additional_info: act.additionalInfo || '',
-            attachments: act.attachments || '',
+            
+            additional_info: finalAdditionalInfo,
+            attachments: finalAttachments,
 
             materials: materialsOutput,
-            materials_raw: act.materials || '',
-            material_docs: useRegistry ? materialsOutput : uniqueDocs.join('; '),
-            material_docs_raw: uniqueDocs.join('; '),
+            materials_raw: materialsArray.join('\n'),
+            material_docs: useRegistry ? materialsOutput : uniqueDocsStr,
+            material_docs_raw: uniqueDocsStr,
             certs: formattedCerts, 
 
             builder_details: act.builderDetails || '',
@@ -207,6 +237,22 @@ export const generateDocument = async (
             ...repsData
         };
 
+        // === ГЕНЕРАЦИЯ СПИСКОВ ДЛЯ СЭНДВИЧЕЙ ===
+        const listData: Record<string, any> = {};
+        for (const [key, value] of Object.entries(data)) {
+            if (typeof value === 'string') {
+                const items = value.split('\n').map(s => s.trim()).filter(Boolean);
+                if (items.length > 0) {
+                    listData[`${key}_list`] = items.map(item => ({ [`${key}_clean`]: item }));
+                } else {
+                    // Если данных нет, передаем false. Docxtemplater удалит весь блок сэндвича без пустых строк!
+                    listData[`${key}_list`] = false; 
+                }
+            }
+        }
+
+        const templateData = { ...data, ...listData };
+
         const zip = new PizZip(base64ToBinaryString(templateBase64));
         const doc = new Docxtemplater(zip, {
             paragraphLoop: true,
@@ -214,7 +260,8 @@ export const generateDocument = async (
             nullGetter: () => ''
         });
 
-        doc.render(data);
+        doc.render(templateData);
+        
         const out = doc.getZip().generate({
             type: 'blob',
             mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -252,7 +299,7 @@ export const generateDocument = async (
             });
 
             const registryData = {
-                ...data, 
+                ...templateData,
                 materials_list: materialsList
             };
 
