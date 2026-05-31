@@ -2336,7 +2336,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 displayContent = (
                                                     <span className="text-slate-400 italic flex items-start gap-1 group/default" title={`Автоматически: ${resolved}`}>
                                                         <SparklesIcon className="w-3 h-3 text-slate-300 opacity-50 group-hover/default:opacity-100 mt-0.5 flex-shrink-0" />
-                                                        <span className="truncate">{renderTextWithTags(resolved || '(Пусто)')}</span>
+                                                        <span className="break-words whitespace-pre-wrap max-w-[16rem]">{renderTextWithTags(resolved || '(Пусто)')}</span>
                                                     </span>
                                                 );
                                             }
@@ -2439,7 +2439,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                     </div>
                                                 ) : (
                                                     <div className="w-full h-full min-h-[1.5em] whitespace-pre-wrap flex items-center justify-between group/cell">
-                                                        <span className="flex-grow">
+                                                        <span className={`flex-grow ${(col.key === 'attachments' || col.key === 'additionalInfo') ? 'max-w-[16rem] break-words' : 'max-w-xs break-words'}`}>
                                                             {typeof displayContent === 'string' ? renderTextWithTags(displayContent) : displayContent}
                                                         </span>
                                                         {(col.key === 'workDates' || col.key === 'date') && (
