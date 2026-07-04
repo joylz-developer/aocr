@@ -442,6 +442,10 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [filters, setFilters] = useState<Record<string, any>>({});
     
+    // Новые стейты для ширины столбцов
+    const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+    const resizingColRef = useRef<{ key: string, startX: number, startWidth: number } | null>(null);
+    
     const [pinnedColumns, setPinnedColumns] = useState<Record<string, PinnedColumnInfo>>({});
     const [starPopoverState, setStarPopoverState] = useState<{colKey: string, position: {top: number, left: number}} | null>(null);
 
@@ -529,6 +533,39 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     const mousePosRef = useRef<{x: number, y: number} | null>(null);
     const autoScrollRaf = useRef<number | null>(null);
+
+    const handleResizeStart = (e: React.MouseEvent, colKey: string) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const th = (e.currentTarget as HTMLElement).closest('th');
+        if (!th) return;
+        const startWidth = th.getBoundingClientRect().width;
+        resizingColRef.current = { key: colKey, startX: e.clientX, startWidth };
+    };
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!resizingColRef.current) return;
+            const { key, startX, startWidth } = resizingColRef.current;
+            const delta = e.clientX - startX;
+            const newWidth = Math.max(100, startWidth + delta); // Минимальная ширина 100px
+            setColumnWidths(prev => ({ ...prev, [key]: newWidth }));
+        };
+
+        const handleMouseUp = () => {
+            if (resizingColRef.current) {
+                resizingColRef.current = null;
+            }
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, []);
 
     const columns = useMemo(() => {
         const colMap = new Map(ALL_COLUMNS.map(col => [col.key, col]));
@@ -1810,7 +1847,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
 
     useLayoutEffect(() => {
         updateFillHandlePosition();
-    }, [updateFillHandlePosition]);
+    }, [updateFillHandlePosition, columnWidths]);
 
     const handleColumnHeaderClick = (e: React.MouseEvent, colIndex: number) => {
         if (e.ctrlKey || e.metaKey) {
@@ -2024,11 +2061,12 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         data-col-index={index}
                                         className={`
                                             border border-slate-300 [.theme-dark_&]:border-slate-700 px-2 py-2 font-medium text-left select-none relative
-                                            ${col.widthClass}
+                                            ${columnWidths[col.key] ? '' : col.widthClass}
                                             ${bgClass}
                                             ${draggedColKey === col.key ? 'opacity-50' : ''}
                                             grabbable group/th align-middle
                                         `}
+                                        style={columnWidths[col.key] ? { width: columnWidths[col.key], minWidth: columnWidths[col.key], maxWidth: columnWidths[col.key] } : undefined}
                                         draggable={!editingCell && !hasActiveFilters}
                                         onDragStart={(e) => {
                                             if (hasActiveFilters) { e.preventDefault(); return; }
@@ -2041,10 +2079,15 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                         onClick={(e) => handleColumnHeaderClick(e, index)}
                                         onMouseEnter={() => setHoveredColIndex(index)}
                                     >
-                                        <div className="relative flex items-center justify-between w-full h-full min-w-max">
-                                            <span className="truncate pr-10">{col.label}</span>
+                                        <div className="relative flex items-center justify-between w-full h-full">
+                                            <div 
+                                                className="absolute right-[-4px] top-0 bottom-0 w-2 cursor-col-resize z-20 hover:bg-blue-500/30 [.theme-dark_&]:hover:bg-blue-400/30 transition-colors"
+                                                onMouseDown={(e) => handleResizeStart(e, col.key)}
+                                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                                            />
+                                            <span className="break-words whitespace-normal flex-grow pr-1">{col.label}</span>
                                             
-                                            <div className={`absolute right-0 top-1/2 -translate-y-1/2 flex items-center space-x-1 px-1 transition-opacity duration-200 
+                                            <div className={`flex items-center space-x-1 px-1 flex-shrink-0 transition-opacity duration-200 
                                                 ${showIcons ? 'opacity-100 pointer-events-auto z-10' : 'opacity-0 pointer-events-none'}`}>
                                                 
                                                 {(isPinned || isActiveColumn) && (
@@ -2336,7 +2379,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                 displayContent = (
                                                     <span className="text-slate-400 italic flex items-start gap-1 group/default" title={`Автоматически: ${resolved}`}>
                                                         <SparklesIcon className="w-3 h-3 text-slate-300 opacity-50 group-hover/default:opacity-100 mt-0.5 flex-shrink-0" />
-                                                        <span className="break-words whitespace-pre-wrap max-w-[16rem]">{renderTextWithTags(resolved || '(Пусто)')}</span>
+                                                        <span className={`break-words whitespace-pre-wrap ${columnWidths[col.key] ? '' : 'max-w-[16rem]'}`}>{renderTextWithTags(resolved || '(Пусто)')}</span>
                                                     </span>
                                                 );
                                             }
@@ -2356,12 +2399,16 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                     ${getHighlightClass(absoluteIndex, colIndex)}
                                                     ${col.key === 'id' ? 'text-xs text-slate-400 select-all' : ''}
                                                     ${col.key === 'commissionGroup' ? 'text-slate-600 [.theme-dark_&]:text-slate-400' : ''}
-                                                    cursor-default
+                                                    cursor-default overflow-hidden
                                                 `}
                                                 onMouseDown={(e) => handleCellMouseDown(e, absoluteIndex, colIndex)}
                                                 onDoubleClick={(e) => handleCellDoubleClick(e, absoluteIndex, colIndex)}
                                                 onContextMenu={(e) => handleContextMenu(e, absoluteIndex, colIndex)}
-                                                style={{ height: '1px', boxShadow: selectionShadow }} 
+                                                style={{ 
+                                                    height: '1px', 
+                                                    boxShadow: selectionShadow,
+                                                    ...(columnWidths[col.key] ? { width: columnWidths[col.key], minWidth: columnWidths[col.key], maxWidth: columnWidths[col.key] } : {})
+                                                }} 
                                             >
                                                 {isCopied && <div className="copied-cell-overlay" />}
                                                 
@@ -2439,7 +2486,7 @@ const ActsTable: React.FC<ActsTableProps> = ({ acts, people, organizations, grou
                                                     </div>
                                                 ) : (
                                                     <div className="w-full h-full min-h-[1.5em] whitespace-pre-wrap flex items-center justify-between group/cell">
-                                                        <span className={`flex-grow ${(col.key === 'attachments' || col.key === 'additionalInfo') ? 'max-w-[16rem] break-words' : 'max-w-xs break-words'}`}>
+                                                        <span className={`flex-grow min-w-0 ${columnWidths[col.key] ? 'break-words' : (col.key === 'attachments' || col.key === 'additionalInfo') ? 'max-w-[16rem] break-words' : 'max-w-xs break-words'}`}>
                                                             {typeof displayContent === 'string' ? renderTextWithTags(displayContent) : displayContent}
                                                         </span>
                                                         {(col.key === 'workDates' || col.key === 'date') && (

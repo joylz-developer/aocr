@@ -110,11 +110,16 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
     }, [searchTerm, groupChanges, showActiveOnly, regulations]);
 
     // Intersection Observer for Infinite Scroll
+    const displayedLengthRef = useRef(displayedRegulations.length);
+    useEffect(() => {
+        displayedLengthRef.current = displayedRegulations.length;
+    }, [displayedRegulations.length]);
+
     useEffect(() => {
         const observer = new IntersectionObserver(
             entries => {
                 if (entries[0].isIntersecting) {
-                    setVisibleCount(prev => Math.min(prev + 50, displayedRegulations.length));
+                    setVisibleCount(prev => Math.min(prev + 50, displayedLengthRef.current));
                 }
             },
             { threshold: 0.1, rootMargin: '100px' }
@@ -125,11 +130,9 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
         }
 
         return () => {
-            if (observerTarget.current) {
-                observer.unobserve(observerTarget.current);
-            }
+            observer.disconnect();
         };
-    }, [displayedRegulations.length]);
+    }, []);
 
     // Derived slice for rendering
     const visibleRegulations = displayedRegulations.slice(0, visibleCount);
@@ -165,8 +168,7 @@ const RegulationsPage: React.FC<RegulationsPageProps> = ({ regulations, onSaveRe
                         registrationDate: item.registrationDate || item["Дата регистрации"] || fullJson["Дата регистрации"],
                         approvalDate: item.approvalDate || item["Дата утверждения"] || fullJson["Дата утверждения"],
                         activeDate: item.activeDate || item["Дата введения в действие"] || fullJson["Дата введения в действие"],
-                        orgApprover: item.orgApprover || item["Орган, утвердивший свод правил"] || fullJson["Орган, утвердивший свод правил"],
-                        fullJson: fullJson
+                        orgApprover: item.orgApprover || item["Орган, утвердивший свод правил"] || fullJson["Орган, утвердивший свод правил"]
                     };
                 }).filter((r: Regulation) => r.designation); // Filter out empty entries
 
